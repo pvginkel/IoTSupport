@@ -1,14 +1,43 @@
+# Dependencies
 node_modules
-.env
-.env.local
-/dist
 .pnpm-store
-/browsers
+
+# Build outputs
+/dist
+dist-ssr
+
+# Environment files
+.env.local
+.env.*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Local files
 /.local
 
 # Playwright artifacts
 /test-results/
 /playwright-report/
 /playwright/.cache/
-.env.test
-*.tsbuildinfo
+/browsers
+
+# Generated files
+src/routeTree.gen.ts
+
+# Editor directories and files
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
