@@ -21,8 +21,7 @@ services:
       - ../backend/.git:/work/backend/.git:ro
       - ../frontend:/work/frontend:rw
       - ../frontend/.git:/work/frontend/.git:ro
-      - ../../ElectronicsInventory/backend:/work/ElectronicsInventory/backend:ro
-      - ../../ElectronicsInventory/frontend:/work/ElectronicsInventory/frontend:ro
+      - ../../ElectronicsInventory:/work/ElectronicsInventory:ro
       - ../../DockerImages/iotsupport:/work/iotsupport:ro
       - ../../HelmCharts:/work/HelmCharts:ro
     # Required for Chromium

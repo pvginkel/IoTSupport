@@ -1,16 +1,15 @@
-# Development Guidelines - Electronics Inventory Backend
+# Development Guidelines - Backend
 
-This document defines the code architecture, patterns, and testing requirements for the Electronics Inventory project. Follow these guidelines to ensure consistency and maintainability.
+This document defines the code architecture, patterns, and testing requirements for the backend project. Follow these guidelines to ensure consistency and maintainability.
 
 ## Project Architecture
 
-This Flask backend implements a **hobby electronics parts inventory system** as described in `docs/product_brief.md`. The architecture follows a layered pattern with clear separation of concerns:
+This Flask backend implements an **IoT support application** as described in `docs/product_brief.md`. The architecture follows a layered pattern with clear separation of concerns:
 
 ```
 app/
 ├── api/          # HTTP endpoints and request handling
 ├── services/     # Business logic layer
-├── models/       # SQLAlchemy database models
 ├── schemas/      # Pydantic request/response schemas
 └── utils/        # Shared utilities and error handling
 ```
@@ -298,16 +297,13 @@ self.metrics_service.increment_counter("operation_total", labels={"status": "suc
 ## Dependencies
 
 - **Flask** - Web framework
-- **SQLAlchemy** - ORM and database abstraction
 - **Pydantic** - Request/response validation 
-- **Alembic** - Database migrations
 - **SpectTree** - OpenAPI documentation generation
-- **PostgreSQL** - Primary database
 - **pytest** - Testing framework
 - **dependency-injector** - Dependency injection container
 - **prometheus-flask-exporter** - Prometheus metrics integration
 
-Focus on creating well-tested, maintainable code that follows these established patterns. The goal is a robust parts inventory system that stays organized and scales with your electronics hobby.
+Focus on creating well-tested, maintainable code that follows these established patterns.
 
 ## Dependency Injection
 
@@ -444,79 +440,6 @@ def __init__(self, shutdown_coordinator: ShutdownCoordinatorProtocol, ...):
 - Use `StubShutdownCoordinator` for unit tests (dependency injection only)
 - Use `TestShutdownCoordinator` for integration tests (simulates shutdown behavior)
 - Both available in `tests.testing_utils`
-
-## Test Data Management
-
-**IMPORTANT**: The project includes a comprehensive fixed test dataset that must be kept up to date with any schema or business logic changes.
-
-### Loading Test Data
-Use the CLI to recreate the database with a consistent, realistic development dataset:
-
-```bash
-# Recreate database and load fixed test dataset
-poetry run python -m app.cli load-test-data --yes-i-am-sure
-```
-
-This command:
-1. Drops all tables and recreates the database schema (like `upgrade-db --recreate`)
-2. Loads fixed test data from JSON files in `app/data/test_data/`
-3. Creates 10 boxes with realistic electronics organization
-4. Loads ~50 realistic electronics parts with proper relationships
-
-### Dataset Maintenance Requirements
-
-**When making schema changes:**
-1. Update the JSON files in `app/data/test_data/` to reflect new fields or relationships
-2. Ensure test data exercises new constraints and validations
-3. Test `load-test-data` command after migrations to verify compatibility
-4. Add new realistic data examples for any new entity types or attributes
-
-**When adding business logic:**
-1. Update test data JSON files to include edge cases for new functionality
-2. Ensure fixed data creates realistic scenarios for testing new features
-3. Verify that all JSON data maintains referential integrity
-
-**The fixed test dataset should always:**
-- Reflect realistic electronics inventory scenarios with proper part organization
-- Exercise all database constraints and relationships
-- Provide diverse, predictable data for comprehensive testing
-- Include edge cases (empty locations, various quantities, different part types)
-- Be consistent and reproducible across all development environments
-
-**Test Data Files Location**: `app/data/test_data/`
-- `boxes.json` - Storage box configurations  
-- `parts.json` - Realistic electronics parts data
-- `part_locations.json` - Part distribution across storage locations
-- `quantity_history.json` - Historical stock changes
-
-**Note**: Electronics part categories are loaded from `app/data/setup/types.txt` during database initialization, not from test data files.
-
-## Database Initialization & Type Sync
-
-The system automatically syncs electronics part types from `app/data/setup/types.txt` during database upgrades. This ensures all environments have consistent type definitions without manual intervention.
-
-### Production Database Setup
-For a new production database:
-```bash
-# Creates database schema AND automatically loads all 99 predefined types
-poetry run python -m app.cli upgrade-db
-```
-
-### Schema Updates  
-For subsequent migrations:
-```bash
-# Applies new migrations AND syncs any new types from setup file
-poetry run python -m app.cli upgrade-db
-```
-
-### Development Workflow
-For development with test data:
-```bash  
-# Loads schema, syncs types from setup file, and loads realistic test data
-poetry run python -m app.cli load-test-data --yes-i-am-sure
-```
-
-The type sync is fully **idempotent** - running multiple times will only add missing types, never create duplicates.
 
 ## Command Templates
 
