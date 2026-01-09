@@ -137,6 +137,23 @@ class TestConfigServiceGetConfig:
 
         assert "invalid format" in str(exc_info.value).lower()
 
+    def test_get_config_normalizes_uppercase_mac(
+        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any]
+    ):
+        """Uppercase MAC is normalized to find lowercase file."""
+        lowercase_mac = "aa-bb-cc-dd-ee-ff"
+        uppercase_mac = "AA-BB-CC-DD-EE-FF"
+
+        # Create file with lowercase name
+        make_config_file(lowercase_mac, sample_config)
+
+        service = ConfigService(config_dir)
+        result = service.get_config(uppercase_mac)
+
+        # Should find the file and return lowercase MAC
+        assert result.mac_address == lowercase_mac
+        assert result.content == sample_config
+
 
 class TestConfigServiceSaveConfig:
     """Tests for save_config method."""
@@ -198,6 +215,27 @@ class TestConfigServiceSaveConfig:
         tmp_files = list(config_dir.glob("*.tmp"))
         assert len(tmp_files) == 0
 
+    def test_save_config_normalizes_uppercase_mac(
+        self, config_dir: Path, sample_config: dict[str, Any]
+    ):
+        """Uppercase MAC is normalized to lowercase."""
+        service = ConfigService(config_dir)
+        uppercase_mac = "AA-BB-CC-DD-EE-FF"
+        lowercase_mac = "aa-bb-cc-dd-ee-ff"
+
+        result = service.save_config(uppercase_mac, sample_config)
+
+        # Result should have lowercase MAC
+        assert result.mac_address == lowercase_mac
+
+        # File should be created with lowercase name
+        file_path = config_dir / f"{lowercase_mac}.json"
+        assert file_path.exists()
+
+        # Uppercase file should NOT exist
+        uppercase_file = config_dir / f"{uppercase_mac}.json"
+        assert not uppercase_file.exists()
+
 
 class TestConfigServiceDeleteConfig:
     """Tests for delete_config method."""
@@ -232,6 +270,24 @@ class TestConfigServiceDeleteConfig:
             service.delete_config("bad-mac")
 
         assert "invalid format" in str(exc_info.value).lower()
+
+    def test_delete_config_normalizes_uppercase_mac(
+        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any]
+    ):
+        """Uppercase MAC is normalized to delete lowercase file."""
+        lowercase_mac = "aa-bb-cc-dd-ee-ff"
+        uppercase_mac = "AA-BB-CC-DD-EE-FF"
+
+        # Create file with lowercase name
+        make_config_file(lowercase_mac, sample_config)
+        file_path = config_dir / f"{lowercase_mac}.json"
+        assert file_path.exists()
+
+        service = ConfigService(config_dir)
+        service.delete_config(uppercase_mac)
+
+        # File should be deleted
+        assert not file_path.exists()
 
 
 class TestValidateMacAddress:

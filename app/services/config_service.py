@@ -109,6 +109,9 @@ class ConfigService:
             InvalidOperationException: If MAC address format is invalid
             RecordNotFoundException: If config file does not exist
         """
+        # Normalize to lowercase before validation
+        mac_address = self.normalize_mac_address(mac_address)
+
         if not self.validate_mac_address(mac_address):
             raise InvalidOperationException(
                 "get config", f"MAC address '{mac_address}' has invalid format"
@@ -148,6 +151,9 @@ class ConfigService:
         Raises:
             InvalidOperationException: If MAC address format is invalid
         """
+        # Normalize to lowercase before validation
+        mac_address = self.normalize_mac_address(mac_address)
+
         if not self.validate_mac_address(mac_address):
             raise InvalidOperationException(
                 "save config", f"MAC address '{mac_address}' has invalid format"
@@ -176,6 +182,9 @@ class ConfigService:
             InvalidOperationException: If MAC address format is invalid
             RecordNotFoundException: If config file does not exist
         """
+        # Normalize to lowercase before validation
+        mac_address = self.normalize_mac_address(mac_address)
+
         if not self.validate_mac_address(mac_address):
             raise InvalidOperationException(
                 "delete config", f"MAC address '{mac_address}' has invalid format"
@@ -209,6 +218,18 @@ class ConfigService:
             # Clean up temp file if rename failed
             if temp_path.exists():
                 temp_path.unlink()
+
+    @staticmethod
+    def normalize_mac_address(mac: str) -> str:
+        """Normalize MAC address to lowercase.
+
+        Args:
+            mac: MAC address string to normalize
+
+        Returns:
+            Lowercase MAC address
+        """
+        return mac.lower()
 
     @staticmethod
     def validate_mac_address(mac: str) -> bool:
