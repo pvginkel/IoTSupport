@@ -32,6 +32,8 @@ pnpm-debug.log*
 
 # Generated files
 src/routeTree.gen.ts
+src/lib/api/generated/
+openapi-cache/
 
 # Editor directories and files
 .idea
