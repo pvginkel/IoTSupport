@@ -19,6 +19,7 @@ flask-cors = "^4.0.0"
 waitress = "^3.0.0"
 dependency-injector = "^4.48.1"
 prometheus-flask-exporter = "^0.23.0"
+cryptography = "^42.0.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.0"

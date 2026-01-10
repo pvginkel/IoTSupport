@@ -42,6 +42,30 @@ class MetricsService:
             ["operation"],
         )
 
+        # Asset upload metrics
+        self.asset_upload_requests_total = Counter(
+            "iot_asset_upload_requests_total",
+            "Total asset upload requests",
+            ["status", "error_type"],
+        )
+
+        self.asset_upload_duration_seconds = Histogram(
+            "iot_asset_upload_duration_seconds",
+            "Duration of asset upload operations in seconds",
+            ["status"],
+        )
+
+        self.asset_upload_file_size_bytes = Histogram(
+            "iot_asset_upload_file_size_bytes",
+            "Size of uploaded asset files in bytes",
+        )
+
+        self.asset_upload_signature_verification_duration_seconds = Histogram(
+            "iot_asset_upload_signature_verification_duration_seconds",
+            "Duration of signature verification in seconds",
+            ["result"],
+        )
+
     def record_operation(
         self, operation: str, status: str, duration: float | None = None
     ) -> None:
@@ -74,6 +98,50 @@ class MetricsService:
             self.config_files_count.set(count)
         except Exception as e:
             logger.error("Error updating config count metric: %s", e)
+
+    def record_asset_upload(
+        self,
+        status: str,
+        error_type: str,
+        duration: float | None = None,
+        file_size: int | None = None,
+    ) -> None:
+        """Record an asset upload attempt.
+
+        Args:
+            status: Upload status (success, validation_error, server_error)
+            error_type: Type of error (filename, timestamp, signature, filesystem, none)
+            duration: Operation duration in seconds (optional)
+            file_size: File size in bytes (for successful uploads only)
+        """
+        try:
+            self.asset_upload_requests_total.labels(
+                status=status, error_type=error_type
+            ).inc()
+
+            if duration is not None:
+                self.asset_upload_duration_seconds.labels(status=status).observe(
+                    duration
+                )
+
+            if file_size is not None:
+                self.asset_upload_file_size_bytes.observe(file_size)
+        except Exception as e:
+            logger.error("Error recording asset upload metric: %s", e)
+
+    def record_signature_verification(self, result: str, duration: float) -> None:
+        """Record a signature verification operation.
+
+        Args:
+            result: Verification result (valid, invalid)
+            duration: Verification duration in seconds
+        """
+        try:
+            self.asset_upload_signature_verification_duration_seconds.labels(
+                result=result
+            ).observe(duration)
+        except Exception as e:
+            logger.error("Error recording signature verification metric: %s", e)
 
     def get_metrics_text(self) -> str:
         """Generate metrics in Prometheus text format.
