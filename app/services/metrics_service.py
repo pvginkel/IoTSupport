@@ -66,6 +66,28 @@ class MetricsService:
             ["result"],
         )
 
+        # Image proxy metrics
+        self.image_proxy_operations_total = Counter(
+            "iot_image_proxy_operations_total",
+            "Total image proxy operations",
+            ["status", "error_type"],
+        )
+
+        self.image_proxy_operation_duration_seconds = Histogram(
+            "iot_image_proxy_operation_duration_seconds",
+            "Duration of image proxy operations in seconds",
+        )
+
+        self.image_proxy_external_fetch_duration_seconds = Histogram(
+            "iot_image_proxy_external_fetch_duration_seconds",
+            "Duration of external image fetches in seconds",
+        )
+
+        self.image_proxy_image_size_bytes = Histogram(
+            "iot_image_proxy_image_size_bytes",
+            "Size of fetched images in bytes",
+        )
+
     def record_operation(
         self, operation: str, status: str, duration: float | None = None
     ) -> None:
@@ -142,6 +164,44 @@ class MetricsService:
             ).observe(duration)
         except Exception as e:
             logger.error("Error recording signature verification metric: %s", e)
+
+    def record_image_proxy_operation(
+        self,
+        status: str | None,
+        error_type: str | None,
+        operation_duration: float | None = None,
+        fetch_duration: float | None = None,
+        image_size: int | None = None,
+    ) -> None:
+        """Record an image proxy operation.
+
+        Args:
+            status: Operation status (success, error), or None to skip counter
+            error_type: Type of error (missing_param, external_fetch_failed, etc., or none for success), or None to skip counter
+            operation_duration: Total operation duration in seconds (optional)
+            fetch_duration: External fetch duration in seconds (optional)
+            image_size: Size of fetched image in bytes (optional)
+        """
+        try:
+            # Only increment counter if status and error_type are provided (API layer)
+            # Service layer can record granular metrics without incrementing overall counter
+            if status is not None and error_type is not None:
+                self.image_proxy_operations_total.labels(
+                    status=status, error_type=error_type
+                ).inc()
+
+            if operation_duration is not None:
+                self.image_proxy_operation_duration_seconds.observe(operation_duration)
+
+            if fetch_duration is not None:
+                self.image_proxy_external_fetch_duration_seconds.observe(
+                    fetch_duration
+                )
+
+            if image_size is not None:
+                self.image_proxy_image_size_bytes.observe(image_size)
+        except Exception as e:
+            logger.error("Error recording image proxy metric: %s", e)
 
     def get_metrics_text(self) -> str:
         """Generate metrics in Prometheus text format.

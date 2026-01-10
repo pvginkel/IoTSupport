@@ -37,3 +37,23 @@ class ValidationException(BusinessLogicException):
 
     def __init__(self, message: str) -> None:
         super().__init__(message, error_code="VALIDATION_FAILED")
+
+
+class ExternalServiceException(BusinessLogicException):
+    """Exception raised when an external service call fails."""
+
+    def __init__(self, operation: str, cause: str) -> None:
+        self.operation = operation
+        self.cause = cause
+        message = f"Cannot {operation} because external service failed: {cause}"
+        super().__init__(message, error_code="EXTERNAL_SERVICE_ERROR")
+
+
+class ProcessingException(BusinessLogicException):
+    """Exception raised when internal processing fails."""
+
+    def __init__(self, operation: str, cause: str) -> None:
+        self.operation = operation
+        self.cause = cause
+        message = f"Cannot {operation} because processing failed: {cause}"
+        super().__init__(message, error_code="PROCESSING_ERROR")

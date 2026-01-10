@@ -20,6 +20,10 @@ waitress = "^3.0.0"
 dependency-injector = "^4.48.1"
 prometheus-flask-exporter = "^0.23.0"
 cryptography = "^42.0.0"
+pillow = "^11.0.0"
+httpx = "^0.27.0"
+pypng = "^0.20220715.0"
+lz4 = "^4.3.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.0"
@@ -54,6 +58,7 @@ ignore = [
 
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401"]
+"app/utils/lvgl/LVGLImage.py" = ["I001", "UP035", "B904", "UP006", "C416", "B905", "E741"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -79,6 +84,26 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "prometheus_client.*"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "png.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "lz4.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "PIL.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "httpx.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "app.utils.lvgl.LVGLImage"
+ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
