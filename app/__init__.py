@@ -34,6 +34,7 @@ def create_app(settings: "Settings | None" = None) -> App:
 
     # Wire container with API modules
     wire_modules = [
+        "app.api.assets",
         "app.api.configs",
         "app.api.health",
         "app.api.metrics",

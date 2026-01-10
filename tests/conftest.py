@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from flask import Flask
 from prometheus_client import REGISTRY
 
@@ -47,10 +49,27 @@ def config_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def test_settings(config_dir: Path) -> Settings:
+def test_settings(config_dir: Path, tmp_path: Path) -> Settings:
     """Create test settings with temporary config directory."""
+    # Create temporary assets directory and signing key for tests
+    assets_dir = tmp_path / "assets"
+    assets_dir.mkdir()
+
+    # Create a valid RSA signing key file for all tests
+    signing_key_path = tmp_path / "test_signing_key.pem"
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    signing_key_path.write_bytes(pem)
+
     return Settings(
         ESP32_CONFIGS_DIR=config_dir,
+        ASSETS_DIR=assets_dir,
+        SIGNING_KEY_PATH=signing_key_path,
+        TIMESTAMP_TOLERANCE_SECONDS=300,
         SECRET_KEY="test-secret-key",
         DEBUG=True,
         CORS_ORIGINS=["http://localhost:3000"],

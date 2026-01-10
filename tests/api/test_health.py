@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from flask.testing import FlaskClient
 
 from app import create_app
@@ -23,8 +25,22 @@ class TestHealthCheck:
         """Returns 503 when config directory does not exist."""
         non_existent = tmp_path / "does_not_exist"
 
+        # Create valid assets dir and signing key for test
+        assets_dir = tmp_path / "assets"
+        assets_dir.mkdir()
+        signing_key_path = tmp_path / "test_key.pem"
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        signing_key_path.write_bytes(pem)
+
         settings = Settings(
             ESP32_CONFIGS_DIR=non_existent,
+            ASSETS_DIR=assets_dir,
+            SIGNING_KEY_PATH=signing_key_path,
             SECRET_KEY="test-secret",
             DEBUG=True,
         )
@@ -43,8 +59,22 @@ class TestHealthCheck:
         file_path = tmp_path / "not_a_dir"
         file_path.touch()
 
+        # Create valid assets dir and signing key for test
+        assets_dir = tmp_path / "assets"
+        assets_dir.mkdir()
+        signing_key_path = tmp_path / "test_key.pem"
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        signing_key_path.write_bytes(pem)
+
         settings = Settings(
             ESP32_CONFIGS_DIR=file_path,
+            ASSETS_DIR=assets_dir,
+            SIGNING_KEY_PATH=signing_key_path,
             SECRET_KEY="test-secret",
             DEBUG=True,
         )

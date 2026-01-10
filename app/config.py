@@ -26,6 +26,18 @@ class Settings(BaseSettings):
         description="Path to ESP32 configuration files directory"
     )
 
+    # Asset upload settings
+    ASSETS_DIR: Path = Field(
+        description="Path to assets upload directory"
+    )
+    SIGNING_KEY_PATH: Path = Field(
+        description="Path to RSA signing key file"
+    )
+    TIMESTAMP_TOLERANCE_SECONDS: int = Field(
+        default=300,
+        description="Timestamp validation tolerance in seconds"
+    )
+
     # CORS settings
     CORS_ORIGINS: list[str] = Field(
         default=["http://localhost:3000"],
