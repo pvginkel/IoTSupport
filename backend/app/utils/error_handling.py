@@ -11,7 +11,9 @@ from pydantic import ValidationError
 
 from app.exceptions import (
     BusinessLogicException,
+    ExternalServiceException,
     InvalidOperationException,
+    ProcessingException,
     RecordNotFoundException,
     ValidationException,
 )
@@ -82,6 +84,24 @@ def handle_api_errors(
                     {"message": "The requested resource could not be found"},
                     code=e.error_code,
                     status_code=404,
+                )
+
+            except ExternalServiceException as e:
+                # External service failure (HTTP 502 Bad Gateway)
+                return _build_error_response(
+                    e.message,
+                    {"message": "External service request failed"},
+                    code=e.error_code,
+                    status_code=502,
+                )
+
+            except ProcessingException as e:
+                # Internal processing failure (HTTP 500 Internal Server Error)
+                return _build_error_response(
+                    e.message,
+                    {"message": "Processing operation failed"},
+                    code=e.error_code,
+                    status_code=500,
                 )
 
             except InvalidOperationException as e:

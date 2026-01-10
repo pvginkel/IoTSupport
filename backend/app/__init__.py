@@ -37,6 +37,7 @@ def create_app(settings: "Settings | None" = None) -> App:
         "app.api.assets",
         "app.api.configs",
         "app.api.health",
+        "app.api.images",
         "app.api.metrics",
     ]
 

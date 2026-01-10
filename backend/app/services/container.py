@@ -5,6 +5,7 @@ from dependency_injector import containers, providers
 from app.config import Settings
 from app.services.asset_upload_service import AssetUploadService
 from app.services.config_service import ConfigService
+from app.services.image_proxy_service import ImageProxyService
 from app.services.metrics_service import MetricsService
 
 
@@ -29,4 +30,10 @@ class ServiceContainer(containers.DeclarativeContainer):
     config_service = providers.Factory(
         ConfigService,
         config_dir=config.provided.ESP32_CONFIGS_DIR,
+    )
+
+    # ImageProxyService - Factory creates new instance per request for thread safety
+    image_proxy_service = providers.Factory(
+        ImageProxyService,
+        metrics_service=metrics_service,
     )
