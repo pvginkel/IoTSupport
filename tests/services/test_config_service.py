@@ -6,7 +6,11 @@ from typing import Any
 
 import pytest
 
-from app.exceptions import InvalidOperationException, RecordNotFoundException
+from app.exceptions import (
+    InvalidOperationException,
+    RecordExistsException,
+    RecordNotFoundException,
+)
 from app.services.config_service import ConfigService
 
 
@@ -235,6 +239,74 @@ class TestConfigServiceSaveConfig:
         # Uppercase file should NOT exist
         uppercase_file = config_dir / f"{uppercase_mac}.json"
         assert not uppercase_file.exists()
+
+    def test_save_config_allow_overwrite_false_new_config(
+        self, config_dir: Path, sample_config: dict[str, Any], valid_mac: str
+    ):
+        """With allow_overwrite=False, creating new config succeeds."""
+        service = ConfigService(config_dir)
+        result = service.save_config(valid_mac, sample_config, allow_overwrite=False)
+
+        assert result.mac_address == valid_mac
+        assert result.content == sample_config
+
+    def test_save_config_allow_overwrite_false_existing_config(
+        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
+    ):
+        """With allow_overwrite=False, updating existing config raises RecordExistsException."""
+        make_config_file(valid_mac, sample_config)
+
+        service = ConfigService(config_dir)
+
+        updated_config = {**sample_config, "deviceName": "Updated Name"}
+        with pytest.raises(RecordExistsException) as exc_info:
+            service.save_config(valid_mac, updated_config, allow_overwrite=False)
+
+        assert valid_mac in str(exc_info.value)
+        assert exc_info.value.error_code == "RECORD_EXISTS"
+
+    def test_save_config_allow_overwrite_true_existing_config(
+        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
+    ):
+        """With allow_overwrite=True (default), updating existing config succeeds."""
+        make_config_file(valid_mac, sample_config)
+
+        service = ConfigService(config_dir)
+
+        updated_config = {**sample_config, "deviceName": "Updated Name"}
+        result = service.save_config(valid_mac, updated_config, allow_overwrite=True)
+
+        assert result.device_name == "Updated Name"
+
+
+class TestConfigServiceConfigExists:
+    """Tests for config_exists method."""
+
+    def test_config_exists_returns_true(
+        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
+    ):
+        """Returns True when config file exists."""
+        make_config_file(valid_mac, sample_config)
+
+        service = ConfigService(config_dir)
+        assert service.config_exists(valid_mac) is True
+
+    def test_config_exists_returns_false(self, config_dir: Path, valid_mac: str):
+        """Returns False when config file does not exist."""
+        service = ConfigService(config_dir)
+        assert service.config_exists(valid_mac) is False
+
+    def test_config_exists_normalizes_mac(
+        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any]
+    ):
+        """Normalizes MAC to lowercase for lookup."""
+        lowercase_mac = "aa-bb-cc-dd-ee-ff"
+        uppercase_mac = "AA-BB-CC-DD-EE-FF"
+
+        make_config_file(lowercase_mac, sample_config)
+
+        service = ConfigService(config_dir)
+        assert service.config_exists(uppercase_mac) is True
 
 
 class TestConfigServiceDeleteConfig:

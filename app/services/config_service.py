@@ -8,7 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.exceptions import InvalidOperationException, RecordNotFoundException
+from app.exceptions import (
+    InvalidOperationException,
+    RecordExistsException,
+    RecordNotFoundException,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -138,18 +142,38 @@ class ConfigService:
             content=content,
         )
 
-    def save_config(self, mac_address: str, content: dict[str, Any]) -> ConfigDetail:
+    def config_exists(self, mac_address: str) -> bool:
+        """Check if a config file exists for the given MAC address.
+
+        Args:
+            mac_address: Device MAC address (will be normalized)
+
+        Returns:
+            True if config exists, False otherwise
+        """
+        mac_address = self.normalize_mac_address(mac_address)
+        file_path = self.config_dir / f"{mac_address}.json"
+        return file_path.exists()
+
+    def save_config(
+        self,
+        mac_address: str,
+        content: dict[str, Any],
+        allow_overwrite: bool = True,
+    ) -> ConfigDetail:
         """Create or update config (upsert).
 
         Args:
             mac_address: Device MAC address
             content: Configuration content as a dictionary
+            allow_overwrite: If False, raises error when config already exists
 
         Returns:
             ConfigDetail with saved content
 
         Raises:
             InvalidOperationException: If MAC address format is invalid
+            RecordExistsException: If allow_overwrite is False and config exists
         """
         # Normalize to lowercase before validation
         mac_address = self.normalize_mac_address(mac_address)
@@ -160,6 +184,10 @@ class ConfigService:
             )
 
         file_path = self.config_dir / f"{mac_address}.json"
+
+        # Check if config exists when overwrite is disallowed
+        if not allow_overwrite and file_path.exists():
+            raise RecordExistsException("Config", mac_address)
 
         # Write atomically using temp file + rename
         self._write_atomic(file_path, content)

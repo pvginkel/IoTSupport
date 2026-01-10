@@ -143,6 +143,63 @@ class TestSaveConfig:
 
         assert response.status_code == 400
 
+    def test_save_config_allow_overwrite_false_new(
+        self, client: FlaskClient, sample_config: dict[str, Any], valid_mac: str
+    ):
+        """Creating new config with allow_overwrite=false returns 200."""
+        response = client.put(
+            f"/api/configs/{valid_mac}",
+            json={"content": sample_config, "allow_overwrite": False},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["mac_address"] == valid_mac
+
+    def test_save_config_allow_overwrite_false_existing(
+        self,
+        client: FlaskClient,
+        make_config_file: Any,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+    ):
+        """Updating existing config with allow_overwrite=false returns 409."""
+        make_config_file(valid_mac, sample_config)
+
+        updated_config = {**sample_config, "deviceName": "Updated Name"}
+        response = client.put(
+            f"/api/configs/{valid_mac}",
+            json={"content": updated_config, "allow_overwrite": False},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 409
+        data = response.get_json()
+        assert data["code"] == "RECORD_EXISTS"
+        assert valid_mac in data["error"]
+
+    def test_save_config_allow_overwrite_defaults_true(
+        self,
+        client: FlaskClient,
+        make_config_file: Any,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+    ):
+        """Updating existing config without allow_overwrite param returns 200 (default True)."""
+        make_config_file(valid_mac, sample_config)
+
+        updated_config = {**sample_config, "deviceName": "Updated Name"}
+        response = client.put(
+            f"/api/configs/{valid_mac}",
+            json={"content": updated_config},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["device_name"] == "Updated Name"
+
 
 class TestDeleteConfig:
     """Tests for DELETE /api/configs/<mac_address>."""

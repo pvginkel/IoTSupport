@@ -14,6 +14,7 @@ from app.exceptions import (
     ExternalServiceException,
     InvalidOperationException,
     ProcessingException,
+    RecordExistsException,
     RecordNotFoundException,
     ValidationException,
 )
@@ -84,6 +85,15 @@ def handle_api_errors(
                     {"message": "The requested resource could not be found"},
                     code=e.error_code,
                     status_code=404,
+                )
+
+            except RecordExistsException as e:
+                # Custom domain exception for duplicate resources
+                return _build_error_response(
+                    e.message,
+                    {"message": "The resource already exists"},
+                    code=e.error_code,
+                    status_code=409,
                 )
 
             except ExternalServiceException as e:

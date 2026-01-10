@@ -22,6 +22,14 @@ class RecordNotFoundException(BusinessLogicException):
         super().__init__(message, error_code="RECORD_NOT_FOUND")
 
 
+class RecordExistsException(BusinessLogicException):
+    """Exception raised when attempting to create a record that already exists."""
+
+    def __init__(self, resource_type: str, identifier: str) -> None:
+        message = f"{resource_type} for {identifier} already exists"
+        super().__init__(message, error_code="RECORD_EXISTS")
+
+
 class InvalidOperationException(BusinessLogicException):
     """Exception raised when an operation cannot be performed due to business rules."""
 
