@@ -22,10 +22,9 @@ test.describe('Smoke Tests', () => {
     // Should redirect to /devices
     await expect(page).toHaveURL(/\/devices$/);
 
-    // Should show placeholder content
-    const placeholder = page.getByTestId('devices.list-placeholder');
-    await expect(placeholder).toBeVisible();
-    await expect(placeholder).toContainText('Device Configs');
+    // Should show device list page (either table or empty state)
+    const heading = page.getByRole('heading', { name: 'Device Configs' });
+    await expect(heading).toBeVisible();
   });
 
   test('backend health endpoint responds via proxy', async ({ request }) => {

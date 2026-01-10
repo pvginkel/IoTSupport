@@ -1,18 +1,14 @@
-/**
- * Toast context stub for Phase A
- * This will be replaced with a full implementation in Phase B
- *
- * Phase A stub - Fast Refresh warnings are acceptable until full implementation in Phase B
- * The file exports both context and components, which triggers Fast Refresh warnings.
- * This is intentional for the stub and will be restructured in Phase B.
- */
-
 /* eslint-disable react-refresh/only-export-components */
-
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { ulid } from 'ulid'
+import { ToastContainer, type Toast, type ToastType, type ToastOptions } from '@/components/ui/toast'
 
 export interface ToastContextValue {
-  showToast: (message: string, error?: unknown) => void
+  showToast: (type: ToastType, message: string, options?: ToastOptions) => void
+  showSuccess: (message: string, options?: ToastOptions) => void
+  showError: (message: string, options?: ToastOptions) => void
+  showWarning: (message: string, options?: ToastOptions) => void
+  showInfo: (message: string, options?: ToastOptions) => void
 }
 
 export const ToastContext = createContext<ToastContextValue | null>(null)
@@ -29,18 +25,45 @@ interface ToastProviderProps {
   children: ReactNode
 }
 
-/**
- * Stub ToastProvider for Phase A
- * Logs messages to console instead of showing UI toasts
- */
 export function ToastProvider({ children }: ToastProviderProps) {
-  const showToast = (message: string, error?: unknown) => {
-    // In Phase A, just log to console
-    console.log('[Toast]', message)
-    if (error) {
-      console.error('[Toast Error]', error)
-    }
-  }
+  const [toasts, setToasts] = useState<Toast[]>([])
 
-  return <ToastContext.Provider value={{ showToast }}>{children}</ToastContext.Provider>
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }, [])
+
+  const showToast = useCallback((type: ToastType, message: string, options?: ToastOptions) => {
+    const id = ulid()
+    const toast: Toast = {
+      id,
+      type,
+      message,
+      duration: options?.duration,
+      action: options?.action
+    }
+    setToasts(prev => [...prev, toast])
+  }, [])
+
+  const showSuccess = useCallback((message: string, options?: ToastOptions) => {
+    showToast('success', message, options)
+  }, [showToast])
+
+  const showError = useCallback((message: string, options?: ToastOptions) => {
+    showToast('error', message, options)
+  }, [showToast])
+
+  const showWarning = useCallback((message: string, options?: ToastOptions) => {
+    showToast('warning', message, options)
+  }, [showToast])
+
+  const showInfo = useCallback((message: string, options?: ToastOptions) => {
+    showToast('info', message, options)
+  }, [showToast])
+
+  return (
+    <ToastContext.Provider value={{ showToast, showSuccess, showError, showWarning, showInfo }}>
+      {children}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+    </ToastContext.Provider>
+  )
 }
