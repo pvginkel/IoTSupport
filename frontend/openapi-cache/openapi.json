@@ -1,0 +1,746 @@
+{
+  "components": {
+    "schemas": {
+      "AssetUploadResponseSchema.765868d": {
+        "description": "Response schema for successful asset upload.",
+        "properties": {
+          "filename": {
+            "description": "Name of the uploaded file",
+            "examples": [
+              "firmware.bin"
+            ],
+            "title": "Filename",
+            "type": "string"
+          },
+          "size": {
+            "description": "File size in bytes",
+            "examples": [
+              1048576
+            ],
+            "title": "Size",
+            "type": "integer"
+          },
+          "uploaded_at": {
+            "description": "ISO 8601 timestamp when upload was processed",
+            "examples": [
+              "2026-01-09T14:30:05.123456+00:00"
+            ],
+            "title": "Uploaded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "size",
+          "uploaded_at"
+        ],
+        "title": "AssetUploadResponseSchema",
+        "type": "object"
+      },
+      "ConfigListResponseSchema.6be28b6": {
+        "description": "Response for list endpoint.",
+        "properties": {
+          "configs": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigListResponseSchema.6be28b6.ConfigSummarySchema"
+            },
+            "title": "Configs",
+            "type": "array"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "configs",
+          "count"
+        ],
+        "title": "ConfigListResponseSchema",
+        "type": "object"
+      },
+      "ConfigListResponseSchema.6be28b6.ConfigSummarySchema": {
+        "description": "Summary for list endpoint.",
+        "properties": {
+          "device_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Device entity ID",
+            "title": "Device Entity Id"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Device name from config",
+            "title": "Device Name"
+          },
+          "enable_ota": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "OTA update enabled",
+            "title": "Enable Ota"
+          },
+          "mac_address": {
+            "description": "Device MAC address (filename)",
+            "title": "Mac Address",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mac_address"
+        ],
+        "title": "ConfigSummarySchema",
+        "type": "object"
+      },
+      "ConfigResponseSchema.6be28b6": {
+        "description": "Response for get/save endpoints.",
+        "properties": {
+          "content": {
+            "additionalProperties": true,
+            "title": "Content",
+            "type": "object"
+          },
+          "device_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Device Entity Id"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Device Name"
+          },
+          "enable_ota": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Enable Ota"
+          },
+          "mac_address": {
+            "title": "Mac Address",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mac_address",
+          "content"
+        ],
+        "title": "ConfigResponseSchema",
+        "type": "object"
+      },
+      "ConfigSaveRequestSchema.6be28b6": {
+        "description": "Request for save endpoint.",
+        "properties": {
+          "allow_overwrite": {
+            "default": true,
+            "description": "If false, returns error when config already exists",
+            "title": "Allow Overwrite",
+            "type": "boolean"
+          },
+          "content": {
+            "additionalProperties": true,
+            "description": "JSON configuration content",
+            "title": "Content",
+            "type": "object"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "ConfigSaveRequestSchema",
+        "type": "object"
+      },
+      "ErrorResponseSchema.8c5cd6b": {
+        "description": "Standard error response.",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Error code",
+            "title": "Code"
+          },
+          "correlationId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Request correlation ID",
+            "title": "Correlationid"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Additional error details",
+            "title": "Details"
+          },
+          "error": {
+            "description": "Error message",
+            "title": "Error",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponseSchema",
+        "type": "object"
+      },
+      "LvglImageQuerySchema.bf1914b": {
+        "additionalProperties": false,
+        "description": "Query parameters for LVGL image proxy endpoint.",
+        "properties": {
+          "headers": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Comma-separated list of header names to forward from the request",
+            "examples": [
+              "Authorization,X-API-Key"
+            ],
+            "title": "Headers"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Target height for resizing (downscale only, maintains aspect ratio)",
+            "examples": [
+              240
+            ],
+            "title": "Height"
+          },
+          "url": {
+            "description": "URL of the image to fetch and convert",
+            "examples": [
+              "https://example.com/image.png"
+            ],
+            "format": "uri",
+            "maxLength": 2083,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Target width for resizing (downscale only, maintains aspect ratio)",
+            "examples": [
+              240
+            ],
+            "title": "Width"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "LvglImageQuerySchema",
+        "type": "object"
+      },
+      "ValidationError.6a07bef": {
+        "description": "Model of a validation error response.",
+        "items": {
+          "$ref": "#/components/schemas/ValidationError.6a07bef.ValidationErrorElement"
+        },
+        "title": "ValidationError",
+        "type": "array"
+      },
+      "ValidationError.6a07bef.ValidationErrorElement": {
+        "description": "Model of a validation error response element.",
+        "properties": {
+          "ctx": {
+            "title": "Error context",
+            "type": "object"
+          },
+          "loc": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing field name",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Error message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationErrorElement",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "REST API for managing ESP32 IoT device configurations",
+    "title": "IoT Support API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/assets": {
+      "post": {
+        "description": "Expects multipart/form-data with: - file: Binary file data - timestamp: ISO 8601 timestamp string - signature: Base64-encoded RSA signature of timestamp\n\nReturns:     200: Upload successful with file metadata     400: Validation error (missing fields, invalid filename, timestamp, or signature)     500: Server error (filesystem write failure)",
+        "operationId": "post__api_assets",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetUploadResponseSchema.765868d"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Upload asset file with cryptographic signature verification.",
+        "tags": []
+      }
+    },
+    "/api/configs": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_configs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigListResponseSchema.6be28b6"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "List all configurations with summary data.",
+        "tags": []
+      }
+    },
+    "/api/configs/{mac_address}": {
+      "delete": {
+        "description": "",
+        "operationId": "delete__api_configs_{mac_address}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "mac_address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Delete configuration by MAC address.",
+        "tags": []
+      },
+      "get": {
+        "description": "",
+        "operationId": "get__api_configs_{mac_address}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "mac_address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigResponseSchema.6be28b6"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Get single configuration by MAC address.",
+        "tags": []
+      },
+      "put": {
+        "description": "",
+        "operationId": "put__api_configs_{mac_address}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "mac_address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigSaveRequestSchema.6be28b6"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigResponseSchema.6be28b6"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        },
+        "summary": "Create or update configuration (upsert).",
+        "tags": []
+      }
+    },
+    "/api/health": {
+      "get": {
+        "description": "Returns 200 when config directory is accessible. Returns 503 when config directory is not accessible.",
+        "operationId": "get__api_health",
+        "parameters": [],
+        "responses": {},
+        "summary": "Health check endpoint for Kubernetes probes.",
+        "tags": []
+      }
+    },
+    "/api/images/lvgl": {
+      "get": {
+        "description": "Query Parameters:     url: URL of the image to fetch     headers: Comma-separated list of header names to forward     width: Target width for resizing (optional, downscale only)     height: Target height for resizing (optional, downscale only)\n\nReturns:     Binary LVGL image data with Cache-Control: no-store header",
+        "operationId": "get__api_images_lvgl",
+        "parameters": [
+          {
+            "description": "URL of the image to fetch and convert",
+            "in": "query",
+            "name": "url",
+            "required": true,
+            "schema": {
+              "description": "URL of the image to fetch and convert",
+              "examples": [
+                "https://example.com/image.png"
+              ],
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated list of header names to forward from the request",
+            "in": "query",
+            "name": "headers",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Comma-separated list of header names to forward from the request",
+              "examples": [
+                "Authorization,X-API-Key"
+              ],
+              "title": "Headers"
+            }
+          },
+          {
+            "description": "Target width for resizing (downscale only, maintains aspect ratio)",
+            "in": "query",
+            "name": "width",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Target width for resizing (downscale only, maintains aspect ratio)",
+              "examples": [
+                240
+              ],
+              "title": "Width"
+            }
+          },
+          {
+            "description": "Target height for resizing (downscale only, maintains aspect ratio)",
+            "in": "query",
+            "name": "height",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Target height for resizing (downscale only, maintains aspect ratio)",
+              "examples": [
+                240
+              ],
+              "title": "Height"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Fetch and convert an image to LVGL binary format.",
+        "tags": []
+      }
+    },
+    "/metrics": {
+      "get": {
+        "description": "Returns:     Response with metrics data in Prometheus exposition format",
+        "operationId": "get__metrics",
+        "parameters": [],
+        "responses": {},
+        "summary": "Return metrics in Prometheus text format.",
+        "tags": []
+      }
+    }
+  },
+  "security": [],
+  "tags": []
+}

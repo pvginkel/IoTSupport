@@ -13,20 +13,24 @@ export class DevicesFactory {
 
   /**
    * Generate a random MAC address for testing
+   * Format: XX-XX-XX-XX-XX-XX (6 pairs of hex digits with hyphen separators)
    */
-  randomMacAddress(prefix: string = 'TEST'): string {
-    const id = ulid().slice(0, 6);
-    return `${prefix}:${id.slice(0, 2)}:${id.slice(2, 4)}:${id.slice(4, 6)}`;
+  randomMacAddress(): string {
+    const id = ulid().slice(0, 12).toUpperCase();
+    return `${id.slice(0, 2)}-${id.slice(2, 4)}-${id.slice(4, 6)}-${id.slice(6, 8)}-${id.slice(8, 10)}-${id.slice(10, 12)}`;
   }
 
   /**
    * Create a device configuration
+   * Note: Backend normalizes MAC addresses to lowercase
    */
   async create(options: DeviceFactoryOptions = {}): Promise<{
     macAddress: string;
     config: Record<string, unknown>;
   }> {
-    const macAddress = options.macAddress || this.randomMacAddress();
+    const inputMac = options.macAddress || this.randomMacAddress();
+    // Backend normalizes to lowercase
+    const macAddress = inputMac.toLowerCase();
     const config = {
       deviceName: options.deviceName || `Test Device ${ulid()}`,
       deviceEntityId: options.deviceEntityId || `test_device_${ulid()}`,

@@ -93,7 +93,7 @@ export function DeviceEditor({
       return
     }
 
-    const config = JSON.parse(jsonConfig)
+    const configContent = JSON.parse(jsonConfig)
 
     // Handle MAC rename for edit mode
     if (mode === 'edit' && macAddress !== originalMacRef.current && originalMacRef.current) {
@@ -101,7 +101,7 @@ export function DeviceEditor({
         // Save to new MAC
         await saveDevice.mutateAsync({
           macAddress,
-          config
+          config: { content: configContent }
         })
 
         // Delete old MAC (partial success is acceptable - new device saved)
@@ -120,7 +120,7 @@ export function DeviceEditor({
     } else {
       // Normal save (new or edit without MAC change)
       saveDevice.mutate(
-        { macAddress, config },
+        { macAddress, config: { content: configContent } },
         {
           onSuccess: () => {
             onSaveCallback?.()

@@ -13,10 +13,9 @@ export async function apiRequest<T>(
   const { data, error, response } = await requestFn();
 
   if (error || !response.ok) {
+    const errorObj = error as { message?: string; detail?: string; error?: string } | undefined;
     const errorMessage = typeof error === 'object' && error !== null
-      ? (error as { message?: string; detail?: string }).message ||
-        (error as { message?: string; detail?: string }).detail ||
-        ''
+      ? errorObj?.message || errorObj?.detail || errorObj?.error || JSON.stringify(error)
       : '';
     const statusInfo = `${response.status} ${response.statusText}`;
     throw new Error(

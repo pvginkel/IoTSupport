@@ -3,14 +3,18 @@ import { test as base, expect } from '@playwright/test';
 import type { WorkerInfo } from '@playwright/test';
 import getPort from 'get-port';
 import { startBackend, startFrontend } from './process/servers';
+import { createApiClient } from '../api/client';
+import { DevicesFactory } from '../api/factories/devices';
 
 type ServiceManager = {
   frontendUrl: string;
+  backendUrl: string;
   disposeServices(): Promise<void>;
 };
 
 type TestFixtures = {
   frontendUrl: string;
+  devices: DevicesFactory;
 };
 
 type InternalFixtures = {
@@ -24,6 +28,12 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
 
   baseURL: async ({ frontendUrl }, use) => {
     await use(frontendUrl);
+  },
+
+  devices: async ({ _serviceManager }, use) => {
+    const client = createApiClient({ baseUrl: _serviceManager.backendUrl });
+    const factory = new DevicesFactory(client);
+    await use(factory);
   },
 
   page: async ({ page }, use) => {
@@ -164,6 +174,7 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
 
       const serviceManager: ServiceManager = {
         frontendUrl: frontend.url,
+        backendUrl: backend.url,
         disposeServices,
       };
 
