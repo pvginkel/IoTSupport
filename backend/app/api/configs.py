@@ -103,7 +103,11 @@ def get_config(
 @configs_bp.route("/<mac_address>", methods=["PUT"])
 @api.validate(
     json=ConfigSaveRequestSchema,
-    resp=SpectreeResponse(HTTP_200=ConfigResponseSchema, HTTP_400=ErrorResponseSchema),
+    resp=SpectreeResponse(
+        HTTP_200=ConfigResponseSchema,
+        HTTP_400=ErrorResponseSchema,
+        HTTP_409=ErrorResponseSchema,
+    ),
 )
 @handle_api_errors
 @inject
@@ -120,7 +124,9 @@ def save_config(
         # Spectree validates the request, but we still need to access the data
         data = ConfigSaveRequestSchema.model_validate(request.get_json())
 
-        config = config_service.save_config(mac_address, data.content)
+        config = config_service.save_config(
+            mac_address, data.content, allow_overwrite=data.allow_overwrite
+        )
 
         # Update config count after save
         configs = config_service.list_configs()

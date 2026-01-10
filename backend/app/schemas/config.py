@@ -38,6 +38,10 @@ class ConfigSaveRequestSchema(BaseModel):
     """Request for save endpoint."""
 
     content: dict[str, Any] = Field(..., description="JSON configuration content")
+    allow_overwrite: bool = Field(
+        default=True,
+        description="If false, returns error when config already exists",
+    )
 
 
 class ConfigResponseSchema(BaseModel):
