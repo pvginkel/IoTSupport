@@ -1,0 +1,188 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.29kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:slim
+#2 DONE 0.2s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [internal] load build context
+#4 transferring context: 5.19kB 0.0s done
+#4 DONE 0.0s
+
+#5 [build 1/8] FROM docker.io/library/python:slim@sha256:3955a7dd66ccf92b68d0232f7f86d892eaf75255511dc7e98961bdc990dc6c9b
+#5 resolve docker.io/library/python:slim@sha256:3955a7dd66ccf92b68d0232f7f86d892eaf75255511dc7e98961bdc990dc6c9b 0.0s done
+#5 sha256:3955a7dd66ccf92b68d0232f7f86d892eaf75255511dc7e98961bdc990dc6c9b 10.37kB / 10.37kB done
+#5 sha256:c13298ac1aac4a3afa031198e681eee745de2e3d95a45caa2c457dd4af0b064f 1.75kB / 1.75kB done
+#5 sha256:a6b1e1d4ae3eb4a24c520d85e6cca756b42d004047e874404100c38f3a827853 4.95kB / 4.95kB done
+#5 sha256:26ece212626a44451fd18280956791ed8d3fed8fd252717a970c2b79411c4903 0B / 1.29MB 0.1s
+#5 sha256:26ece212626a44451fd18280956791ed8d3fed8fd252717a970c2b79411c4903 1.29MB / 1.29MB 0.4s done
+#5 extracting sha256:26ece212626a44451fd18280956791ed8d3fed8fd252717a970c2b79411c4903
+#5 extracting sha256:26ece212626a44451fd18280956791ed8d3fed8fd252717a970c2b79411c4903 0.1s done
+#5 sha256:d4025aea9e4c1e743787a4c2298d6f6d593a0200c17f93f55a7b730ffe271398 0B / 12.24MB 0.5s
+#5 sha256:d4025aea9e4c1e743787a4c2298d6f6d593a0200c17f93f55a7b730ffe271398 1.05MB / 12.24MB 0.8s
+#5 sha256:d4025aea9e4c1e743787a4c2298d6f6d593a0200c17f93f55a7b730ffe271398 4.19MB / 12.24MB 1.0s
+#5 sha256:d4025aea9e4c1e743787a4c2298d6f6d593a0200c17f93f55a7b730ffe271398 5.24MB / 12.24MB 1.1s
+#5 sha256:d4025aea9e4c1e743787a4c2298d6f6d593a0200c17f93f55a7b730ffe271398 7.34MB / 12.24MB 1.3s
+#5 sha256:d4025aea9e4c1e743787a4c2298d6f6d593a0200c17f93f55a7b730ffe271398 9.44MB / 12.24MB 1.4s
+#5 sha256:d4025aea9e4c1e743787a4c2298d6f6d593a0200c17f93f55a7b730ffe271398 11.53MB / 12.24MB 1.6s
+#5 sha256:d4025aea9e4c1e743787a4c2298d6f6d593a0200c17f93f55a7b730ffe271398 12.24MB / 12.24MB 1.6s done
+#5 extracting sha256:d4025aea9e4c1e743787a4c2298d6f6d593a0200c17f93f55a7b730ffe271398 0.1s
+#5 sha256:2bbf6e277eea76010be1dccc57e6edac2bd3ad9e2fde8db2270a64508b233780 0B / 248B 1.7s
+#5 sha256:2bbf6e277eea76010be1dccc57e6edac2bd3ad9e2fde8db2270a64508b233780 248B / 248B 1.9s done
+#5 extracting sha256:d4025aea9e4c1e743787a4c2298d6f6d593a0200c17f93f55a7b730ffe271398 0.3s done
+#5 extracting sha256:2bbf6e277eea76010be1dccc57e6edac2bd3ad9e2fde8db2270a64508b233780 done
+#5 DONE 2.2s
+
+#6 [build 2/8] RUN apt-get update &&     apt-get install -y --no-install-recommends       curl       ca-certificates       build-essential       libffi-dev libssl-dev pkg-config       patch    && rm -rf /var/lib/apt/lists/*
+#6 0.397 Get:1 http://deb.debian.org/debian trixie InRelease [140 kB]
+#6 0.423 Get:2 http://deb.debian.org/debian trixie-updates InRelease [47.3 kB]
+#6 0.435 Get:3 http://deb.debian.org/debian-security trixie-security InRelease [43.4 kB]
+#6 0.459 Get:4 http://deb.debian.org/debian trixie/main amd64 Packages [9670 kB]
+#6 1.979 Get:5 http://deb.debian.org/debian trixie-updates/main amd64 Packages [5412 B]
+#6 1.979 Get:6 http://deb.debian.org/debian-security trixie-security/main amd64 Packages [94.5 kB]
+#6 2.551 Fetched 10.0 MB in 2s (4565 kB/s)
+#6 2.551 Reading package lists...
+#6 3.010 Reading package lists...
+#6 3.487 Building dependency tree...
+#6 3.606 Reading state information...
+#6 3.775 ca-certificates is already the newest version (20250419).
+#6 3.775 The following additional packages will be installed:
+#6 3.775   binutils binutils-common binutils-x86-64-linux-gnu bzip2 cpp cpp-14
+#6 3.775   cpp-14-x86-64-linux-gnu cpp-x86-64-linux-gnu dpkg-dev g++ g++-14
+#6 3.775   g++-14-x86-64-linux-gnu g++-x86-64-linux-gnu gcc gcc-14
+#6 3.775   gcc-14-x86-64-linux-gnu gcc-x86-64-linux-gnu libasan8 libatomic1 libbinutils
+#6 3.775   libbrotli1 libc-bin libc-dev-bin libc6 libc6-dev libcc1-0 libcom-err2
+#6 3.775   libcrypt-dev libctf-nobfd0 libctf0 libcurl4t64 libdpkg-perl libgcc-14-dev
+#6 3.775   libgdbm-compat4t64 libgnutls30t64 libgomp1 libgprofng0 libgssapi-krb5-2
+#6 3.775   libhwasan0 libidn2-0 libisl23 libitm1 libjansson4 libk5crypto3 libkeyutils1
+#6 3.775   libkrb5-3 libkrb5support0 libldap2 liblsan0 libmpc3 libmpfr6 libnghttp2-14
+#6 3.775   libnghttp3-9 libp11-kit0 libperl5.40 libpkgconf3 libpsl5t64 libquadmath0
+#6 3.776   librtmp1 libsasl2-2 libsasl2-modules-db libsframe1 libssh2-1t64
+#6 3.776   libstdc++-14-dev libtasn1-6 libtsan2 libubsan1 libunistring5 linux-libc-dev
+#6 3.776   make perl perl-modules-5.40 pkgconf pkgconf-bin rpcsvc-proto xz-utils
+#6 3.778 Suggested packages:
+#6 3.778   binutils-doc gprofng-gui binutils-gold bzip2-doc cpp-doc gcc-14-locales
+#6 3.778   cpp-14-doc debian-keyring debian-tag2upload-keyring g++-multilib
+#6 3.778   g++-14-multilib gcc-14-doc gcc-multilib manpages-dev autoconf automake
+#6 3.778   libtool flex bison gdb gcc-doc gcc-14-multilib gdb-x86-64-linux-gnu
+#6 3.778   libc-devtools glibc-doc sq | sqop | rsop | gosop | pgpainless-cli | gpg-sq
+#6 3.778   | gnupg sensible-utils git bzr gnutls-bin krb5-doc krb5-user libssl-doc
+#6 3.778   libstdc++-14-doc make-doc ed diffutils-doc perl-doc
+#6 3.778   libterm-readline-gnu-perl | libterm-readline-perl-perl
+#6 3.778   libtap-harness-archive-perl
+#6 3.778 Recommended packages:
+#6 3.778   bash-completion fakeroot sq | sqop | rsop | gosop | pgpainless-cli | gpg-sq
+#6 3.778   | gnupg libalgorithm-merge-perl manpages manpages-dev libfile-fcntllock-perl
+#6 3.778   liblocale-gettext-perl krb5-locales libldap-common publicsuffix
+#6 3.778   libsasl2-modules
+#6 4.110 The following NEW packages will be installed:
+#6 4.110   binutils binutils-common binutils-x86-64-linux-gnu build-essential bzip2 cpp
+#6 4.110   cpp-14 cpp-14-x86-64-linux-gnu cpp-x86-64-linux-gnu curl dpkg-dev g++ g++-14
+#6 4.110   g++-14-x86-64-linux-gnu g++-x86-64-linux-gnu gcc gcc-14
+#6 4.110   gcc-14-x86-64-linux-gnu gcc-x86-64-linux-gnu libasan8 libatomic1 libbinutils
+#6 4.110   libbrotli1 libc-dev-bin libc6-dev libcc1-0 libcom-err2 libcrypt-dev
+#6 4.110   libctf-nobfd0 libctf0 libcurl4t64 libdpkg-perl libffi-dev libgcc-14-dev
+#6 4.110   libgdbm-compat4t64 libgnutls30t64 libgomp1 libgprofng0 libgssapi-krb5-2
+#6 4.110   libhwasan0 libidn2-0 libisl23 libitm1 libjansson4 libk5crypto3 libkeyutils1
+#6 4.110   libkrb5-3 libkrb5support0 libldap2 liblsan0 libmpc3 libmpfr6 libnghttp2-14
+#6 4.110   libnghttp3-9 libp11-kit0 libperl5.40 libpkgconf3 libpsl5t64 libquadmath0
+#6 4.110   librtmp1 libsasl2-2 libsasl2-modules-db libsframe1 libssh2-1t64 libssl-dev
+#6 4.111   libstdc++-14-dev libtasn1-6 libtsan2 libubsan1 libunistring5 linux-libc-dev
+#6 4.111   make patch perl perl-modules-5.40 pkg-config pkgconf pkgconf-bin
+#6 4.111   rpcsvc-proto xz-utils
+#6 4.111 The following packages will be upgraded:
+#6 4.112   libc-bin libc6
+#6 4.144 2 upgraded, 80 newly installed, 0 to remove and 4 not upgraded.
+#6 4.144 Need to get 93.8 MB of archives.
+#6 4.144 After this operation, 368 MB of additional disk space will be used.
+#6 4.144 Get:1 http://deb.debian.org/debian trixie/main amd64 libc6 amd64 2.41-12+deb13u1 [2851 kB]
+#6 ...
+
+#7 [stage-1 2/5] RUN apt-get update &&     apt-get install -y --no-install-recommends tini netcat-openbsd &&     rm -rf /var/lib/apt/lists/*
+#7 0.396 Get:1 http://deb.debian.org/debian trixie InRelease [140 kB]
+#7 0.418 Get:2 http://deb.debian.org/debian trixie-updates InRelease [47.3 kB]
+#7 0.426 Get:3 http://deb.debian.org/debian-security trixie-security InRelease [43.4 kB]
+#7 0.438 Get:4 http://deb.debian.org/debian trixie/main amd64 Packages [9670 kB]
+#7 1.525 Get:5 http://deb.debian.org/debian trixie-updates/main amd64 Packages [5412 B]
+#7 1.526 Get:6 http://deb.debian.org/debian-security trixie-security/main amd64 Packages [94.5 kB]
+#7 2.109 Fetched 10.0 MB in 2s (5758 kB/s)
+#7 2.109 Reading package lists...
+#7 2.575 Reading package lists...
+#7 3.004 Building dependency tree...
+#7 3.113 Reading state information...
+#7 3.334 The following NEW packages will be installed:
+#7 3.334   netcat-openbsd tini
+#7 3.373 0 upgraded, 2 newly installed, 0 to remove and 6 not upgraded.
+#7 3.373 Need to get 323 kB of archives.
+#7 3.373 After this operation, 895 kB of additional disk space will be used.
+#7 3.373 Get:1 http://deb.debian.org/debian trixie/main amd64 netcat-openbsd amd64 1.229-1 [42.5 kB]
+#7 3.384 Get:2 http://deb.debian.org/debian trixie/main amd64 tini amd64 0.19.0-3+b5 [281 kB]
+#7 3.518 debconf: unable to initialize frontend: Dialog
+#7 3.518 debconf: (TERM is not set, so the dialog frontend is not usable.)
+#7 3.518 debconf: falling back to frontend: Readline
+#7 3.518 debconf: unable to initialize frontend: Readline
+#7 3.518 debconf: (Can't locate Term/ReadLine.pm in @INC (you may need to install the Term::ReadLine module) (@INC entries checked: /etc/perl /usr/local/lib/x86_64-linux-gnu/perl/5.40.1 /usr/local/share/perl/5.40.1 /usr/lib/x86_64-linux-gnu/perl5/5.40 /usr/share/perl5 /usr/lib/x86_64-linux-gnu/perl-base /usr/lib/x86_64-linux-gnu/perl/5.40 /usr/share/perl/5.40 /usr/local/lib/site_perl) at /usr/share/perl5/Debconf/FrontEnd/Readline.pm line 8, <STDIN> line 2.)
+#7 3.518 debconf: falling back to frontend: Teletype
+#7 3.521 debconf: unable to initialize frontend: Teletype
+#7 3.521 debconf: (This frontend requires a controlling tty.)
+#7 3.521 debconf: falling back to frontend: Noninteractive
+#7 4.037 Fetched 323 kB in 0s (5872 kB/s)
+#7 4.078 Selecting previously unselected package netcat-openbsd.
+#7 4.078 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 5644 files and directories currently installed.)
+#7 4.083 Preparing to unpack .../netcat-openbsd_1.229-1_amd64.deb ...
+#7 4.092 Unpacking netcat-openbsd (1.229-1) ...
+#7 4.159 Selecting previously unselected package tini.
+#7 4.160 Preparing to unpack .../tini_0.19.0-3+b5_amd64.deb ...
+#7 4.168 Unpacking tini (0.19.0-3+b5) ...
+#7 4.239 Setting up netcat-openbsd (1.229-1) ...
+#7 4.259 update-alternatives: using /bin/nc.openbsd to provide /bin/nc (nc) in auto mode
+#7 4.263 update-alternatives: warning: skip creation of /usr/share/man/man1/nc.1.gz because associated file /usr/share/man/man1/nc_openbsd.1.gz (of link group nc) doesn't exist
+#7 4.263 update-alternatives: warning: skip creation of /usr/share/man/man1/netcat.1.gz because associated file /usr/share/man/man1/nc_openbsd.1.gz (of link group nc) doesn't exist
+#7 4.278 Setting up tini (0.19.0-3+b5) ...
+#7 DONE 4.4s
+
+#8 [stage-1 3/5] WORKDIR /app
+#8 DONE 0.1s
+
+#6 [build 2/8] RUN apt-get update &&     apt-get install -y --no-install-recommends       curl       ca-certificates       build-essential       libffi-dev libssl-dev pkg-config       patch    && rm -rf /var/lib/apt/lists/*
+#6 4.381 Get:2 http://deb.debian.org/debian trixie/main amd64 libc-bin amd64 2.41-12+deb13u1 [637 kB]
+#6 4.430 Get:3 http://deb.debian.org/debian trixie/main amd64 bzip2 amd64 1.0.8-6 [40.5 kB]
+#6 4.433 Get:4 http://deb.debian.org/debian trixie/main amd64 perl-modules-5.40 all 5.40.1-6 [3019 kB]
+#6 4.671 Get:5 http://deb.debian.org/debian trixie/main amd64 libgdbm-compat4t64 amd64 1.24-2 [50.3 kB]
+#6 4.675 Get:6 http://deb.debian.org/debian trixie/main amd64 libperl5.40 amd64 5.40.1-6 [4341 kB]
+#6 5.017 Get:7 http://deb.debian.org/debian trixie/main amd64 perl amd64 5.40.1-6 [267 kB]
+#6 5.038 Get:8 http://deb.debian.org/debian trixie/main amd64 xz-utils amd64 5.8.1-1 [660 kB]
+#6 5.089 Get:9 http://deb.debian.org/debian trixie/main amd64 libsframe1 amd64 2.44-3 [78.4 kB]
+#6 5.095 Get:10 http://deb.debian.org/debian trixie/main amd64 binutils-common amd64 2.44-3 [2509 kB]
+#6 5.293 Get:11 http://deb.debian.org/debian trixie/main amd64 libbinutils amd64 2.44-3 [534 kB]
+#6 5.335 Get:12 http://deb.debian.org/debian trixie/main amd64 libgprofng0 amd64 2.44-3 [808 kB]
+#6 5.398 Get:13 http://deb.debian.org/debian trixie/main amd64 libctf-nobfd0 amd64 2.44-3 [156 kB]
+#6 5.411 Get:14 http://deb.debian.org/debian trixie/main amd64 libctf0 amd64 2.44-3 [88.6 kB]
+#6 5.418 Get:15 http://deb.debian.org/debian trixie/main amd64 libjansson4 amd64 2.14-2+b3 [39.8 kB]
+#6 5.421 Get:16 http://deb.debian.org/debian trixie/main amd64 binutils-x86-64-linux-gnu amd64 2.44-3 [1014 kB]
+#6 5.501 Get:17 http://deb.debian.org/debian trixie/main amd64 binutils amd64 2.44-3 [265 kB]
+#6 5.522 Get:18 http://deb.debian.org/debian trixie/main amd64 libc-dev-bin amd64 2.41-12+deb13u1 [58.5 kB]
+#6 5.526 Get:19 http://deb.debian.org/debian trixie/main amd64 linux-libc-dev all 6.12.63-1 [2720 kB]
+#6 5.741 Get:20 http://deb.debian.org/debian trixie/main amd64 libcrypt-dev amd64 1:4.4.38-1 [119 kB]
+#6 5.750 Get:21 http://deb.debian.org/debian trixie/main amd64 rpcsvc-proto amd64 1.4.3-1 [63.3 kB]
+#6 5.755 Get:22 http://deb.debian.org/debian trixie/main amd64 libc6-dev amd64 2.41-12+deb13u1 [1994 kB]
+#6 5.912 Get:23 http://deb.debian.org/debian trixie/main amd64 libisl23 amd64 0.27-1 [659 kB]
+#6 5.964 Get:24 http://deb.debian.org/debian trixie/main amd64 libmpfr6 amd64 4.2.2-1 [729 kB]
+#6 6.021 Get:25 http://deb.debian.org/debian trixie/main amd64 libmpc3 amd64 1.3.1-1+b3 [52.2 kB]
+#6 6.025 Get:26 http://deb.debian.org/debian trixie/main amd64 cpp-14-x86-64-linux-gnu amd64 14.2.0-19 [11.0 MB]
+#6 6.895 Get:27 http://deb.debian.org/debian trixie/main amd64 cpp-14 amd64 14.2.0-19 [1280 B]
+#6 6.895 Get:28 http://deb.debian.org/debian trixie/main amd64 cpp-x86-64-linux-gnu amd64 4:14.2.0-1 [4840 B]
+#6 6.895 Get:29 http://deb.debian.org/debian trixie/main amd64 cpp amd64 4:14.2.0-1 [1568 B]
+#6 6.896 Get:30 http://deb.debian.org/debian trixie/main amd64 libcc1-0 amd64 14.2.0-19 [42.8 kB]
+#6 6.898 Get:31 http://deb.debian.org/debian trixie/main amd64 libgomp1 amd64 14.2.0-19 [137 kB]
+#6 6.909 Get:32 http://deb.debian.org/debian trixie/main amd64 libitm1 amd64 14.2.0-19 [26.0 kB]
+#6 6.911 Get:33 http://deb.debian.org/debian trixie/main amd64 libatomic1 amd64 14.2.0-19 [9308 B]
+#6 6.912 Get:34 http://deb.debian.org/debian trixie/main amd64 libasan8 amd64 14.2.0-19 [2725 kB]
+#6 CANCELED
+ERROR: failed to build: failed to solve: Canceled: context canceled

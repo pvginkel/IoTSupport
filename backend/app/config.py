@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # Flask settings
     SECRET_KEY: str = Field(default="dev-secret-key-change-in-production")
-    DEBUG: bool = Field(default=True)
+    FLASK_ENV: str = Field(default="development")
 
     # ESP32 configuration directory
     ESP32_CONFIGS_DIR: Path = Field(
