@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Link } from '@tanstack/react-router'
+import { Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { DeviceConfig } from '@/hooks/use-devices'
@@ -87,9 +88,9 @@ export function DeviceListTable({
               className="border-b border-zinc-800 hover:bg-zinc-900"
               data-testid="devices.list.row"
             >
-              <td className="px-4 py-3 text-sm text-zinc-50">{device.macAddress}</td>
+              <td className="px-4 py-3 text-sm text-zinc-50 font-mono">{device.macAddress}</td>
               <td className="px-4 py-3 text-sm text-zinc-300">{device.deviceName || '—'}</td>
-              <td className="px-4 py-3 text-sm text-zinc-300">{device.deviceEntityId || '—'}</td>
+              <td className="px-4 py-3 text-sm text-zinc-300 font-mono">{device.deviceEntityId || '—'}</td>
               <td className="px-4 py-3 text-sm text-zinc-300">
                 {device.enableOta === true && <span className="text-green-400">✓</span>}
                 {device.enableOta === false && <span className="text-red-400">✕</span>}
@@ -98,8 +99,13 @@ export function DeviceListTable({
               <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
                   <Link to="/devices/$macAddress" params={{ macAddress: device.macAddress }}>
-                    <Button variant="outline" size="sm" data-testid="devices.list.row.edit-button">
-                      Edit
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      data-testid="devices.list.row.edit-button"
+                      title="Edit device"
+                    >
+                      <Pencil className="h-4 w-4" />
                     </Button>
                   </Link>
                   <Button
@@ -107,8 +113,9 @@ export function DeviceListTable({
                     size="sm"
                     onClick={() => onDelete(device.macAddress)}
                     data-testid="devices.list.row.delete-button"
+                    title="Delete device"
                   >
-                    Delete
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               </td>

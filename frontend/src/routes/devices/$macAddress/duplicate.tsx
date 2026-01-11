@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { DeviceEditor } from '@/components/devices/device-editor'
 import { useDevice } from '@/hooks/use-devices'
+import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('/devices/$macAddress/duplicate')({
   component: DuplicateDeviceRoute,
@@ -8,7 +9,7 @@ export const Route = createFileRoute('/devices/$macAddress/duplicate')({
 
 function DuplicateDeviceRoute() {
   const { macAddress } = Route.useParams()
-  const { config, isLoading } = useDevice(macAddress)
+  const { config, isLoading, error } = useDevice(macAddress)
 
   if (isLoading) {
     return (
@@ -18,10 +19,14 @@ function DuplicateDeviceRoute() {
     )
   }
 
-  if (!config) {
+  if (error || !config) {
+    const errorMessage = error?.message || 'Device not found'
     return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-red-400">Device not found</p>
+      <div className="flex h-full flex-col items-center justify-center gap-4">
+        <p className="text-red-400">{errorMessage}</p>
+        <Link to="/devices">
+          <Button variant="outline">Back to Device List</Button>
+        </Link>
       </div>
     )
   }

@@ -40,7 +40,7 @@ export class DevicesFactory {
     await apiRequest(() =>
       this.client.PUT('/api/configs/{mac_address}', {
         params: { path: { mac_address: macAddress } },
-        body: { content: config },
+        body: { content: config, allow_overwrite: true },
       })
     );
 

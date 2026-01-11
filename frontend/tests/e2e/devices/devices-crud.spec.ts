@@ -222,7 +222,7 @@ test.describe('Edit Device', () => {
 });
 
 test.describe('Duplicate Device', () => {
-  test('duplicates a device', async ({ page, devices }) => {
+  test('duplicates a device via new device page', async ({ page, devices }) => {
     const sourceDevice = await devices.create({
       macAddress: '5c-ce-d0-b1-00-01',
       deviceName: 'Source Device',
@@ -233,10 +233,23 @@ test.describe('Duplicate Device', () => {
 
     try {
       const devicesPage = new DevicesPage(page);
-      await devicesPage.gotoDuplicate(sourceDevice.macAddress);
+      await devicesPage.gotoEdit(sourceDevice.macAddress);
       await devicesPage.waitForEditorLoaded();
 
-      // Clear any pre-filled MAC and set new MAC
+      // Click duplicate button
+      await devicesPage.duplicate();
+
+      // Should navigate to /devices/new with config in search params
+      await expect(page).toHaveURL(/\/devices\/new\?/);
+      await devicesPage.waitForEditorLoaded();
+
+      // MAC should be empty (user needs to enter new MAC)
+      await expect(devicesPage.macInput).toHaveValue('');
+
+      // Title should show it's a duplicate
+      await expect(page.locator('h1')).toContainText('Duplicate Device');
+
+      // Fill in new MAC
       await devicesPage.fillMacAddress(newMac);
 
       // Wait for validation
@@ -258,25 +271,44 @@ test.describe('Duplicate Device', () => {
     }
   });
 
-  test('navigates to duplicate from edit page', async ({ page, devices }) => {
-    const device = await devices.create({ macAddress: 'aa-fd-0b-10-00-01' });
+  test('duplicate preserves JSON configuration', async ({ page, devices }) => {
+    const sourceDevice = await devices.create({
+      macAddress: 'aa-fd-0b-10-00-01',
+      deviceName: 'Source Config Name',
+      deviceEntityId: 'source_config_entity',
+      enableOTA: true
+    });
 
     try {
       const devicesPage = new DevicesPage(page);
-      await devicesPage.gotoEdit(device.macAddress);
+      await devicesPage.gotoEdit(sourceDevice.macAddress);
       await devicesPage.waitForEditorLoaded();
 
-      // Duplicate button should be visible in edit mode
-      await expect(devicesPage.duplicateButton).toBeVisible();
-
+      // Click duplicate button
       await devicesPage.duplicate();
 
-      // Should navigate to duplicate URL
-      await expect(page).toHaveURL(`/devices/${encodeURIComponent(device.macAddress)}/duplicate`);
-      // Editor should be visible
-      await expect(devicesPage.editor).toBeVisible();
+      // Wait for navigation and editor load
+      await expect(page).toHaveURL(/\/devices\/new\?/);
+      await devicesPage.waitForEditorLoaded();
+
+      // The JSON editor should contain the source device's config
+      const monacoContent = await page.evaluate(() => {
+        const monaco = (window as unknown as { monaco?: { editor: { getEditors(): Array<{ getValue(): string }> } } }).monaco;
+        if (monaco) {
+          const editors = monaco.editor.getEditors();
+          if (editors.length > 0) {
+            return editors[0].getValue();
+          }
+        }
+        return '';
+      });
+
+      const config = JSON.parse(monacoContent);
+      expect(config.deviceName).toBe('Source Config Name');
+      expect(config.deviceEntityId).toBe('source_config_entity');
+      expect(config.enableOTA).toBe(true);
     } finally {
-      try { await devices.delete(device.macAddress); } catch { /* ignore */ }
+      try { await devices.delete(sourceDevice.macAddress); } catch { /* ignore */ }
     }
   });
 });
@@ -431,6 +463,40 @@ test.describe('Unsaved Changes', () => {
       await devices.delete(device.macAddress);
     }
   });
+
+  test('shows confirmation when clicking sidebar with unsaved changes', async ({ page, devices }) => {
+    const device = await devices.create({ macAddress: 'a1-de-ba-61-00-01' });
+
+    try {
+      const devicesPage = new DevicesPage(page);
+      await devicesPage.gotoEdit(device.macAddress);
+      await devicesPage.waitForEditorLoaded();
+
+      // Make a change
+      await devicesPage.fillMacAddress('b1-de-ba-61-00-01');
+
+      // Click on sidebar link
+      await page.locator('[data-testid="app-shell.sidebar.link.devices"]').click();
+
+      // Navigation blocker dialog should appear
+      const blockerDialog = page.locator('[data-testid="devices.editor.navigation-blocker-dialog"]');
+      await expect(blockerDialog).toBeVisible();
+
+      // Cancel the navigation - stay on page
+      await blockerDialog.locator('button:has-text("Cancel")').click();
+      await expect(page).toHaveURL(`/devices/${encodeURIComponent(device.macAddress)}`);
+
+      // Click sidebar again and confirm discard
+      await page.locator('[data-testid="app-shell.sidebar.link.devices"]').click();
+      await expect(blockerDialog).toBeVisible();
+      await blockerDialog.locator('button:has-text("Discard")').click();
+
+      // Should navigate away
+      await expect(page).toHaveURL('/devices');
+    } finally {
+      await devices.delete(device.macAddress);
+    }
+  });
 });
 
 test.describe('Error Handling', () => {
@@ -471,7 +537,7 @@ test.describe('Error Handling', () => {
     await expect(devicesPage.jsonEditorContainer).toHaveAttribute('data-state', 'invalid');
   });
 
-  test('shows error for duplicate MAC address', async ({ page, devices }) => {
+  test('prevents overwriting existing device when creating new', async ({ page, devices }) => {
     const existingDevice = await devices.create({ macAddress: 'd0-b1-1c-ac-00-01' });
 
     try {
@@ -488,13 +554,123 @@ test.describe('Error Handling', () => {
 
       await devicesPage.save();
 
-      // Note: Backend may allow upsert (update existing), so this might succeed
-      // or show an error depending on backend implementation
-      // We just verify the action completes without crashing
-      await expect(page).toHaveURL('/devices');
+      // Should show error toast and stay on page (allow_overwrite=false prevents overwriting)
+      await page.waitForTimeout(1000);
+      await expect(page).toHaveURL('/devices/new');
+
+      // Toast should show an error message (use first() since there might be multiple)
+      await expect(page.locator('[role="status"]').first()).toBeVisible();
     } finally {
       await devices.delete(existingDevice.macAddress);
     }
+  });
+
+  test('shows error when opening non-existent device', async ({ page }) => {
+    const devicesPage = new DevicesPage(page);
+
+    // Navigate to a non-existent device (use valid MAC format)
+    await devicesPage.gotoEdit('11-22-33-44-55-66');
+
+    // Wait for loading to complete and error to appear
+    // The error message from the backend contains "was not found"
+    await expect(page.locator('text=/was not found|not found/i')).toBeVisible({ timeout: 10000 });
+
+    // Should show "Back to Device List" button
+    await expect(page.locator('text=Back to Device List')).toBeVisible();
+  });
+
+  test('back to list button works on 404 page', async ({ page }) => {
+    const devicesPage = new DevicesPage(page);
+
+    // Navigate to a non-existent device (use valid MAC format)
+    await devicesPage.gotoEdit('22-33-44-55-66-77');
+
+    // Wait for error message to appear
+    await expect(page.locator('text=/was not found|not found/i')).toBeVisible({ timeout: 10000 });
+
+    // Click back to list button
+    await page.locator('text=Back to Device List').click();
+
+    // Should navigate to device list
+    await expect(page).toHaveURL('/devices');
+  });
+});
+
+test.describe('UI Elements', () => {
+  test('MAC address help text shows correct format', async ({ page }) => {
+    const devicesPage = new DevicesPage(page);
+    await devicesPage.gotoNew();
+    await devicesPage.waitForEditorLoaded();
+
+    // Help text should show hyphen-separated lowercase format
+    await expect(page.locator('text=aa-bb-cc-dd-ee-ff')).toBeVisible();
+    await expect(page.locator('text=hyphen-separated, lowercase')).toBeVisible();
+  });
+
+  test('edit and delete buttons show icons', async ({ page, devices }) => {
+    const device = await devices.create({ macAddress: 'b1-c0-50-00-00-01' });
+
+    try {
+      const devicesPage = new DevicesPage(page);
+      await devicesPage.goto();
+      await devicesPage.waitForListLoaded();
+
+      // Edit button should have pencil icon (svg)
+      const editButton = devicesPage.row(device.macAddress).locator('[data-testid="devices.list.row.edit-button"]');
+      await expect(editButton.locator('svg')).toBeVisible();
+
+      // Delete button should have trash icon (svg)
+      const deleteButton = devicesPage.row(device.macAddress).locator('[data-testid="devices.list.row.delete-button"]');
+      await expect(deleteButton.locator('svg')).toBeVisible();
+    } finally {
+      await devices.delete(device.macAddress);
+    }
+  });
+
+  test('list reloads after saving a new device', async ({ page, devices }) => {
+    const testMac = 'c1-ea-d5-00-00-01';
+    const devicesPage = new DevicesPage(page);
+
+    try {
+      // Create new device
+      await devicesPage.gotoNew();
+      await devicesPage.waitForEditorLoaded();
+      await devicesPage.fillMacAddress(testMac);
+      await devicesPage.setJsonObject({ deviceName: 'Reload Test', deviceEntityId: 'reload_test', enableOTA: false });
+      await page.waitForTimeout(100);
+      await devicesPage.save();
+
+      // Wait for navigation and list to reload
+      await expect(page).toHaveURL('/devices');
+      await devicesPage.waitForListLoaded();
+
+      // Wait a bit for the query to refetch after invalidation
+      await page.waitForTimeout(500);
+
+      // Device should now be visible (list was reloaded)
+      await expect(devicesPage.row(testMac)).toBeVisible({ timeout: 10000 });
+    } finally {
+      // Cleanup
+      try { await devices.delete(testMac); } catch { /* ignore */ }
+    }
+  });
+
+  test('list reloads after deleting a device', async ({ page, devices }) => {
+    const device = await devices.create({ macAddress: 'de-e1-e1-00-00-01' });
+
+    const devicesPage = new DevicesPage(page);
+    await devicesPage.goto();
+    await devicesPage.waitForListLoaded();
+
+    // Verify device exists
+    await expect(devicesPage.row(device.macAddress)).toBeVisible();
+
+    // Delete device
+    await devicesPage.deleteDevice(device.macAddress);
+    await devicesPage.confirmDelete();
+
+    // Wait for query invalidation and list to update
+    await expect(devicesPage.row(device.macAddress)).not.toBeVisible({ timeout: 10000 });
   });
 });
 

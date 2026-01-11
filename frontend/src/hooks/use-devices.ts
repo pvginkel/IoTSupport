@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   useGetConfigs,
   useGetConfigsByMacAddress,
@@ -67,8 +68,11 @@ export function useDevice(macAddress: string) {
 // Hook to save a device config
 export function useSaveDevice() {
   const { showSuccess, showError } = useToast()
+  const queryClient = useQueryClient()
   const mutation = usePutConfigsByMacAddress({
     onSuccess: () => {
+      // Manually invalidate to ensure list updates (generated hook's invalidation may be overridden)
+      queryClient.invalidateQueries({ queryKey: ['getConfigs'] })
       showSuccess('Device configuration saved successfully')
     },
     onError: (error) => {
@@ -97,8 +101,11 @@ export function useSaveDevice() {
 // Hook to delete a device config
 export function useDeleteDevice() {
   const { showSuccess, showError } = useToast()
+  const queryClient = useQueryClient()
   const mutation = useDeleteConfigsByMacAddress({
     onSuccess: () => {
+      // Manually invalidate to ensure list updates (generated hook's invalidation may be overridden)
+      queryClient.invalidateQueries({ queryKey: ['getConfigs'] })
       showSuccess('Device configuration deleted successfully')
     },
     onError: (error) => {

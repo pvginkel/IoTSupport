@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useBlocker } from '@tanstack/react-router'
 import Editor from '@monaco-editor/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,6 +11,7 @@ interface DeviceEditorProps {
   mode: 'new' | 'edit' | 'duplicate'
   initialMacAddress?: string
   initialConfig?: Record<string, unknown>
+  duplicateFrom?: string
   onSave?: () => void
   onCancel?: () => void
 }
@@ -25,6 +26,7 @@ export function DeviceEditor({
   mode,
   initialMacAddress = '',
   initialConfig = DEFAULT_TEMPLATE,
+  duplicateFrom,
   onSave: onSaveCallback,
   onCancel: onCancelCallback
 }: DeviceEditorProps) {
@@ -48,11 +50,19 @@ export function DeviceEditor({
   }, [macAddress, jsonConfig, originalMac, originalJson])
 
   const originalMacRef = useRef(initialMacAddress)
+  // Use ref to track if we're intentionally navigating (bypassing blocker)
+  const isNavigatingRef = useRef(false)
 
-  // Beforeunload warning
+  // Navigation blocker for unsaved changes (handles back/forward and link clicks)
+  const { proceed, reset, status } = useBlocker({
+    shouldBlockFn: () => isDirty && !isNavigatingRef.current,
+    withResolver: true,
+  })
+
+  // Beforeunload warning for page refresh/close
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isDirty) {
+      if (isDirty && !isNavigatingRef.current) {
         e.preventDefault()
         e.returnValue = ''
       }
@@ -94,6 +104,17 @@ export function DeviceEditor({
     }
 
     const configContent = JSON.parse(jsonConfig)
+    isNavigatingRef.current = true
+
+    // Determine if we should prevent overwriting existing config:
+    // - For new devices: always set allow_overwrite to false
+    // - For edit mode with MAC change: set allow_overwrite to false (new MAC might exist)
+    // - For edit mode without MAC change: allow_overwrite to true
+    const isNewOrMacChanged = mode === 'new' || (mode === 'edit' && macAddress !== originalMacRef.current)
+    const allowOverwrite = !isNewOrMacChanged
+
+    // Build the config request
+    const configRequest = { content: configContent, allow_overwrite: allowOverwrite }
 
     // Handle MAC rename for edit mode
     if (mode === 'edit' && macAddress !== originalMacRef.current && originalMacRef.current) {
@@ -101,7 +122,7 @@ export function DeviceEditor({
         // Save to new MAC
         await saveDevice.mutateAsync({
           macAddress,
-          config: { content: configContent }
+          config: configRequest
         })
 
         // Delete old MAC (partial success is acceptable - new device saved)
@@ -116,15 +137,19 @@ export function DeviceEditor({
         navigate({ to: '/devices' })
       } catch {
         // Error already handled by mutation hook toast
+        isNavigatingRef.current = false
       }
     } else {
       // Normal save (new or edit without MAC change)
       saveDevice.mutate(
-        { macAddress, config: { content: configContent } },
+        { macAddress, config: configRequest },
         {
           onSuccess: () => {
             onSaveCallback?.()
             navigate({ to: '/devices' })
+          },
+          onError: () => {
+            isNavigatingRef.current = false
           }
         }
       )
@@ -141,6 +166,9 @@ export function DeviceEditor({
       })
 
       if (!confirmed) return
+
+      // Set ref to bypass blocker during navigation
+      isNavigatingRef.current = true
     }
 
     onCancelCallback?.()
@@ -148,21 +176,36 @@ export function DeviceEditor({
   }, [isDirty, confirm, onCancelCallback, navigate])
 
   const handleDuplicate = useCallback(() => {
-    if (initialMacAddress) {
-      navigate({ to: '/devices/$macAddress/duplicate', params: { macAddress: initialMacAddress } })
-    }
-  }, [initialMacAddress, navigate])
+    // Set ref to bypass blocker during navigation
+    isNavigatingRef.current = true
+    navigate({
+      to: '/devices/new',
+      search: {
+        config: jsonConfig,
+        from: initialMacAddress,
+      }
+    })
+  }, [jsonConfig, initialMacAddress, navigate])
 
   const isValid = !!macAddress.trim() && !jsonError && !saveDevice.isPending
+
+  // Title based on mode
+  const getTitle = () => {
+    if (mode === 'new') {
+      return duplicateFrom ? `Duplicate Device: ${duplicateFrom}` : 'New Device'
+    }
+    if (mode === 'edit') {
+      return `Edit Device: ${initialMacAddress}`
+    }
+    return `Duplicate Device: ${initialMacAddress}`
+  }
 
   return (
     <div className="flex h-full flex-col" data-testid="devices.editor">
       <div className="border-b border-zinc-800 bg-zinc-950 p-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-zinc-50">
-            {mode === 'new' && 'New Device'}
-            {mode === 'edit' && `Edit Device: ${initialMacAddress}`}
-            {mode === 'duplicate' && `Duplicate Device: ${initialMacAddress}`}
+            {getTitle()}
           </h1>
           <div className="flex items-center gap-2">
             <Button
@@ -206,10 +249,11 @@ export function DeviceEditor({
               id="mac-address"
               value={macAddress}
               onChange={(e) => setMacAddress(e.target.value)}
-              placeholder="AA:BB:CC:DD:EE:FF"
+              placeholder="aa-bb-cc-dd-ee-ff"
               disabled={saveDevice.isPending}
               data-testid="devices.editor.mac-input"
             />
+            <p className="mt-1 text-xs text-zinc-500">Format: aa-bb-cc-dd-ee-ff (hyphen-separated, lowercase)</p>
           </div>
 
           <div>
@@ -221,7 +265,7 @@ export function DeviceEditor({
             </div>
             <div
               className="rounded-md border border-zinc-700 overflow-hidden"
-              style={{ height: '500px' }}
+              style={{ height: '425px' }}
               data-testid="devices.editor.json-editor"
               data-state={jsonError ? 'invalid' : 'valid'}
             >
@@ -247,6 +291,18 @@ export function DeviceEditor({
       <ConfirmDialog
         {...confirmProps}
         contentProps={{ 'data-testid': 'devices.editor.unsaved-changes-dialog' }}
+      />
+
+      {/* Navigation blocker dialog */}
+      <ConfirmDialog
+        open={status === 'blocked'}
+        onOpenChange={(open) => { if (!open) reset?.() }}
+        onConfirm={() => proceed?.()}
+        title="Discard Changes"
+        description="You have unsaved changes. Discard them?"
+        confirmText="Discard"
+        destructive
+        contentProps={{ 'data-testid': 'devices.editor.navigation-blocker-dialog' }}
       />
     </div>
   )

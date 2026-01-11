@@ -47,6 +47,15 @@ export function toApiError(error: unknown): Error {
  * Parse API error into a user-friendly message
  */
 function parseApiError(error: unknown): string {
+  // Handle structured API error responses with 'error' field (ErrorResponseSchema)
+  // This should be checked first since it's the most specific format from our backend
+  if (typeof error === 'object' && error !== null && 'error' in error) {
+    const apiError = error as { error: unknown }
+    if (typeof apiError.error === 'string') {
+      return apiError.error
+    }
+  }
+
   // Handle fetch/network errors
   if (error instanceof Error) {
     if ('status' in error && typeof (error as Error & { status: unknown }).status === 'number') {
@@ -61,17 +70,17 @@ function parseApiError(error: unknown): string {
     return error.message || 'An unexpected error occurred'
   }
 
-  // Handle structured API error responses with 'error' field
-  if (typeof error === 'object' && error !== null && 'error' in error) {
-    const apiError = error as { error: unknown }
-    if (typeof apiError.error === 'string') {
-      return apiError.error
-    }
-  }
-
   // Handle error objects with message property
   if (typeof error === 'object' && error !== null && 'message' in error) {
     return String((error as { message: unknown }).message)
+  }
+
+  // Handle error objects with detail property (common in some frameworks)
+  if (typeof error === 'object' && error !== null && 'detail' in error) {
+    const detailError = error as { detail: unknown }
+    if (typeof detailError.detail === 'string') {
+      return detailError.detail
+    }
   }
 
   // Handle string errors
