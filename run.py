@@ -21,7 +21,9 @@ def main() -> None:
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "3201"))
 
-    if settings.DEBUG:
+    debug_mode = settings.FLASK_ENV in ("development", "testing")
+
+    if debug_mode:
         app.logger.info("Running in debug mode with Flask development server")
         app.run(host=host, port=port, debug=True)
     else:

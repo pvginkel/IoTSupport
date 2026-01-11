@@ -49,8 +49,9 @@ def create_app(settings: "Settings | None" = None) -> App:
     CORS(app, origins=settings.CORS_ORIGINS)
 
     # Configure logging
+    debug_mode = settings.FLASK_ENV in ("development", "testing")
     logging.basicConfig(
-        level=logging.DEBUG if settings.DEBUG else logging.INFO,
+        level=logging.DEBUG if debug_mode else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
