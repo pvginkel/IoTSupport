@@ -1,8 +1,12 @@
 """Tests for configuration API endpoints."""
 
 from typing import Any
+from unittest.mock import patch
 
+from flask import Flask
 from flask.testing import FlaskClient
+
+from app.services.container import ServiceContainer
 
 
 class TestListConfigs:
@@ -233,3 +237,106 @@ class TestDeleteConfig:
         assert response.status_code == 400
         data = response.get_json()
         assert data["code"] == "INVALID_OPERATION"
+
+
+class TestConfigsWithMqtt:
+    """Tests for MQTT integration in config API endpoints."""
+
+    def test_save_config_publishes_mqtt_notification(
+        self, app: Flask, client: FlaskClient, sample_config: dict[str, Any], valid_mac: str, container: ServiceContainer
+    ):
+        """Successful config save publishes MQTT notification."""
+        # Get the mqtt_service from container and mock its publish method
+        mqtt_service = container.mqtt_service()
+        with patch.object(mqtt_service, "publish_config_update") as mock_publish:
+            response = client.put(
+                f"/api/configs/{valid_mac}",
+                json={"content": sample_config},
+                content_type="application/json",
+            )
+
+            assert response.status_code == 200
+
+            # Verify MQTT notification was published with correct filename
+            mock_publish.assert_called_once_with(f"{valid_mac}.json")
+
+    def test_save_config_update_publishes_mqtt_notification(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        make_config_file: Any,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+        container: ServiceContainer,
+    ):
+        """Updating existing config publishes MQTT notification."""
+        make_config_file(valid_mac, sample_config)
+
+        mqtt_service = container.mqtt_service()
+        with patch.object(mqtt_service, "publish_config_update") as mock_publish:
+            updated_config = {**sample_config, "deviceName": "Updated Name"}
+            response = client.put(
+                f"/api/configs/{valid_mac}",
+                json={"content": updated_config},
+                content_type="application/json",
+            )
+
+            assert response.status_code == 200
+            mock_publish.assert_called_once_with(f"{valid_mac}.json")
+
+    def test_save_config_failure_does_not_publish_mqtt(
+        self, app: Flask, client: FlaskClient, valid_mac: str, container: ServiceContainer
+    ):
+        """Failed config save does not publish MQTT notification."""
+        mqtt_service = container.mqtt_service()
+        with patch.object(mqtt_service, "publish_config_update") as mock_publish:
+            # Invalid request - missing content
+            response = client.put(
+                f"/api/configs/{valid_mac}",
+                json={},
+                content_type="application/json",
+            )
+
+            assert response.status_code == 400
+
+            # MQTT should not be published on failure
+            mock_publish.assert_not_called()
+
+    def test_delete_config_does_not_publish_mqtt(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        make_config_file: Any,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+        container: ServiceContainer,
+    ):
+        """Config deletion does NOT publish MQTT notification."""
+        make_config_file(valid_mac, sample_config)
+
+        mqtt_service = container.mqtt_service()
+        with patch.object(mqtt_service, "publish_config_update") as mock_publish:
+            response = client.delete(f"/api/configs/{valid_mac}")
+
+            assert response.status_code == 204
+
+            # MQTT should NOT be published on delete
+            mock_publish.assert_not_called()
+
+    def test_save_config_mqtt_disabled_succeeds(
+        self, app: Flask, client: FlaskClient, sample_config: dict[str, Any], valid_mac: str, container: ServiceContainer
+    ):
+        """Config save succeeds when MQTT is disabled."""
+        mqtt_service = container.mqtt_service()
+
+        # Disable MQTT by setting enabled flag
+        mqtt_service.enabled = False
+
+        response = client.put(
+            f"/api/configs/{valid_mac}",
+            json={"content": sample_config},
+            content_type="application/json",
+        )
+
+        # API should return success when MQTT is disabled
+        assert response.status_code == 200

@@ -14,6 +14,7 @@ from app.schemas.error import ErrorResponseSchema
 from app.services.asset_upload_service import AssetUploadService
 from app.services.container import ServiceContainer
 from app.services.metrics_service import MetricsService
+from app.services.mqtt_service import MqttService
 from app.utils.error_handling import handle_api_errors
 from app.utils.spectree_config import api
 
@@ -37,6 +38,7 @@ def upload_asset(
         ServiceContainer.asset_upload_service
     ],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+    mqtt_service: MqttService = Provide[ServiceContainer.mqtt_service],
 ) -> Any:
     """Upload asset file with cryptographic signature verification.
 
@@ -105,6 +107,9 @@ def upload_asset(
 
             status = "validation_error"
             raise
+
+        # Publish MQTT notification after successful upload
+        mqtt_service.publish_asset_update(filename)
 
         # Return success response
         response = AssetUploadResponseSchema(

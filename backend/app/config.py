@@ -47,6 +47,20 @@ class Settings(BaseSettings):
         description="Allowed CORS origins"
     )
 
+    # MQTT settings
+    MQTT_URL: str | None = Field(
+        default=None,
+        description="MQTT broker URL (e.g., mqtt://localhost:1883, mqtts://broker:8883)"
+    )
+    MQTT_USERNAME: str | None = Field(
+        default=None,
+        description="MQTT broker username"
+    )
+    MQTT_PASSWORD: str | None = Field(
+        default=None,
+        description="MQTT broker password"
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

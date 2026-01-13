@@ -4,6 +4,7 @@ import base64
 import io
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
@@ -423,3 +424,144 @@ class TestUploadAsset:
         data = response.get_json()
         assert data["filename"] == "large.bin"
         assert data["size"] == len(large_content)
+
+
+class TestAssetsWithMqtt:
+    """Tests for MQTT integration in asset upload API endpoints."""
+
+    def test_upload_asset_publishes_mqtt_notification(
+        self, app_with_assets: Flask, client_with_assets: FlaskClient, sign_timestamp
+    ):
+        """Successful asset upload publishes MQTT notification."""
+        container = app_with_assets.container
+        mqtt_service = container.mqtt_service()
+
+        with patch.object(mqtt_service, "publish_asset_update") as mock_publish:
+            timestamp_str = datetime.now(UTC).isoformat()
+            signature_str = sign_timestamp(timestamp_str)
+
+            file_content = b"test firmware data"
+            file_data = (io.BytesIO(file_content), "firmware.bin")
+
+            response = client_with_assets.post(
+                "/api/assets",
+                data={
+                    "file": file_data,
+                    "timestamp": timestamp_str,
+                    "signature": signature_str,
+                },
+                content_type="multipart/form-data",
+            )
+
+            assert response.status_code == 200
+
+            # Verify MQTT notification was published with correct filename
+            mock_publish.assert_called_once_with("firmware.bin")
+
+    def test_upload_asset_with_different_filenames_publishes_correctly(
+        self, app_with_assets: Flask, client_with_assets: FlaskClient, sign_timestamp
+    ):
+        """Different asset filenames are published correctly."""
+        container = app_with_assets.container
+        mqtt_service = container.mqtt_service()
+
+        filenames = ["firmware-v1.2.3.bin", "config.json", "image.png"]
+
+        for filename in filenames:
+            with patch.object(mqtt_service, "publish_asset_update") as mock_publish:
+                timestamp_str = datetime.now(UTC).isoformat()
+                signature_str = sign_timestamp(timestamp_str)
+                file_data = (io.BytesIO(b"test"), filename)
+
+                response = client_with_assets.post(
+                    "/api/assets",
+                    data={
+                        "file": file_data,
+                        "timestamp": timestamp_str,
+                        "signature": signature_str,
+                    },
+                    content_type="multipart/form-data",
+                )
+
+                assert response.status_code == 200
+                mock_publish.assert_called_once_with(filename)
+
+    def test_upload_asset_failure_does_not_publish_mqtt(
+        self, app_with_assets: Flask, client_with_assets: FlaskClient
+    ):
+        """Failed asset upload does not publish MQTT notification."""
+        container = app_with_assets.container
+        mqtt_service = container.mqtt_service()
+
+        with patch.object(mqtt_service, "publish_asset_update") as mock_publish:
+            # Invalid request - missing timestamp
+            file_data = (io.BytesIO(b"test"), "firmware.bin")
+
+            response = client_with_assets.post(
+                "/api/assets",
+                data={"file": file_data, "signature": "dummy"},
+                content_type="multipart/form-data",
+            )
+
+            assert response.status_code == 400
+
+            # MQTT should not be published on failure
+            mock_publish.assert_not_called()
+
+    def test_upload_asset_validation_error_does_not_publish_mqtt(
+        self, app_with_assets: Flask, client_with_assets: FlaskClient, sign_timestamp
+    ):
+        """Validation errors do not publish MQTT notification."""
+        container = app_with_assets.container
+        mqtt_service = container.mqtt_service()
+
+        with patch.object(mqtt_service, "publish_asset_update") as mock_publish:
+            timestamp_str = datetime.now(UTC).isoformat()
+            signature_str = sign_timestamp(timestamp_str)
+
+            # Invalid filename with path traversal
+            file_data = (io.BytesIO(b"test"), "../etc/passwd")
+
+            response = client_with_assets.post(
+                "/api/assets",
+                data={
+                    "file": file_data,
+                    "timestamp": timestamp_str,
+                    "signature": signature_str,
+                },
+                content_type="multipart/form-data",
+            )
+
+            assert response.status_code == 400
+
+            # MQTT should not be published on validation failure
+            mock_publish.assert_not_called()
+
+    def test_upload_asset_mqtt_disabled_succeeds(
+        self, app_with_assets: Flask, client_with_assets: FlaskClient, sign_timestamp
+    ):
+        """Asset upload succeeds when MQTT is disabled."""
+        container = app_with_assets.container
+        mqtt_service = container.mqtt_service()
+
+        # Disable MQTT by setting enabled flag
+        mqtt_service.enabled = False
+
+        timestamp_str = datetime.now(UTC).isoformat()
+        signature_str = sign_timestamp(timestamp_str)
+
+        file_content = b"test firmware data"
+        file_data = (io.BytesIO(file_content), "firmware.bin")
+
+        response = client_with_assets.post(
+            "/api/assets",
+            data={
+                "file": file_data,
+                "timestamp": timestamp_str,
+                "signature": signature_str,
+            },
+            content_type="multipart/form-data",
+        )
+
+        # API should return success when MQTT is disabled
+        assert response.status_code == 200

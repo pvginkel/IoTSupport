@@ -24,6 +24,7 @@ pillow = "^11.0.0"
 httpx = "^0.27.0"
 pypng = "^0.20220715.0"
 lz4 = "^4.3.0"
+paho-mqtt = "^2.1.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.0"
@@ -99,6 +100,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "httpx.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "paho.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
