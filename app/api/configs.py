@@ -17,6 +17,7 @@ from app.schemas.error import ErrorResponseSchema
 from app.services.config_service import ConfigService
 from app.services.container import ServiceContainer
 from app.services.metrics_service import MetricsService
+from app.services.mqtt_service import MqttService
 from app.utils.error_handling import handle_api_errors
 from app.utils.spectree_config import api
 
@@ -115,6 +116,7 @@ def save_config(
     mac_address: str,
     config_service: ConfigService = Provide[ServiceContainer.config_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+    mqtt_service: MqttService = Provide[ServiceContainer.mqtt_service],
 ) -> Any:
     """Create or update configuration (upsert)."""
     start_time = time.perf_counter()
@@ -131,6 +133,9 @@ def save_config(
         # Update config count after save
         configs = config_service.list_configs()
         metrics_service.update_config_count(len(configs))
+
+        # Publish MQTT notification after successful save and metrics update
+        mqtt_service.publish_config_update(f"{mac_address}.json")
 
         return ConfigResponseSchema(
             mac_address=config.mac_address,
