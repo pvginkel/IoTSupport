@@ -65,3 +65,17 @@ class ProcessingException(BusinessLogicException):
         self.cause = cause
         message = f"Cannot {operation} because processing failed: {cause}"
         super().__init__(message, error_code="PROCESSING_ERROR")
+
+
+class AuthenticationException(BusinessLogicException):
+    """Exception raised when authentication fails."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, error_code="AUTHENTICATION_REQUIRED")
+
+
+class AuthorizationException(BusinessLogicException):
+    """Exception raised when authorization fails."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, error_code="AUTHORIZATION_FAILED")

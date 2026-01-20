@@ -61,6 +61,60 @@ class Settings(BaseSettings):
         description="MQTT broker password"
     )
 
+    # OIDC Authentication Settings
+    BASEURL: str = Field(
+        default="http://localhost:3200",
+        description="Base URL for the application (used for redirect URI and cookie security)"
+    )
+    OIDC_ENABLED: bool = Field(
+        default=False,
+        description="Enable OIDC authentication"
+    )
+    OIDC_ISSUER_URL: str | None = Field(
+        default=None,
+        description="OIDC issuer URL (e.g., https://auth.example.com/realms/iot)"
+    )
+    OIDC_CLIENT_ID: str | None = Field(
+        default=None,
+        description="OIDC client ID"
+    )
+    OIDC_CLIENT_SECRET: str | None = Field(
+        default=None,
+        description="OIDC client secret (confidential client)"
+    )
+    OIDC_SCOPES: str = Field(
+        default="openid profile email",
+        description="Space-separated OIDC scopes"
+    )
+    OIDC_AUDIENCE: str | None = Field(
+        default=None,
+        description="Expected 'aud' claim in JWT (defaults to client_id if not set)"
+    )
+    OIDC_CLOCK_SKEW_SECONDS: int = Field(
+        default=30,
+        description="Clock skew tolerance for token validation"
+    )
+    OIDC_ADMIN_ROLE: str = Field(
+        default="admin",
+        description="Role name for full administrative access"
+    )
+    OIDC_ASSET_ROLE: str = Field(
+        default="asset-uploader",
+        description="Role name for asset upload access"
+    )
+    OIDC_COOKIE_NAME: str = Field(
+        default="access_token",
+        description="Cookie name for storing JWT access token"
+    )
+    OIDC_COOKIE_SECURE: bool | None = Field(
+        default=None,
+        description="Secure flag for cookie (inferred from BASEURL if None)"
+    )
+    OIDC_COOKIE_SAMESITE: str = Field(
+        default="Lax",
+        description="SameSite attribute for cookie"
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

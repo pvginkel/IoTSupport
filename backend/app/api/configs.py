@@ -18,6 +18,7 @@ from app.services.config_service import ConfigService
 from app.services.container import ServiceContainer
 from app.services.metrics_service import MetricsService
 from app.services.mqtt_service import MqttService
+from app.utils.auth import public
 from app.utils.error_handling import handle_api_errors
 from app.utils.spectree_config import api
 
@@ -67,6 +68,7 @@ def list_configs(
 
 
 @configs_bp.route("/<mac_address>.json", methods=["GET"])
+@public
 @handle_api_errors
 @inject
 def get_config_raw(

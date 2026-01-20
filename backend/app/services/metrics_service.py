@@ -88,6 +88,30 @@ class MetricsService:
             "Size of fetched images in bytes",
         )
 
+        # Authentication metrics
+        self.auth_validation_total = Counter(
+            "iot_auth_validation_total",
+            "Total JWT token validation attempts",
+            ["status"],
+        )
+
+        self.auth_validation_duration_seconds = Histogram(
+            "iot_auth_validation_duration_seconds",
+            "Duration of JWT token validation in seconds",
+        )
+
+        self.jwks_refresh_total = Counter(
+            "iot_jwks_refresh_total",
+            "Total JWKS refresh attempts",
+            ["trigger", "status"],
+        )
+
+        self.oidc_token_exchange_total = Counter(
+            "iot_oidc_token_exchange_total",
+            "Total OIDC token exchange attempts",
+            ["status"],
+        )
+
     def record_operation(
         self, operation: str, status: str, duration: float | None = None
     ) -> None:
@@ -202,6 +226,41 @@ class MetricsService:
                 self.image_proxy_image_size_bytes.observe(image_size)
         except Exception as e:
             logger.error("Error recording image proxy metric: %s", e)
+
+    def increment_counter(self, metric_name: str, labels: dict[str, str] | None = None) -> None:
+        """Increment a counter metric by name.
+
+        Generic method for incrementing any counter metric.
+
+        Args:
+            metric_name: Name of the counter metric (e.g., 'iot_auth_validation_total')
+            labels: Optional dictionary of label names and values
+        """
+        try:
+            metric = getattr(self, metric_name.replace("iot_", ""), None)
+            if metric and hasattr(metric, "labels"):
+                if labels:
+                    metric.labels(**labels).inc()
+                else:
+                    metric.inc()
+        except Exception as e:
+            logger.error("Error incrementing counter %s: %s", metric_name, e)
+
+    def record_operation_duration(self, metric_name: str, duration: float) -> None:
+        """Record a duration observation for a histogram metric.
+
+        Generic method for recording durations.
+
+        Args:
+            metric_name: Name of the histogram metric (e.g., 'iot_auth_validation_duration_seconds')
+            duration: Duration in seconds
+        """
+        try:
+            metric = getattr(self, metric_name.replace("iot_", ""), None)
+            if metric and hasattr(metric, "observe"):
+                metric.observe(duration)
+        except Exception as e:
+            logger.error("Error recording duration for %s: %s", metric_name, e)
 
     def get_metrics_text(self) -> str:
         """Generate metrics in Prometheus text format.
