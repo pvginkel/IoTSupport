@@ -65,13 +65,14 @@ def test_settings(config_dir: Path, tmp_path: Path) -> Settings:
     )
     signing_key_path.write_bytes(pem)
 
+    # Use _env_file=None to prevent reading from .env file during tests
     return Settings(
+        _env_file=None,  # type: ignore[call-arg]
         ESP32_CONFIGS_DIR=config_dir,
         ASSETS_DIR=assets_dir,
         SIGNING_KEY_PATH=signing_key_path,
         TIMESTAMP_TOLERANCE_SECONDS=300,
         SECRET_KEY="test-secret-key",
-        DEBUG=True,
         CORS_ORIGINS=["http://localhost:3000"],
     )
 
@@ -150,3 +151,101 @@ def valid_mac() -> str:
 def another_valid_mac() -> str:
     """Another valid MAC address for testing."""
     return "11-22-33-44-55-66"
+
+
+@pytest.fixture
+def mock_oidc_discovery():
+    """Mock OIDC discovery document."""
+    return {
+        "issuer": "https://auth.example.com/realms/iot",
+        "authorization_endpoint": "https://auth.example.com/realms/iot/protocol/openid-connect/auth",
+        "token_endpoint": "https://auth.example.com/realms/iot/protocol/openid-connect/token",
+        "end_session_endpoint": "https://auth.example.com/realms/iot/protocol/openid-connect/logout",
+        "jwks_uri": "https://auth.example.com/realms/iot/protocol/openid-connect/certs",
+    }
+
+
+@pytest.fixture
+def mock_jwks():
+    """Mock JWKS (JSON Web Key Set)."""
+    return {
+        "keys": [
+            {
+                "kid": "test-key-id",
+                "kty": "RSA",
+                "use": "sig",
+                "n": "test-modulus",
+                "e": "AQAB",
+            }
+        ]
+    }
+
+
+@pytest.fixture
+def generate_test_jwt(test_settings: Settings):
+    """Factory fixture to generate test JWT tokens."""
+    import time
+
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    # Generate RSA keypair for testing
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+
+    def _generate(
+        subject: str = "test-user",
+        email: str | None = "test@example.com",
+        name: str | None = "Test User",
+        roles: list[str] | None = None,
+        expired: bool = False,
+        invalid_signature: bool = False,
+        invalid_issuer: bool = False,
+        invalid_audience: bool = False,
+    ) -> str:
+        """Generate a test JWT token.
+
+        Args:
+            subject: Subject claim (sub)
+            email: Email claim
+            name: Name claim
+            roles: List of roles (stored in realm_access.roles)
+            expired: Whether token should be expired
+            invalid_signature: Whether to use wrong key for signing
+            invalid_issuer: Whether to use wrong issuer
+            invalid_audience: Whether to use wrong audience
+
+        Returns:
+            JWT token string
+        """
+        if roles is None:
+            roles = ["admin"]
+
+        now = int(time.time())
+        exp = now - 3600 if expired else now + 3600
+
+        payload = {
+            "sub": subject,
+            "iss": "https://wrong.example.com" if invalid_issuer else test_settings.OIDC_ISSUER_URL,
+            "aud": "wrong-client-id" if invalid_audience else test_settings.OIDC_CLIENT_ID,
+            "exp": exp,
+            "iat": now,
+            "realm_access": {"roles": roles},
+        }
+
+        if email:
+            payload["email"] = email
+        if name:
+            payload["name"] = name
+
+        # Use wrong key if invalid_signature requested
+        signing_key = rsa.generate_private_key(public_exponent=65537, key_size=2048) if invalid_signature else private_key
+
+        token = jwt.encode(payload, signing_key, algorithm="RS256", headers={"kid": "test-key-id"})
+        return token
+
+    # Attach public key for test verification
+    _generate.public_key = public_key  # type: ignore
+    _generate.private_key = private_key  # type: ignore
+
+    return _generate

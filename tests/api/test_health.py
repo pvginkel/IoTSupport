@@ -38,11 +38,11 @@ class TestHealthCheck:
         signing_key_path.write_bytes(pem)
 
         settings = Settings(
+            _env_file=None,  # type: ignore[call-arg]
             ESP32_CONFIGS_DIR=non_existent,
             ASSETS_DIR=assets_dir,
             SIGNING_KEY_PATH=signing_key_path,
             SECRET_KEY="test-secret",
-            DEBUG=True,
         )
         app = create_app(settings)
         client = app.test_client()
@@ -72,11 +72,11 @@ class TestHealthCheck:
         signing_key_path.write_bytes(pem)
 
         settings = Settings(
+            _env_file=None,  # type: ignore[call-arg]
             ESP32_CONFIGS_DIR=file_path,
             ASSETS_DIR=assets_dir,
             SIGNING_KEY_PATH=signing_key_path,
             SECRET_KEY="test-secret",
-            DEBUG=True,
         )
         app = create_app(settings)
         client = app.test_client()

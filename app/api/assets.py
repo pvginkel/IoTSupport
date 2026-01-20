@@ -15,6 +15,7 @@ from app.services.asset_upload_service import AssetUploadService
 from app.services.container import ServiceContainer
 from app.services.metrics_service import MetricsService
 from app.services.mqtt_service import MqttService
+from app.utils.auth import public
 from app.utils.error_handling import handle_api_errors
 from app.utils.spectree_config import api
 
@@ -24,6 +25,7 @@ assets_bp = Blueprint("assets", __name__, url_prefix="/assets")
 
 
 @assets_bp.route("/<filename>", methods=["GET"])
+@public
 @handle_api_errors
 @inject
 def get_asset(

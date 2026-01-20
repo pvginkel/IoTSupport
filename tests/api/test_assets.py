@@ -53,13 +53,14 @@ def test_settings_with_assets(
     config_dir: Path, assets_dir: Path, signing_key_path: Path
 ) -> Settings:
     """Create test settings with asset upload configuration."""
+    # Use _env_file=None to prevent reading from .env file during tests
     return Settings(
+        _env_file=None,  # type: ignore[call-arg]
         ESP32_CONFIGS_DIR=config_dir,
         ASSETS_DIR=assets_dir,
         SIGNING_KEY_PATH=signing_key_path,
         TIMESTAMP_TOLERANCE_SECONDS=300,
         SECRET_KEY="test-secret-key",
-        DEBUG=True,
         CORS_ORIGINS=["http://localhost:3000"],
     )
 

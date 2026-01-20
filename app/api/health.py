@@ -7,11 +7,13 @@ from flask import Blueprint, jsonify
 
 from app.services.config_service import ConfigService
 from app.services.container import ServiceContainer
+from app.utils.auth import public
 
 health_bp = Blueprint("health", __name__, url_prefix="/health")
 
 
 @health_bp.route("", methods=["GET"])
+@public
 @inject
 def health_check(
     config_service: ConfigService = Provide[ServiceContainer.config_service],

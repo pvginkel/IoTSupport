@@ -4,10 +4,12 @@ from dependency_injector import containers, providers
 
 from app.config import Settings
 from app.services.asset_upload_service import AssetUploadService
+from app.services.auth_service import AuthService
 from app.services.config_service import ConfigService
 from app.services.image_proxy_service import ImageProxyService
 from app.services.metrics_service import MetricsService
 from app.services.mqtt_service import MqttService
+from app.services.oidc_client_service import OidcClientService
 
 
 class ServiceContainer(containers.DeclarativeContainer):
@@ -44,5 +46,19 @@ class ServiceContainer(containers.DeclarativeContainer):
     # ImageProxyService - Factory creates new instance per request for thread safety
     image_proxy_service = providers.Factory(
         ImageProxyService,
+        metrics_service=metrics_service,
+    )
+
+    # AuthService - Singleton to cache JWKS keys for performance
+    auth_service = providers.Singleton(
+        AuthService,
+        config=config,
+        metrics_service=metrics_service,
+    )
+
+    # OidcClientService - Singleton to cache OIDC endpoints
+    oidc_client_service = providers.Singleton(
+        OidcClientService,
+        config=config,
         metrics_service=metrics_service,
     )

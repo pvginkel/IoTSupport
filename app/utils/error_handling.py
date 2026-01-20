@@ -10,6 +10,8 @@ from flask.wrappers import Response
 from pydantic import ValidationError
 
 from app.exceptions import (
+    AuthenticationException,
+    AuthorizationException,
     BusinessLogicException,
     ExternalServiceException,
     InvalidOperationException,
@@ -76,6 +78,24 @@ def handle_api_errors(
 
                 return _build_error_response(
                     "Validation failed", {"errors": error_details}, status_code=400
+                )
+
+            except AuthenticationException as e:
+                # Authentication failure (401 Unauthorized)
+                return _build_error_response(
+                    e.message,
+                    {"message": "Authentication is required to access this resource"},
+                    code=e.error_code,
+                    status_code=401,
+                )
+
+            except AuthorizationException as e:
+                # Authorization failure (403 Forbidden)
+                return _build_error_response(
+                    e.message,
+                    {"message": "Insufficient permissions to access this resource"},
+                    code=e.error_code,
+                    status_code=403,
                 )
 
             except RecordNotFoundException as e:
