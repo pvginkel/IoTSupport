@@ -4,6 +4,7 @@ import base64
 import io
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -13,6 +14,7 @@ from flask import Flask
 from flask.testing import FlaskClient
 
 from app.config import Settings
+from app.services.container import ServiceContainer
 
 
 @pytest.fixture
@@ -88,6 +90,128 @@ def sign_timestamp(test_keypair: tuple):
         return base64.b64encode(signature).decode("ascii")
 
     return _sign
+
+
+class TestGetAsset:
+    """Tests for GET /api/assets/<filename> endpoint."""
+
+    def test_get_asset_success(self, client: FlaskClient, make_asset_file: Any):
+        """Existing asset returns 200 with binary content and Cache-Control header."""
+        # Create a test asset file
+        test_content = b"Binary firmware content here"
+        make_asset_file("firmware-v1.bin", test_content)
+
+        response = client.get("/api/assets/firmware-v1.bin")
+
+        assert response.status_code == 200
+        assert response.data == test_content
+        assert response.headers.get("Content-Type") == "application/octet-stream"
+        assert response.headers.get("Cache-Control") == "no-cache"
+
+    def test_get_asset_not_found(self, client: FlaskClient):
+        """Non-existent asset returns 404."""
+        response = client.get("/api/assets/nonexistent.bin")
+
+        assert response.status_code == 404
+        data = response.get_json()
+        assert "error" in data
+        assert data["code"] == "RECORD_NOT_FOUND"
+
+    def test_get_asset_path_traversal_double_dot_in_filename(self, client: FlaskClient):
+        """Filename containing .. returns 400."""
+        # Test filename that contains .. but no slashes
+        response = client.get("/api/assets/file..name.bin")
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "error" in data
+        assert data["code"] == "VALIDATION_FAILED"
+
+    def test_get_asset_multipart_path_returns_404(self, client: FlaskClient):
+        """Multi-part paths don't match route (returns 404 from Flask routing)."""
+        # Flask routing doesn't match slashes in path params, so these never
+        # reach our handler - they return 404 from Flask itself
+        response = client.get("/api/assets/subdir/file.bin")
+        assert response.status_code == 404
+
+    def test_get_asset_path_traversal_backslash(self, client: FlaskClient):
+        """Path traversal with \\ returns 400."""
+        response = client.get("/api/assets/subdir\\file.bin")
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "error" in data
+        assert data["code"] == "VALIDATION_FAILED"
+
+    def test_get_asset_empty_filename(self, client: FlaskClient):
+        """Empty filename returns 400."""
+        response = client.get("/api/assets/")
+
+        # Flask routing will not match this route, so it returns 404
+        assert response.status_code == 404
+
+    def test_get_asset_large_file(self, client: FlaskClient, make_asset_file: Any):
+        """Large binary file is served completely."""
+        # Create a 1MB test file
+        test_content = b"X" * (1024 * 1024)
+        make_asset_file("large-firmware.bin", test_content)
+
+        response = client.get("/api/assets/large-firmware.bin")
+
+        assert response.status_code == 200
+        assert len(response.data) == len(test_content)
+        assert response.data == test_content
+
+    def test_get_asset_different_extensions(self, client: FlaskClient, make_asset_file: Any):
+        """Different file extensions are served correctly."""
+        test_files = [
+            ("firmware.bin", b"Binary content"),
+            ("update.hex", b"Hex file content"),
+            ("config.dat", b"Data file content"),
+        ]
+
+        for filename, content in test_files:
+            make_asset_file(filename, content)
+            response = client.get(f"/api/assets/{filename}")
+
+            assert response.status_code == 200
+            assert response.data == content
+            assert response.headers.get("Content-Type") == "application/octet-stream"
+            assert response.headers.get("Cache-Control") == "no-cache"
+
+    def test_get_asset_records_metrics_success(self, client: FlaskClient, make_asset_file: Any, container: ServiceContainer):
+        """Successful asset serve records metrics with success status."""
+        test_content = b"Firmware binary content"
+        make_asset_file("test-firmware.bin", test_content)
+
+        metrics_service = container.metrics_service()
+        with patch.object(metrics_service, "record_operation") as mock_record:
+            response = client.get("/api/assets/test-firmware.bin")
+
+            assert response.status_code == 200
+
+            # Verify metrics were recorded
+            mock_record.assert_called_once()
+            args = mock_record.call_args[0]
+            assert args[0] == "asset_serve"
+            assert args[1] == "success"
+            assert args[2] > 0  # duration should be positive
+
+    def test_get_asset_records_metrics_error(self, client: FlaskClient, container: ServiceContainer):
+        """Failed asset serve records metrics with error status."""
+        metrics_service = container.metrics_service()
+        with patch.object(metrics_service, "record_operation") as mock_record:
+            # Request non-existent asset
+            response = client.get("/api/assets/nonexistent-firmware.bin")
+
+            assert response.status_code == 404
+
+            # Verify metrics were recorded with error status
+            mock_record.assert_called_once()
+            args = mock_record.call_args[0]
+            assert args[0] == "asset_serve"
+            assert args[1] == "error"
+            assert args[2] > 0  # duration should be positive
 
 
 class TestUploadAsset:

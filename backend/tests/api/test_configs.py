@@ -340,3 +340,119 @@ class TestConfigsWithMqtt:
 
         # API should return success when MQTT is disabled
         assert response.status_code == 200
+
+
+class TestGetConfigRaw:
+    """Tests for GET /api/configs/<mac_address>.json (raw endpoint for ESP32 devices)."""
+
+    def test_get_config_raw_success(
+        self, client: FlaskClient, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
+    ):
+        """Existing config returns 200 with raw JSON content and Cache-Control header."""
+        make_config_file(valid_mac, sample_config)
+
+        response = client.get(f"/api/configs/{valid_mac}.json")
+
+        assert response.status_code == 200
+        # Response should be raw JSON content, not wrapped
+        data = response.get_json()
+        assert data == sample_config
+        # Verify Cache-Control header is present
+        assert response.headers.get("Cache-Control") == "no-cache"
+
+    def test_get_config_raw_not_found(self, client: FlaskClient, valid_mac: str):
+        """Non-existent config returns 404."""
+        response = client.get(f"/api/configs/{valid_mac}.json")
+
+        assert response.status_code == 404
+        data = response.get_json()
+        assert "error" in data
+        assert data["code"] == "RECORD_NOT_FOUND"
+
+    def test_get_config_raw_invalid_mac(self, client: FlaskClient):
+        """Invalid MAC format returns 400."""
+        response = client.get("/api/configs/invalid-mac.json")
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "error" in data
+        assert data["code"] == "INVALID_OPERATION"
+
+    def test_get_config_raw_uppercase_mac_normalized(
+        self, client: FlaskClient, make_config_file: Any, sample_config: dict[str, Any]
+    ):
+        """Uppercase MAC is normalized to lowercase."""
+        # Create config with lowercase MAC
+        make_config_file("aa-bb-cc-dd-ee-ff", sample_config)
+
+        # Request with uppercase MAC
+        response = client.get("/api/configs/AA-BB-CC-DD-EE-FF.json")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data == sample_config
+
+    def test_get_config_raw_minimal_fields(
+        self, client: FlaskClient, make_config_file: Any, sample_config_minimal: dict[str, Any], valid_mac: str
+    ):
+        """Config with minimal fields returns correctly."""
+        make_config_file(valid_mac, sample_config_minimal)
+
+        response = client.get(f"/api/configs/{valid_mac}.json")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data == sample_config_minimal
+
+    def test_get_config_wrapped_still_works(
+        self, client: FlaskClient, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
+    ):
+        """Existing wrapped endpoint (without .json) still returns wrapped response."""
+        make_config_file(valid_mac, sample_config)
+
+        response = client.get(f"/api/configs/{valid_mac}")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        # Wrapped response has mac_address, content, etc.
+        assert "mac_address" in data
+        assert "content" in data
+        assert data["mac_address"] == valid_mac
+        assert data["content"] == sample_config
+
+    def test_get_config_raw_records_metrics_success(
+        self, client: FlaskClient, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str, container: ServiceContainer
+    ):
+        """Successful raw config get records metrics with success status."""
+        make_config_file(valid_mac, sample_config)
+
+        metrics_service = container.metrics_service()
+        with patch.object(metrics_service, "record_operation") as mock_record:
+            response = client.get(f"/api/configs/{valid_mac}.json")
+
+            assert response.status_code == 200
+
+            # Verify metrics were recorded
+            mock_record.assert_called_once()
+            args = mock_record.call_args[0]
+            assert args[0] == "get_raw"
+            assert args[1] == "success"
+            assert args[2] > 0  # duration should be positive
+
+    def test_get_config_raw_records_metrics_error(
+        self, client: FlaskClient, valid_mac: str, container: ServiceContainer
+    ):
+        """Failed raw config get records metrics with error status."""
+        metrics_service = container.metrics_service()
+        with patch.object(metrics_service, "record_operation") as mock_record:
+            # Request non-existent config
+            response = client.get(f"/api/configs/{valid_mac}.json")
+
+            assert response.status_code == 404
+
+            # Verify metrics were recorded with error status
+            mock_record.assert_called_once()
+            args = mock_record.call_args[0]
+            assert args[0] == "get_raw"
+            assert args[1] == "error"
+            assert args[2] > 0  # duration should be positive

@@ -129,6 +129,18 @@ def make_config_file(config_dir: Path) -> Any:
 
 
 @pytest.fixture
+def make_asset_file(test_settings: Settings) -> Any:
+    """Factory fixture for creating asset files."""
+
+    def _make(filename: str, content: bytes) -> Path:
+        file_path = test_settings.ASSETS_DIR / filename
+        file_path.write_bytes(content)
+        return file_path
+
+    return _make
+
+
+@pytest.fixture
 def valid_mac() -> str:
     """Valid MAC address for testing."""
     return "aa-bb-cc-dd-ee-ff"
