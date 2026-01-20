@@ -5,10 +5,10 @@ import time
 from typing import Any
 
 from dependency_injector.wiring import Provide, inject
-from flask import Blueprint, request
+from flask import Blueprint, request, send_file
 from spectree import Response as SpectreeResponse
 
-from app.exceptions import ValidationException
+from app.exceptions import RecordNotFoundException, ValidationException
 from app.schemas.asset_upload import AssetUploadResponseSchema
 from app.schemas.error import ErrorResponseSchema
 from app.services.asset_upload_service import AssetUploadService
@@ -21,6 +21,53 @@ from app.utils.spectree_config import api
 logger = logging.getLogger(__name__)
 
 assets_bp = Blueprint("assets", __name__, url_prefix="/assets")
+
+
+@assets_bp.route("/<filename>", methods=["GET"])
+@handle_api_errors
+@inject
+def get_asset(
+    filename: str,
+    asset_upload_service: AssetUploadService = Provide[
+        ServiceContainer.asset_upload_service
+    ],
+    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+) -> Any:
+    """Serve raw asset file for ESP32 device consumption.
+
+    This endpoint serves binary firmware files directly to devices.
+    Validates filename to prevent path traversal attacks.
+    """
+    start_time = time.perf_counter()
+    status = "success"
+
+    try:
+        # Validate filename for path traversal
+        asset_upload_service.validate_filename(filename)
+
+        # Construct file path
+        file_path = asset_upload_service.assets_dir / filename
+
+        # Check file existence before send_file (for proper error handling)
+        if not file_path.exists():
+            raise RecordNotFoundException("Asset", filename)
+
+        # Serve file with Cache-Control header
+        response = send_file(
+            file_path,
+            mimetype="application/octet-stream",
+            as_attachment=False,
+        )
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+    except Exception:
+        status = "error"
+        raise
+
+    finally:
+        duration = time.perf_counter() - start_time
+        metrics_service.record_operation("asset_serve", status, duration)
 
 
 @assets_bp.route("", methods=["POST"])

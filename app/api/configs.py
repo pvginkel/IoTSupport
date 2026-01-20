@@ -66,6 +66,38 @@ def list_configs(
         metrics_service.record_operation("list", status, duration)
 
 
+@configs_bp.route("/<mac_address>.json", methods=["GET"])
+@handle_api_errors
+@inject
+def get_config_raw(
+    mac_address: str,
+    config_service: ConfigService = Provide[ServiceContainer.config_service],
+    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+) -> Any:
+    """Get raw JSON configuration for ESP32 device consumption.
+
+    This endpoint returns the raw config content without wrapping,
+    suitable for direct consumption by ESP32 devices.
+    """
+    start_time = time.perf_counter()
+    status = "success"
+
+    try:
+        config = config_service.get_config(mac_address)
+
+        # Return raw content dict with Cache-Control header
+        response = (config.content, 200, {"Cache-Control": "no-cache"})
+        return response
+
+    except Exception:
+        status = "error"
+        raise
+
+    finally:
+        duration = time.perf_counter() - start_time
+        metrics_service.record_operation("get_raw", status, duration)
+
+
 @configs_bp.route("/<mac_address>", methods=["GET"])
 @api.validate(
     resp=SpectreeResponse(HTTP_200=ConfigResponseSchema, HTTP_400=ErrorResponseSchema, HTTP_404=ErrorResponseSchema)
