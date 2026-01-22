@@ -1,5 +1,6 @@
 import { ulid } from 'ulid';
 import type { Page } from '@playwright/test';
+import { createApiClient, createPlaywrightFetch, apiRequest, type ApiClient } from '../client';
 
 export interface DeviceFactoryOptions {
   macAddress?: string;
@@ -9,10 +10,15 @@ export interface DeviceFactoryOptions {
 }
 
 export class DevicesFactory {
-  constructor(
-    private baseUrl: string,
-    private page: Page
-  ) {}
+  private client: ApiClient;
+
+  constructor(baseUrl: string, page: Page) {
+    // Use Playwright's request context for cookie sharing with the browser
+    this.client = createApiClient({
+      baseUrl,
+      fetch: createPlaywrightFetch(page.request),
+    });
+  }
 
   /**
    * Generate a random MAC address for testing
@@ -40,17 +46,12 @@ export class DevicesFactory {
       enableOTA: options.enableOTA ?? false,
     };
 
-    const response = await this.page.request.put(
-      `${this.baseUrl}/api/configs/${encodeURIComponent(macAddress)}`,
-      {
-        data: { content: config, allow_overwrite: true },
-      }
+    await apiRequest(() =>
+      this.client.PUT('/api/configs/{mac_address}', {
+        params: { path: { mac_address: macAddress } },
+        body: { content: config, allow_overwrite: true },
+      })
     );
-
-    if (!response.ok()) {
-      const text = await response.text();
-      throw new Error(`Failed to create device: ${response.status()} ${response.statusText()} - ${text}`);
-    }
 
     return { macAddress, config };
   }
@@ -59,34 +60,31 @@ export class DevicesFactory {
    * Delete a device configuration
    */
   async delete(macAddress: string): Promise<void> {
-    const response = await this.page.request.delete(
-      `${this.baseUrl}/api/configs/${encodeURIComponent(macAddress)}`
+    await apiRequest(() =>
+      this.client.DELETE('/api/configs/{mac_address}', {
+        params: { path: { mac_address: macAddress } },
+      })
     );
-
-    if (!response.ok()) {
-      const text = await response.text();
-      throw new Error(`Failed to delete device: ${response.status()} ${response.statusText()} - ${text}`);
-    }
   }
 
   /**
    * Get a device configuration
    */
   async get(macAddress: string): Promise<Record<string, unknown> | null> {
-    const response = await this.page.request.get(
-      `${this.baseUrl}/api/configs/${encodeURIComponent(macAddress)}`
-    );
-
-    if (!response.ok()) {
-      if (response.status() === 404) {
+    try {
+      const { data } = await apiRequest(() =>
+        this.client.GET('/api/configs/{mac_address}', {
+          params: { path: { mac_address: macAddress } },
+        })
+      );
+      return data?.content || null;
+    } catch (error) {
+      // Return null for 404
+      if (error instanceof Error && error.message.includes('404')) {
         return null;
       }
-      const text = await response.text();
-      throw new Error(`Failed to get device: ${response.status()} ${response.statusText()} - ${text}`);
+      throw error;
     }
-
-    const data = await response.json();
-    return data?.content || null;
   }
 
   /**
@@ -98,14 +96,7 @@ export class DevicesFactory {
     device_entity_id: string | null;
     enable_ota: boolean | null;
   }>> {
-    const response = await this.page.request.get(`${this.baseUrl}/api/configs`);
-
-    if (!response.ok()) {
-      const text = await response.text();
-      throw new Error(`Failed to list devices: ${response.status()} ${response.statusText()} - ${text}`);
-    }
-
-    const data = await response.json();
+    const { data } = await apiRequest(() => this.client.GET('/api/configs'));
     return data?.configs || [];
   }
 }
