@@ -181,8 +181,14 @@ def container(app: Flask) -> ServiceContainer:
 
 
 @pytest.fixture
-def sample_config() -> dict[str, Any]:
-    """Sample configuration data."""
+def sample_config() -> str:
+    """Sample configuration data as JSON string (stored verbatim)."""
+    return '{"deviceName": "Living Room Sensor", "deviceEntityId": "sensor.living_room", "enableOTA": true, "mqttBroker": "mqtt.local", "updateInterval": 60}'
+
+
+@pytest.fixture
+def sample_config_dict() -> dict[str, Any]:
+    """Sample configuration data as dict (for assertions)."""
     return {
         "deviceName": "Living Room Sensor",
         "deviceEntityId": "sensor.living_room",
@@ -193,8 +199,14 @@ def sample_config() -> dict[str, Any]:
 
 
 @pytest.fixture
-def sample_config_minimal() -> dict[str, Any]:
-    """Sample configuration with minimal fields."""
+def sample_config_minimal() -> str:
+    """Sample configuration with minimal fields as JSON string."""
+    return '{"mqttBroker": "mqtt.local"}'
+
+
+@pytest.fixture
+def sample_config_minimal_dict() -> dict[str, Any]:
+    """Sample configuration with minimal fields as dict (for assertions)."""
     return {
         "mqttBroker": "mqtt.local",
     }

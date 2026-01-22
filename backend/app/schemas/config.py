@@ -32,13 +32,33 @@ class ConfigCreateRequestSchema(BaseModel):
     """Request for POST /api/configs (create new config)."""
 
     mac_address: str = Field(..., description="Device MAC address (colon-separated)")
-    content: dict[str, Any] = Field(..., description="JSON configuration content")
+    content: str = Field(..., description="JSON configuration content as string (stored verbatim)")
+
+    @field_validator("content")
+    @classmethod
+    def validate_content_is_json(cls, v: str) -> str:
+        """Validate that content is valid JSON."""
+        try:
+            json.loads(v)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"content must be valid JSON: {e}") from e
+        return v
 
 
 class ConfigUpdateRequestSchema(BaseModel):
     """Request for PUT /api/configs/<id> (update existing config)."""
 
-    content: dict[str, Any] = Field(..., description="JSON configuration content")
+    content: str = Field(..., description="JSON configuration content as string (stored verbatim)")
+
+    @field_validator("content")
+    @classmethod
+    def validate_content_is_json(cls, v: str) -> str:
+        """Validate that content is valid JSON."""
+        try:
+            json.loads(v)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"content must be valid JSON: {e}") from e
+        return v
 
 
 class ConfigResponseSchema(BaseModel):

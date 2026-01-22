@@ -112,12 +112,12 @@ class ConfigService:
         config = self.get_config_by_mac(mac_address)
         return json.loads(config.content)
 
-    def create_config(self, mac_address: str, content: dict[str, Any]) -> Config:
+    def create_config(self, mac_address: str, content: str) -> Config:
         """Create a new device configuration.
 
         Args:
             mac_address: Device MAC address (colon-separated format)
-            content: Configuration content as a dictionary
+            content: Configuration content as a JSON string (stored verbatim)
 
         Returns:
             Created Config model instance
@@ -142,9 +142,7 @@ class ConfigService:
             raise RecordExistsException("Config", mac_address)
 
         # Extract optional fields from content
-        device_name = content.get("deviceName")
-        device_entity_id = content.get("deviceEntityId")
-        enable_ota = content.get("enableOTA")
+        device_name, device_entity_id, enable_ota = self._extract_fields(content)
 
         # Create new config
         config = Config(
@@ -152,7 +150,7 @@ class ConfigService:
             device_name=device_name,
             device_entity_id=device_entity_id,
             enable_ota=enable_ota,
-            content=json.dumps(content),
+            content=content,
         )
 
         self.db.add(config)
@@ -160,12 +158,12 @@ class ConfigService:
 
         return config
 
-    def update_config(self, config_id: int, content: dict[str, Any]) -> Config:
+    def update_config(self, config_id: int, content: str) -> Config:
         """Update an existing configuration by ID.
 
         Args:
             config_id: Config surrogate ID
-            content: New configuration content
+            content: New configuration content as a JSON string (stored verbatim)
 
         Returns:
             Updated Config model instance
@@ -176,14 +174,37 @@ class ConfigService:
         config = self.get_config_by_id(config_id)
 
         # Extract optional fields from content
-        config.device_name = content.get("deviceName")
-        config.device_entity_id = content.get("deviceEntityId")
-        config.enable_ota = content.get("enableOTA")
-        config.content = json.dumps(content)
+        device_name, device_entity_id, enable_ota = self._extract_fields(content)
+
+        config.device_name = device_name
+        config.device_entity_id = device_entity_id
+        config.enable_ota = enable_ota
+        config.content = content
 
         self.db.flush()
 
         return config
+
+    def _extract_fields(
+        self, content: str
+    ) -> tuple[str | None, str | None, bool | None]:
+        """Extract common fields from JSON content string.
+
+        Args:
+            content: JSON string containing configuration
+
+        Returns:
+            Tuple of (device_name, device_entity_id, enable_ota)
+        """
+        try:
+            parsed = json.loads(content)
+            return (
+                parsed.get("deviceName"),
+                parsed.get("deviceEntityId"),
+                parsed.get("enableOTA"),
+            )
+        except (json.JSONDecodeError, AttributeError):
+            return (None, None, None)
 
     def delete_config(self, config_id: int) -> str:
         """Delete config by ID.
