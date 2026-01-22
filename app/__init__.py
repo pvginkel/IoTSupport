@@ -41,6 +41,7 @@ def create_app(settings: "Settings | None" = None) -> App:
         "app.api.health",
         "app.api.images",
         "app.api.metrics",
+        "app.api.testing",
     ]
 
     container.wire(modules=wire_modules)

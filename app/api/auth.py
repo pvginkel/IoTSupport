@@ -9,10 +9,11 @@ from pydantic import BaseModel, Field
 from spectree import Response as SpectreeResponse
 
 from app.config import Settings
-from app.exceptions import ValidationException
+from app.exceptions import AuthenticationException, ValidationException
 from app.services.auth_service import AuthService
 from app.services.container import ServiceContainer
 from app.services.oidc_client_service import OidcClientService
+from app.services.testing_service import TestingService
 from app.utils.auth import (
     deserialize_auth_state,
     get_auth_context,
@@ -45,6 +46,7 @@ class UserInfoResponseSchema(BaseModel):
 @inject
 def get_current_user(
     auth_service: AuthService = Provide[ServiceContainer.auth_service],
+    testing_service: TestingService = Provide[ServiceContainer.testing_service],
     config: Settings = Provide[ServiceContainer.config],
 ) -> tuple[dict[str, Any], int]:
     """Get current authenticated user information.
@@ -59,7 +61,40 @@ def get_current_user(
         200: User information from validated token
         401: No valid token provided or token invalid
     """
-    # Check if OIDC is enabled
+    # In testing mode, handle test sessions and forced errors
+    if config.is_testing:
+        # Check for forced errors first (single-shot)
+        forced_error = testing_service.consume_forced_auth_error()
+        if forced_error:
+            from flask import jsonify
+
+            logger.info("Returning forced auth error: status=%d", forced_error)
+            return jsonify({
+                "error": f"Simulated error for testing (status {forced_error})",
+                "message": "Simulated error for testing",
+            }), forced_error
+
+        # Check for test sessions
+        token = request.cookies.get(config.OIDC_COOKIE_NAME)
+        if token and token.startswith("test-session-"):
+            test_session = testing_service.get_session(token)
+            if test_session:
+                user_info = UserInfoResponseSchema(
+                    subject=test_session.subject,
+                    email=test_session.email,
+                    name=test_session.name,
+                    roles=sorted(test_session.roles),
+                )
+                logger.info(
+                    "Returned test session user info for subject=%s",
+                    test_session.subject,
+                )
+                return user_info.model_dump(), 200
+
+        # No test session in testing mode - return 401
+        raise AuthenticationException("No valid test session provided")
+
+    # Check if OIDC is enabled (non-testing mode)
     if not config.OIDC_ENABLED:
         # Return a default "admin" user when auth is disabled
         return UserInfoResponseSchema(
@@ -77,8 +112,6 @@ def get_current_user(
 
         token = extract_token_from_request(config)
         if not token:
-            from app.exceptions import AuthenticationException
-
             raise AuthenticationException("No valid token provided")
 
         auth_context = auth_service.validate_token(token)
@@ -223,7 +256,6 @@ def callback(
     )
 
     # Determine cookie security settings
-    # Determine cookie security settings
     cookie_secure = get_cookie_secure(config)
 
     # Create response with redirect to original URL
@@ -274,7 +306,6 @@ def logout(
     # Validate redirect URL to prevent open redirect attacks
     validate_redirect_url(redirect_url, config.BASEURL)
 
-    # Determine cookie security settings
     # Determine cookie security settings
     cookie_secure = get_cookie_secure(config)
 

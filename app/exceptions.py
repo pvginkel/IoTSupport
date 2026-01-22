@@ -79,3 +79,10 @@ class AuthorizationException(BusinessLogicException):
 
     def __init__(self, message: str) -> None:
         super().__init__(message, error_code="AUTHORIZATION_FAILED")
+
+
+class RouteNotAvailableException(BusinessLogicException):
+    """Exception raised when a route is not available in the current environment."""
+
+    def __init__(self, message: str = "This route is not available") -> None:
+        super().__init__(message, error_code="ROUTE_NOT_AVAILABLE")
