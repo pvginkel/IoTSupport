@@ -172,18 +172,8 @@ class RotationService:
             # Step 2: Process timeouts
             result.processed_timeouts = self._process_timeouts()
 
-            # Step 3: Check if there's a pending device
-            pending = self._get_pending_device()
-            if pending is not None:
-                # Wait for current device to complete or timeout
-                logger.debug("Device %s is currently pending rotation", pending.key)
-                return result
-
-            # Step 4: Select next device to rotate
-            device = self._select_next_device()
-            if device is not None:
-                self._rotate_device(device)
-                result.device_rotated = device.key
+            # Step 3: Check for pending device, or select and rotate next device
+            result.device_rotated = self._rotate_next_queued_device()
 
             # Record metrics
             duration = time.perf_counter() - start_time
@@ -392,3 +382,54 @@ class RotationService:
         except Exception as e:
             # Fire-and-forget - log but don't fail
             logger.error("Exception publishing MQTT to %s: %s", topic, e)
+
+    def rotate_next_queued_device(self) -> bool:
+        """Rotate the next queued device if one exists.
+
+        Called after a device completes rotation to maintain momentum.
+        This creates a chain reaction where devices rotate back-to-back
+        without waiting for the next CRON tick.
+
+        Returns:
+            True if a device was rotated, False if no devices are queued
+        """
+        device_key = self._rotate_next_queued_device()
+        if device_key is not None:
+            logger.info(
+                "Chain rotation: started rotating device %s after previous completion",
+                device_key
+            )
+            return True
+
+        return False
+
+    def _rotate_next_queued_device(self) -> str | None:
+        """Rotate the next queued device if one exists.
+
+        Called to kick off device rotation and after a device completes
+        rotation to maintain momentum. This creates a chain reaction
+        where devices rotate back-to-back without waiting for the next
+        CRON tick.
+
+        Returns:
+            The device key of the rotated device, or None if no device
+            was rotated (either because one is already pending or none
+            are queued).
+        """
+
+        # Step 3: Check if there's a pending device
+        pending = self._get_pending_device()
+        if pending is not None:
+            # Wait for current device to complete or timeout
+            logger.debug("Device %s is currently pending rotation", pending.key)
+            return None
+
+        # Step 4: Select next device to rotate
+        device = self._select_next_device()
+        if device is not None:
+            self._rotate_device(device)
+            return device.key
+    
+        logger.debug("No queued devices for chain rotation")
+
+        return None

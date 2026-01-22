@@ -361,3 +361,91 @@ class TestRotationServiceDeviceSelection:
                 selected = rotation_service._select_next_device()
 
                 assert selected is None
+
+
+class TestRotationServiceChainRotation:
+    """Tests for rotate_next_queued_device (chain rotation)."""
+
+    def test_chain_rotation_triggers_next_device(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that rotate_next_queued_device triggers next queued device."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="chain1", name="Chain Test 1")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.QUEUED.value
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+
+                # Mock MQTT to avoid actual publish
+                with patch.object(rotation_service.mqtt_service, "enabled", False):
+                    result = rotation_service.rotate_next_queued_device()
+
+                assert result is True
+                assert device.rotation_state == RotationState.PENDING.value
+
+    def test_chain_rotation_returns_false_when_no_devices(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that rotate_next_queued_device returns False when nothing to rotate."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="chain2", name="Chain Test 2")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.OK.value
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                result = rotation_service.rotate_next_queued_device()
+
+                assert result is False
+                # Device should still be OK
+                assert device.rotation_state == RotationState.OK.value
+
+    def test_chain_rotation_skips_when_pending_exists(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that rotate_next_queued_device skips when a device is already pending."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="chain3", name="Chain Test 3")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+                pending_device = device_service.create_device(device_model_id=model.id, config="{}")
+                queued_device = device_service.create_device(device_model_id=model.id, config="{}")
+
+                pending_device.rotation_state = RotationState.PENDING.value
+                queued_device.rotation_state = RotationState.QUEUED.value
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                result = rotation_service.rotate_next_queued_device()
+
+                # Should skip because pending_device is already pending
+                assert result is False
+                # Queued device should still be queued
+                assert queued_device.rotation_state == RotationState.QUEUED.value

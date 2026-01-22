@@ -25,6 +25,7 @@ from app.services.device_service import DeviceService
 from app.services.firmware_service import FirmwareService
 from app.services.keycloak_admin_service import KeycloakAdminService
 from app.services.metrics_service import MetricsService
+from app.services.rotation_service import RotationService
 from app.utils.device_auth import (
     authenticate_device_request,
     get_device_auth_context,
@@ -64,6 +65,7 @@ def before_request_device_auth(
 @inject
 def get_config(
     device_service: DeviceService = Provide[ServiceContainer.device_service],
+    rotation_service: RotationService = Provide[ServiceContainer.rotation_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
     config: Settings = Provide[ServiceContainer.config],
 ) -> Any:
@@ -71,7 +73,8 @@ def get_config(
 
     This endpoint is called by ESP32 devices to fetch their configuration.
     If the device is in PENDING rotation state and the token was issued
-    after the rotation attempt, the rotation is marked as complete.
+    after the rotation attempt, the rotation is marked as complete and
+    the next queued device is triggered.
 
     Returns raw JSON content without wrapping.
     """
@@ -91,9 +94,9 @@ def get_config(
         else:
             device = device_service.get_device_by_key(device_ctx.device_key)
 
-        # Check for rotation completion
+        # Check for rotation completion and trigger next device
         if device.rotation_state == RotationState.PENDING.value:
-            _check_rotation_completion(device, device_ctx, device_service)
+            _check_rotation_completion(device, device_ctx, device_service, rotation_service)
 
         # Return raw config
         config_data = device_service.get_config_for_device(device)
@@ -113,16 +116,23 @@ def get_config(
         metrics_service.record_operation("iot_get_config", status, duration)
 
 
-def _check_rotation_completion(device: Any, device_ctx: Any, device_service: DeviceService) -> None:
+def _check_rotation_completion(
+    device: Any,
+    device_ctx: Any,
+    device_service: DeviceService,
+    rotation_service: RotationService,
+) -> None:
     """Check if rotation should be marked complete based on token timestamp.
 
     If the token was issued after the rotation attempt started, the device
     has successfully obtained new credentials and rotation is complete.
+    After completion, triggers the next queued device to maintain rotation momentum.
 
     Args:
         device: Device instance
         device_ctx: Device auth context with token_iat
         device_service: Device service for updates
+        rotation_service: Rotation service for triggering next device
     """
     if device_ctx is None or device_ctx.token_iat is None:
         return
@@ -150,6 +160,10 @@ def _check_rotation_completion(device: Any, device_ctx: Any, device_service: Dev
             token_time,
             device.last_rotation_attempt_at,
         )
+
+        # Chain rotation: immediately trigger the next queued device
+        # This maintains rotation momentum without waiting for the next CRON tick
+        rotation_service.rotate_next_queued_device()
 
 
 @iot_bp.route("/firmware", methods=["GET"])
