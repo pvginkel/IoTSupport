@@ -1,55 +1,101 @@
 """Tests for testing API endpoints."""
 
+import sqlite3
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 from flask import Flask
 from flask.testing import FlaskClient
+from sqlalchemy.pool import StaticPool
 
 from app import create_app
 from app.config import Settings
+from app.database import upgrade_database
 from app.services.container import ServiceContainer
 
 
-@pytest.fixture
-def testing_settings(config_dir, tmp_path) -> Settings:
-    """Create test settings with FLASK_ENV=testing to enable testing endpoints."""
-
+def _build_testing_settings(tmp_path: Path) -> Settings:
+    """Build settings for testing mode tests."""
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
 
     # Create temporary assets directory and signing key for tests
     assets_dir = tmp_path / "assets"
-    assets_dir.mkdir()
+    assets_dir.mkdir(exist_ok=True)
 
     # Create a valid RSA signing key file for all tests
     signing_key_path = tmp_path / "test_signing_key.pem"
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-    signing_key_path.write_bytes(pem)
+    if not signing_key_path.exists():
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        signing_key_path.write_bytes(pem)
 
     return Settings(
         _env_file=None,  # type: ignore[call-arg]
-        ESP32_CONFIGS_DIR=config_dir,
+        DATABASE_URL="sqlite:///:memory:",
         ASSETS_DIR=assets_dir,
         SIGNING_KEY_PATH=signing_key_path,
         TIMESTAMP_TOLERANCE_SECONDS=300,
         SECRET_KEY="test-secret-key",
         CORS_ORIGINS=["http://localhost:3000"],
         FLASK_ENV="testing",  # Enable testing mode
-        # OIDC_ENABLED defaults to False - test sessions handle auth in testing mode
     )
 
 
+@pytest.fixture(scope="module")
+def testing_template_connection(tmp_path_factory) -> Generator[sqlite3.Connection, None, None]:
+    """Create a template SQLite database for testing mode tests."""
+    tmp_path = tmp_path_factory.mktemp("testing")
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+
+    settings = _build_testing_settings(tmp_path)
+    settings.DATABASE_URL = "sqlite://"
+    settings.set_engine_options_override({
+        "poolclass": StaticPool,
+        "creator": lambda: conn,
+    })
+
+    template_app = create_app(settings, skip_background_services=True)
+    with template_app.app_context():
+        upgrade_database(recreate=True)
+
+    yield conn
+    conn.close()
+
+
 @pytest.fixture
-def testing_app(testing_settings: Settings) -> Generator[Flask, None, None]:
-    """Create Flask app with testing mode enabled."""
-    app = create_app(testing_settings)
-    yield app
+def testing_settings(tmp_path) -> Settings:
+    """Create test settings with FLASK_ENV=testing to enable testing endpoints."""
+    return _build_testing_settings(tmp_path)
+
+
+@pytest.fixture
+def testing_app(testing_settings: Settings, testing_template_connection: sqlite3.Connection) -> Generator[Flask, None, None]:
+    """Create Flask app with testing mode enabled and database set up."""
+    clone_conn = sqlite3.connect(":memory:", check_same_thread=False)
+    testing_template_connection.backup(clone_conn)
+
+    settings = testing_settings.model_copy()
+    settings.DATABASE_URL = "sqlite://"
+    settings.set_engine_options_override({
+        "poolclass": StaticPool,
+        "creator": lambda: clone_conn,
+    })
+
+    app = create_app(settings, skip_background_services=True)
+
+    try:
+        yield app
+    finally:
+        with app.app_context():
+            from app.extensions import db as flask_db
+            flask_db.session.remove()
+        clone_conn.close()
 
 
 @pytest.fixture
@@ -309,10 +355,18 @@ class TestTestSessionAuthenticationMiddleware:
 
         assert response.status_code == 200
 
-    def test_no_test_session_returns_401_for_protected_endpoints(
+    def test_no_test_session_allows_access_but_no_auth_context(
         self, testing_client: FlaskClient
     ):
-        """Without a test session, protected endpoints return 401."""
-        response = testing_client.get("/api/configs")
+        """Without a test session, endpoints work but /api/auth/self returns 401.
 
+        With OIDC disabled, endpoints don't require authentication.
+        However, /api/auth/self requires a valid auth context to return user info.
+        """
+        # Regular endpoints work without auth when OIDC is disabled
+        response = testing_client.get("/api/configs")
+        assert response.status_code == 200
+
+        # But /api/auth/self returns 401 since there's no auth context
+        response = testing_client.get("/api/auth/self")
         assert response.status_code == 401
