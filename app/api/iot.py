@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any
 
 from dependency_injector.wiring import Provide, inject
-from flask import Blueprint, send_file
+from flask import Blueprint, Response, send_file
 
 from app.config import Settings
 from app.exceptions import AuthenticationException
@@ -98,13 +98,14 @@ def get_config(
         if device.rotation_state == RotationState.PENDING.value:
             _check_rotation_completion(device, device_ctx, device_service, rotation_service)
 
-        # Return raw config
+        # Return raw config as JSON string
         config_data = device_service.get_config_for_device(device)
 
-        return (
+        return Response(
             config_data,
-            200,
-            {"Cache-Control": "no-cache"},
+            status=200,
+            mimetype="application/json",
+            headers={"Cache-Control": "no-cache"},
         )
 
     except Exception:

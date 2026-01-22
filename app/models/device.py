@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
@@ -52,6 +52,11 @@ class Device(db.Model):  # type: ignore[name-defined]
 
     # JSON configuration content (stored as text)
     config: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Fields extracted from config for display purposes
+    device_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    device_entity_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    enable_ota: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # Rotation state machine
     rotation_state: Mapped[str] = mapped_column(
