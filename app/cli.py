@@ -133,6 +133,10 @@ def load_test_data(yes_i_am_sure: bool) -> None:
             test_data_service = app.container.test_data_service()
             count = test_data_service.load_configs()
 
+            # Commit the loaded data
+            session = app.container.db_session()
+            session.commit()
+
             click.echo("Test data loaded successfully")
             click.echo("Dataset summary:")
             click.echo(f"   - {count} device configurations")
