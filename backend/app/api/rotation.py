@@ -9,6 +9,7 @@ from spectree import Response as SpectreeResponse
 
 from app.schemas.error import ErrorResponseSchema
 from app.schemas.rotation import (
+    DashboardResponseSchema,
     RotationStatusSchema,
     RotationTriggerResponseSchema,
 )
@@ -81,3 +82,34 @@ def trigger_fleet_rotation(
     finally:
         duration = time.perf_counter() - start_time
         metrics_service.record_operation("trigger_fleet_rotation", status, duration)
+
+
+@rotation_bp.route("/dashboard", methods=["GET"])
+@api.validate(resp=SpectreeResponse(HTTP_200=DashboardResponseSchema))
+@handle_api_errors
+@inject
+def get_dashboard(
+    rotation_service: RotationService = Provide[ServiceContainer.rotation_service],
+    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+) -> Any:
+    """Get device dashboard grouped by health status.
+
+    Returns devices categorized as:
+    - healthy: OK, QUEUED, or PENDING states
+    - warning: TIMEOUT state, under critical threshold
+    - critical: TIMEOUT state, at or over critical threshold
+    """
+    start_time = time.perf_counter()
+    status = "success"
+
+    try:
+        result = rotation_service.get_dashboard_status()
+        return DashboardResponseSchema(**result).model_dump()
+
+    except Exception:
+        status = "error"
+        raise
+
+    finally:
+        duration = time.perf_counter() - start_time
+        metrics_service.record_operation("get_dashboard", status, duration)
