@@ -449,3 +449,183 @@ class TestRotationServiceChainRotation:
                 assert result is False
                 # Queued device should still be queued
                 assert queued_device.rotation_state == RotationState.QUEUED.value
+
+
+class TestRotationServiceDashboard:
+    """Tests for get_dashboard_status."""
+
+    def test_dashboard_no_devices(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test dashboard with no devices."""
+        with app.app_context():
+            rotation_service = container.rotation_service()
+
+            result = rotation_service.get_dashboard_status()
+
+            assert result["healthy"] == []
+            assert result["warning"] == []
+            assert result["critical"] == []
+            assert result["counts"]["healthy"] == 0
+            assert result["counts"]["warning"] == 0
+            assert result["counts"]["critical"] == 0
+
+    def test_dashboard_healthy_states(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test dashboard groups OK, QUEUED, PENDING as healthy."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="dash1", name="Dashboard Test")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+
+                d_ok = device_service.create_device(device_model_id=model.id, config="{}")
+                d_queued = device_service.create_device(device_model_id=model.id, config="{}")
+                d_pending = device_service.create_device(device_model_id=model.id, config="{}")
+
+                d_ok.rotation_state = RotationState.OK.value
+                d_queued.rotation_state = RotationState.QUEUED.value
+                d_pending.rotation_state = RotationState.PENDING.value
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                result = rotation_service.get_dashboard_status()
+
+                assert result["counts"]["healthy"] == 3
+                assert result["counts"]["warning"] == 0
+                assert result["counts"]["critical"] == 0
+
+                healthy_keys = {d["key"] for d in result["healthy"]}
+                assert d_ok.key in healthy_keys
+                assert d_queued.key in healthy_keys
+                assert d_pending.key in healthy_keys
+
+    def test_dashboard_warning_timeout_under_threshold(
+        self, app: Flask, container: ServiceContainer, test_settings
+    ) -> None:
+        """Test dashboard classifies TIMEOUT under threshold as warning."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="dash2", name="Dashboard Test 2")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.TIMEOUT.value
+                # Less than threshold days ago
+                threshold_days = test_settings.ROTATION_CRITICAL_THRESHOLD_DAYS
+                device.last_rotation_completed_at = datetime.utcnow() - timedelta(
+                    days=threshold_days - 1
+                )
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                result = rotation_service.get_dashboard_status()
+
+                assert result["counts"]["healthy"] == 0
+                assert result["counts"]["warning"] == 1
+                assert result["counts"]["critical"] == 0
+                assert result["warning"][0]["key"] == device.key
+
+    def test_dashboard_critical_timeout_over_threshold(
+        self, app: Flask, container: ServiceContainer, test_settings
+    ) -> None:
+        """Test dashboard classifies TIMEOUT over threshold as critical."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="dash3", name="Dashboard Test 3")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.TIMEOUT.value
+                # More than threshold days ago
+                threshold_days = test_settings.ROTATION_CRITICAL_THRESHOLD_DAYS
+                device.last_rotation_completed_at = datetime.utcnow() - timedelta(
+                    days=threshold_days + 1
+                )
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                result = rotation_service.get_dashboard_status()
+
+                assert result["counts"]["healthy"] == 0
+                assert result["counts"]["warning"] == 0
+                assert result["counts"]["critical"] == 1
+                assert result["critical"][0]["key"] == device.key
+                assert result["critical"][0]["days_since_rotation"] == threshold_days + 1
+
+    def test_dashboard_timeout_no_last_rotation_is_warning(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test TIMEOUT device with no last_rotation_completed_at goes to warning."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="dash4", name="Dashboard Test 4")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.TIMEOUT.value
+                # No last_rotation_completed_at set
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                result = rotation_service.get_dashboard_status()
+
+                # With no last_rotation_completed_at, days_since is None
+                # The logic checks days_since >= threshold, which fails if None
+                # So it goes to warning
+                assert result["counts"]["warning"] == 1
+                assert result["counts"]["critical"] == 0
+                assert result["warning"][0]["days_since_rotation"] is None
+
+    def test_dashboard_includes_device_model_code(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test dashboard includes device_model_code in response."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="thermo_v1", name="Thermostat V1")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.OK.value
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                result = rotation_service.get_dashboard_status()
+
+                assert result["healthy"][0]["device_model_code"] == "thermo_v1"

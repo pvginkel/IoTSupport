@@ -173,6 +173,10 @@ class Settings(BaseSettings):
         default=300,
         description="Timeout for device to complete rotation before rollback"
     )
+    ROTATION_CRITICAL_THRESHOLD_DAYS: int = Field(
+        default=7,
+        description="Days after which a timed-out device is considered critical"
+    )
 
     # Secret Encryption Key (for cached_secret encryption)
     # Derived from SECRET_KEY if not explicitly set

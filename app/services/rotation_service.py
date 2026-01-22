@@ -429,7 +429,70 @@ class RotationService:
         if device is not None:
             self._rotate_device(device)
             return device.key
-    
+
         logger.debug("No queued devices for chain rotation")
 
         return None
+
+    def get_dashboard_status(self) -> dict[str, Any]:
+        """Get device dashboard status grouped by health category.
+
+        Groups devices into:
+        - healthy: OK, QUEUED, or PENDING states
+        - warning: TIMEOUT state, under critical threshold days
+        - critical: TIMEOUT state, at or over critical threshold days
+
+        Returns:
+            Dict with healthy, warning, critical device lists and counts
+        """
+        from sqlalchemy.orm import joinedload
+
+        now = datetime.utcnow()
+        threshold_days = self.config.ROTATION_CRITICAL_THRESHOLD_DAYS
+
+        # Fetch all devices with their model info
+        stmt = select(Device).options(joinedload(Device.device_model))
+        devices = list(self.db.scalars(stmt).all())
+
+        healthy: list[dict[str, Any]] = []
+        warning: list[dict[str, Any]] = []
+        critical: list[dict[str, Any]] = []
+
+        for device in devices:
+            # Calculate days since rotation
+            days_since: int | None = None
+            if device.last_rotation_completed_at is not None:
+                delta = now - device.last_rotation_completed_at
+                days_since = delta.days
+
+            device_data = {
+                "id": device.id,
+                "key": device.key,
+                "device_name": device.device_name,
+                "device_model_code": device.device_model.code,
+                "rotation_state": device.rotation_state,
+                "last_rotation_completed_at": device.last_rotation_completed_at,
+                "days_since_rotation": days_since,
+            }
+
+            # Categorize by state
+            if device.rotation_state == RotationState.TIMEOUT.value:
+                # TIMEOUT devices go to warning or critical based on time
+                if days_since is not None and days_since >= threshold_days:
+                    critical.append(device_data)
+                else:
+                    warning.append(device_data)
+            else:
+                # OK, QUEUED, PENDING are all healthy
+                healthy.append(device_data)
+
+        return {
+            "healthy": healthy,
+            "warning": warning,
+            "critical": critical,
+            "counts": {
+                "healthy": len(healthy),
+                "warning": len(warning),
+                "critical": len(critical),
+            },
+        }
