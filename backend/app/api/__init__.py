@@ -54,28 +54,22 @@ def before_request_authentication(
             logger.debug("Public endpoint - skipping authentication")
             return None
 
-    # In testing mode, check for test sessions (before OIDC check to avoid JWKS discovery)
+    # In testing mode, check for test session token (bypasses OIDC)
     if config.is_testing:
         token = request.cookies.get(config.OIDC_COOKIE_NAME)
-        if token and token.startswith("test-session-"):
+        if token:
             test_session = testing_service.get_session(token)
             if test_session:
-                # Create auth context from test session
+                logger.debug("Test session authenticated: subject=%s", test_session.subject)
                 g.auth_context = AuthContext(
                     subject=test_session.subject,
                     email=test_session.email,
                     name=test_session.name,
                     roles=set(test_session.roles),
                 )
-                logger.debug("Test session authenticated: subject=%s", test_session.subject)
                 return None
-        # In testing mode without valid test session, require authentication
-        # (don't skip even if OIDC is disabled - return 401)
-        if not config.OIDC_ENABLED:
-            logger.warning("Testing mode: No valid test session and OIDC disabled")
-            return {"error": "No valid test session provided"}, 401
 
-    # Skip authentication if OIDC is disabled (non-testing mode only)
+    # Skip authentication if OIDC is disabled
     if not config.OIDC_ENABLED:
         logger.debug("OIDC disabled - skipping authentication")
         return None

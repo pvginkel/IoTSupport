@@ -70,7 +70,6 @@ def _build_test_settings(tmp_path: Path) -> Settings:
         DATABASE_URL="sqlite:///:memory:",
         SECRET_KEY="test-secret-key",
         DEBUG=True,
-        FLASK_ENV="testing",
         ASSETS_DIR=assets_dir,
         SIGNING_KEY_PATH=signing_key_path,
         TIMESTAMP_TOLERANCE_SECONDS=300,

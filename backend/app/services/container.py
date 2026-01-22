@@ -11,8 +11,8 @@ from app.services.image_proxy_service import ImageProxyService
 from app.services.metrics_service import MetricsService
 from app.services.mqtt_service import MqttService
 from app.services.oidc_client_service import OidcClientService
-from app.services.testing_service import TestingService
 from app.services.test_data_service import TestDataService
+from app.services.testing_service import TestingService
 
 
 class ServiceContainer(containers.DeclarativeContainer):
