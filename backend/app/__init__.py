@@ -22,6 +22,11 @@ def create_app(settings: "Settings | None" = None, skip_background_services: boo
     if settings is None:
         settings = get_settings()
 
+    # Validate production configuration
+    # Skip validation in testing mode to allow tests to run with minimal config
+    if settings.FLASK_ENV != "testing":
+        settings.validate_production_config()
+
     app.config.from_object(settings)
 
     # Initialize Flask-SQLAlchemy

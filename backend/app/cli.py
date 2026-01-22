@@ -179,6 +179,10 @@ def db_status() -> None:
             click.echo("No pending migrations")
 
 
+# Setting key for last scheduled rotation timestamp
+LAST_SCHEDULED_AT_KEY = "LAST_SCHEDULED_AT"
+
+
 @cli.command()
 @click.option(
     "--run-once",
@@ -201,9 +205,7 @@ def rotation_job(run_once: bool) -> None:
     Examples:
         iotsupport-cli rotation-job              Execute one rotation cycle
     """
-    import json
     from datetime import datetime
-    from pathlib import Path
 
     app = create_app(skip_background_services=True)
 
@@ -213,35 +215,29 @@ def rotation_job(run_once: bool) -> None:
             click.echo("Error: Cannot connect to database", err=True)
             sys.exit(1)
 
-        # Get last scheduled rotation time from state file (persistent volume)
-        state_file = Path("/tmp/rotation_state.json")
+        # Get last scheduled rotation time from database settings
+        settings_service = app.container.settings_service()
         last_scheduled_at = None
 
-        try:
-            if state_file.exists():
-                state = json.loads(state_file.read_text())
-                if state.get("last_scheduled_at"):
-                    last_scheduled_at = datetime.fromisoformat(state["last_scheduled_at"])
-        except Exception as e:
-            click.echo(f"Warning: Could not read state file: {e}")
+        last_scheduled_str = settings_service.get(LAST_SCHEDULED_AT_KEY)
+        if last_scheduled_str:
+            try:
+                last_scheduled_at = datetime.fromisoformat(last_scheduled_str)
+            except ValueError as e:
+                click.echo(f"Warning: Invalid last_scheduled_at value: {e}")
 
         try:
             # Run rotation job
             rotation_service = app.container.rotation_service()
             result = rotation_service.process_rotation_job(last_scheduled_at)
 
-            # Commit database changes
+            # Update setting if scheduled rotation was triggered
+            if result.scheduled_rotation_triggered:
+                settings_service.set(LAST_SCHEDULED_AT_KEY, datetime.utcnow().isoformat())
+
+            # Commit database changes (includes rotation state and settings)
             session = app.container.db_session()
             session.commit()
-
-            # Update state file if scheduled rotation was triggered
-            if result.scheduled_rotation_triggered:
-                try:
-                    state_file.write_text(json.dumps({
-                        "last_scheduled_at": datetime.utcnow().isoformat()
-                    }))
-                except Exception as e:
-                    click.echo(f"Warning: Could not write state file: {e}")
 
             # Output results
             click.echo("Rotation job completed")

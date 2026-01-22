@@ -10,6 +10,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Project root directory (parent of app/)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Default secret key that must be changed in production
+_DEFAULT_SECRET_KEY = "dev-secret-key-change-in-production"
+
+
+class ConfigurationError(Exception):
+    """Raised when application configuration is invalid."""
+
+    pass
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -22,9 +31,14 @@ class Settings(BaseSettings):
     )
 
     # Flask settings
-    SECRET_KEY: str = Field(default="dev-secret-key-change-in-production")
+    SECRET_KEY: str = Field(default=_DEFAULT_SECRET_KEY)
     FLASK_ENV: str = Field(default="development")
     DEBUG: bool = Field(default=True)
+
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production mode."""
+        return self.FLASK_ENV == "production" or not self.DEBUG
 
     # Database settings
     DATABASE_URL: str = Field(
@@ -179,6 +193,57 @@ class Settings(BaseSettings):
     def configure_environment_defaults(self) -> "Settings":
         """Apply environment-specific defaults after validation."""
         return self
+
+    def validate_production_config(self) -> None:
+        """Validate that required configuration is set for production.
+
+        Raises:
+            ConfigurationError: If required settings are missing or insecure
+        """
+        errors: list[str] = []
+
+        # SECRET_KEY must be changed from default in production
+        if self.is_production and self.SECRET_KEY == _DEFAULT_SECRET_KEY:
+            errors.append(
+                "SECRET_KEY must be set to a secure value in production "
+                "(current value is the insecure default)"
+            )
+
+        # FERNET_KEY should be set in production for cached secret encryption
+        if self.is_production and not self.FERNET_KEY:
+            errors.append(
+                "FERNET_KEY must be set in production for encrypted secret storage"
+            )
+
+        # Keycloak settings required when provisioning is used
+        keycloak_settings = [
+            ("KEYCLOAK_ADMIN_URL", self.KEYCLOAK_ADMIN_URL),
+            ("KEYCLOAK_REALM", self.KEYCLOAK_REALM),
+            ("KEYCLOAK_ADMIN_CLIENT_ID", self.KEYCLOAK_ADMIN_CLIENT_ID),
+            ("KEYCLOAK_ADMIN_CLIENT_SECRET", self.KEYCLOAK_ADMIN_CLIENT_SECRET),
+        ]
+        keycloak_missing = [name for name, value in keycloak_settings if not value]
+        if keycloak_missing and self.is_production:
+            errors.append(
+                f"Keycloak settings required for device provisioning: {', '.join(keycloak_missing)}"
+            )
+
+        # WiFi settings required for provisioning
+        if self.is_production and (not self.WIFI_SSID or not self.WIFI_PASSWORD):
+            errors.append(
+                "WIFI_SSID and WIFI_PASSWORD must be set for device provisioning"
+            )
+
+        # OIDC_TOKEN_URL required for provisioning
+        if self.is_production and not self.OIDC_TOKEN_URL:
+            errors.append(
+                "OIDC_TOKEN_URL must be set for device provisioning"
+            )
+
+        if errors:
+            raise ConfigurationError(
+                "Configuration validation failed:\n  - " + "\n  - ".join(errors)
+            )
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:

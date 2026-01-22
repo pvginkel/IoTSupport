@@ -15,6 +15,7 @@ from app.services.metrics_service import MetricsService
 from app.services.mqtt_service import MqttService
 from app.services.oidc_client_service import OidcClientService
 from app.services.rotation_service import RotationService
+from app.services.settings_service import SettingsService
 from app.services.test_data_service import TestDataService
 from app.services.testing_service import TestingService
 
@@ -53,6 +54,12 @@ class ServiceContainer(containers.DeclarativeContainer):
     # TestDataService - Factory creates new instance per request with database session
     test_data_service = providers.Factory(
         TestDataService,
+        db=db_session,
+    )
+
+    # SettingsService - Factory creates new instance per request with database session
+    settings_service = providers.Factory(
+        SettingsService,
         db=db_session,
     )
 

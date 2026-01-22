@@ -4,6 +4,7 @@ import logging
 import os
 import struct
 import tempfile
+from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -69,14 +70,20 @@ class FirmwareService:
         """
         return self.get_firmware_path(model_code).exists()
 
-    def get_firmware(self, model_code: str) -> bytes:
-        """Get firmware binary content for a model.
+    def get_firmware_stream(self, model_code: str) -> BytesIO:
+        """Get firmware as a BytesIO stream.
+
+        Use this method with Flask's send_file for efficient transfer.
+        Returns a BytesIO object that can be used directly with send_file.
+
+        This pattern matches the S3 service download_file() method,
+        making future migration to S3 storage straightforward.
 
         Args:
             model_code: The device model code
 
         Returns:
-            Firmware binary content
+            BytesIO containing the firmware data (seeked to position 0)
 
         Raises:
             RecordNotFoundException: If firmware doesn't exist
@@ -85,7 +92,7 @@ class FirmwareService:
         if not path.exists():
             raise RecordNotFoundException("Firmware", model_code)
 
-        return path.read_bytes()
+        return BytesIO(path.read_bytes())
 
     def save_firmware(self, model_code: str, content: bytes) -> str:
         """Save firmware binary and extract version.

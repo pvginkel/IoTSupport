@@ -16,6 +16,8 @@ from app.exceptions import (
 from app.models.device_model import DeviceModel
 
 if TYPE_CHECKING:
+    from io import BytesIO
+
     from app.services.firmware_service import FirmwareService
 
 logger = logging.getLogger(__name__)
@@ -205,25 +207,23 @@ class DeviceModelService:
         logger.info("Uploaded firmware for model %s: version %s", model.code, version)
         return model
 
-    def get_firmware(self, model_id: int) -> tuple[bytes, str]:
-        """Get firmware binary for a device model.
+    def get_firmware_stream(self, model_id: int) -> tuple["BytesIO", str]:
+        """Get firmware stream for a device model.
+
+        Returns a BytesIO for use with Flask's send_file.
 
         Args:
             model_id: Device model ID
 
         Returns:
-            Tuple of (firmware_content, model_code)
+            Tuple of (BytesIO stream, model_code)
 
         Raises:
             RecordNotFoundException: If model or firmware doesn't exist
         """
         model = self.get_device_model(model_id)
-
-        if not self.firmware_service.firmware_exists(model.code):
-            raise RecordNotFoundException("Firmware", model.code)
-
-        content = self.firmware_service.get_firmware(model.code)
-        return content, model.code
+        stream = self.firmware_service.get_firmware_stream(model.code)
+        return stream, model.code
 
     def has_firmware(self, model_id: int) -> bool:
         """Check if a device model has firmware uploaded.

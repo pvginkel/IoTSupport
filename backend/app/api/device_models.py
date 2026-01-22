@@ -4,7 +4,7 @@ import time
 from typing import Any
 
 from dependency_injector.wiring import Provide, inject
-from flask import Blueprint, Response, request
+from flask import Blueprint, request, send_file
 from spectree import Response as SpectreeResponse
 
 from app.schemas.device_model import (
@@ -255,15 +255,14 @@ def download_firmware(
     status = "success"
 
     try:
-        content, model_code = device_model_service.get_firmware(model_id)
+        stream, model_code = device_model_service.get_firmware_stream(model_id)
 
-        return Response(
-            content,
+        # Use send_file with BytesIO stream
+        return send_file(
+            stream,
             mimetype="application/octet-stream",
-            headers={
-                "Content-Disposition": f"attachment; filename=firmware-{model_code}.bin",
-                "Cache-Control": "no-cache",
-            },
+            as_attachment=True,
+            download_name=f"firmware-{model_code}.bin",
         )
 
     except Exception:
