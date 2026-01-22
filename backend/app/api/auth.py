@@ -271,6 +271,17 @@ def callback(
         max_age=token_response.expires_in,
     )
 
+    # Set ID token cookie for logout (if available)
+    if token_response.id_token:
+        response.set_cookie(
+            "id_token",
+            token_response.id_token,
+            httponly=True,
+            secure=cookie_secure,
+            samesite=config.OIDC_COOKIE_SAMESITE,
+            max_age=token_response.expires_in,
+        )
+
     # Clear auth state cookie
     response.set_cookie(
         "auth_state",
@@ -288,17 +299,19 @@ def callback(
 @public
 @inject
 def logout(
+    oidc_client_service: OidcClientService = Provide[ServiceContainer.oidc_client_service],
     config: Settings = Provide[ServiceContainer.config],
 ) -> Any:
     """Log out current user.
 
-    Clears access token cookie and redirects to specified URL.
+    Clears access token cookie and redirects to OIDC provider's logout endpoint
+    to terminate the session at the IdP level.
 
     Query Parameters:
         redirect: URL to redirect to after logout (default: /)
 
     Returns:
-        302: Redirect to logout URL with cookie cleared
+        302: Redirect to OIDC logout endpoint (or direct redirect if OIDC disabled)
     """
     # Get redirect parameter (default to /)
     redirect_url = request.args.get("redirect", "/")
@@ -309,8 +322,54 @@ def logout(
     # Determine cookie security settings
     cookie_secure = get_cookie_secure(config)
 
+    # Get ID token for logout hint (to skip confirmation prompt)
+    id_token = request.cookies.get("id_token")
+
+    # Build the post-logout redirect URI (must be absolute for OIDC)
+    if redirect_url.startswith("/"):
+        post_logout_redirect_uri = f"{config.BASEURL}{redirect_url}"
+    else:
+        post_logout_redirect_uri = redirect_url
+
+    # Determine where to redirect
+    if config.OIDC_ENABLED:
+        try:
+            end_session_endpoint = oidc_client_service.endpoints.end_session_endpoint
+            if end_session_endpoint:
+                # Redirect to OIDC provider's logout endpoint
+                from urllib.parse import urlencode
+
+                logout_params: dict[str, str] = {
+                    "client_id": config.OIDC_CLIENT_ID or "",
+                    "post_logout_redirect_uri": post_logout_redirect_uri,
+                }
+
+                # Include ID token hint to skip confirmation prompt
+                if id_token:
+                    logout_params["id_token_hint"] = id_token
+
+                final_redirect_url = f"{end_session_endpoint}?{urlencode(logout_params)}"
+                logger.info(
+                    "User logged out: redirecting to OIDC end_session_endpoint (id_token_hint=%s)",
+                    "present" if id_token else "absent",
+                )
+            else:
+                # No end_session_endpoint available, redirect directly
+                final_redirect_url = redirect_url
+                logger.warning(
+                    "OIDC end_session_endpoint not available, redirecting directly"
+                )
+        except ValueError:
+            # OIDC endpoints not available
+            final_redirect_url = redirect_url
+            logger.warning("OIDC endpoints not available, redirecting directly")
+    else:
+        # OIDC disabled, redirect directly
+        final_redirect_url = redirect_url
+        logger.info("User logged out: redirecting to %s", redirect_url)
+
     # Create response with redirect
-    response = make_response(redirect(redirect_url))
+    response = make_response(redirect(final_redirect_url))
 
     # Clear access token cookie
     response.set_cookie(
@@ -322,6 +381,14 @@ def logout(
         max_age=0,
     )
 
-    logger.info("User logged out: redirecting to %s", redirect_url)
+    # Clear ID token cookie
+    response.set_cookie(
+        "id_token",
+        "",
+        httponly=True,
+        secure=cookie_secure,
+        samesite=config.OIDC_COOKIE_SAMESITE,
+        max_age=0,
+    )
 
     return response
