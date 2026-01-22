@@ -92,12 +92,15 @@ class DeviceModelService:
 
         return model
 
-    def create_device_model(self, code: str, name: str) -> DeviceModel:
+    def create_device_model(
+        self, code: str, name: str, config_schema: str | None = None
+    ) -> DeviceModel:
         """Create a new device model.
 
         Args:
             code: Unique model code (lowercase alphanumeric with underscores)
             name: Human-readable model name
+            config_schema: Optional JSON schema for validating device configurations
 
         Returns:
             Created DeviceModel instance
@@ -120,21 +123,27 @@ class DeviceModelService:
             raise RecordExistsException("DeviceModel", code)
 
         # Create new model
-        model = DeviceModel(code=code, name=name)
+        model = DeviceModel(code=code, name=name, config_schema=config_schema)
         self.db.add(model)
         self.db.flush()
 
         logger.info("Created device model: %s (%s)", model.code, model.name)
         return model
 
-    def update_device_model(self, model_id: int, name: str) -> DeviceModel:
-        """Update a device model's name.
+    def update_device_model(
+        self,
+        model_id: int,
+        name: str | None = None,
+        config_schema: str | None = None,
+    ) -> DeviceModel:
+        """Update a device model.
 
         Note: code is immutable and cannot be changed.
 
         Args:
             model_id: Device model ID
-            name: New human-readable name
+            name: New human-readable name (optional)
+            config_schema: New JSON schema for config validation (optional)
 
         Returns:
             Updated DeviceModel instance
@@ -143,7 +152,12 @@ class DeviceModelService:
             RecordNotFoundException: If model doesn't exist
         """
         model = self.get_device_model(model_id)
-        model.name = name
+
+        if name is not None:
+            model.name = name
+        if config_schema is not None:
+            model.config_schema = config_schema
+
         self.db.flush()
 
         logger.info("Updated device model: %s (%s)", model.code, model.name)

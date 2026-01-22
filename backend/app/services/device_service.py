@@ -6,8 +6,9 @@ import json
 import logging
 import secrets
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
+import jsonschema
 from cryptography.fernet import Fernet
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -131,6 +132,63 @@ class DeviceService:
         """
         return self._fernet.decrypt(encrypted.encode()).decode()
 
+    def _extract_config_fields(
+        self, config: str
+    ) -> tuple[str | None, str | None, bool | None]:
+        """Extract display fields from JSON config string.
+
+        Args:
+            config: JSON string containing configuration
+
+        Returns:
+            Tuple of (device_name, device_entity_id, enable_ota)
+        """
+        try:
+            parsed = json.loads(config)
+            return (
+                parsed.get("deviceName"),
+                parsed.get("deviceEntityId"),
+                parsed.get("enableOTA"),
+            )
+        except (json.JSONDecodeError, AttributeError):
+            return (None, None, None)
+
+    def _validate_config_schema(self, config: str, schema: str | None) -> None:
+        """Validate config against JSON schema if schema is set.
+
+        Args:
+            config: JSON config string
+            schema: JSON schema string (optional)
+
+        Raises:
+            ValidationException: If config doesn't match schema
+        """
+        if schema is None:
+            return
+
+        try:
+            config_data = json.loads(config)
+            schema_data = json.loads(schema)
+            jsonschema.validate(instance=config_data, schema=schema_data)
+        except json.JSONDecodeError as e:
+            raise ValidationException(f"Invalid JSON in config or schema: {e}") from e
+        except jsonschema.ValidationError as e:
+            raise ValidationException(f"Config validation failed: {e.message}") from e
+        except jsonschema.SchemaError as e:
+            raise ValidationException(f"Invalid JSON schema: {e.message}") from e
+
+    def _apply_config_fields(self, device: Device, config: str) -> None:
+        """Extract and apply config fields to device.
+
+        Args:
+            device: Device to update
+            config: JSON config string
+        """
+        device_name, device_entity_id, enable_ota = self._extract_config_fields(config)
+        device.device_name = device_name
+        device.device_entity_id = device_entity_id
+        device.enable_ota = enable_ota
+
     def list_devices(
         self,
         model_id: int | None = None,
@@ -207,7 +265,7 @@ class DeviceService:
 
         Raises:
             RecordNotFoundException: If model doesn't exist
-            ValidationException: If config is invalid JSON
+            ValidationException: If config is invalid JSON or fails schema validation
             ExternalServiceException: If Keycloak client creation fails
         """
         # Validate model exists
@@ -218,6 +276,9 @@ class DeviceService:
             json.loads(config)
         except json.JSONDecodeError as e:
             raise ValidationException(f"config must be valid JSON: {e}") from e
+
+        # Validate against schema if model has one
+        self._validate_config_schema(config, model.config_schema)
 
         # Generate unique device key
         key = self._generate_device_key()
@@ -241,6 +302,9 @@ class DeviceService:
                 rotation_state=RotationState.OK.value,
                 secret_created_at=datetime.utcnow(),
             )
+            # Extract and apply config fields for display
+            self._apply_config_fields(device, config)
+
             self.db.add(device)
             self.db.flush()
 
@@ -276,7 +340,7 @@ class DeviceService:
 
         Raises:
             RecordNotFoundException: If device doesn't exist
-            ValidationException: If config is invalid JSON
+            ValidationException: If config is invalid JSON or fails schema validation
         """
         device = self.get_device(device_id)
 
@@ -286,7 +350,12 @@ class DeviceService:
         except json.JSONDecodeError as e:
             raise ValidationException(f"config must be valid JSON: {e}") from e
 
+        # Validate against schema if model has one
+        self._validate_config_schema(config, device.device_model.config_schema)
+
         device.config = config
+        # Extract and apply config fields for display
+        self._apply_config_fields(device, config)
         self.db.flush()
 
         logger.info("Updated device %s config", device.key)
@@ -417,16 +486,16 @@ class DeviceService:
 
         return self.get_device_by_key(device_key)
 
-    def get_config_for_device(self, device: Device) -> dict[str, Any]:
-        """Get parsed config for a device.
+    def get_config_for_device(self, device: Device) -> str:
+        """Get config for a device.
 
         Args:
             device: Device instance
 
         Returns:
-            Parsed config dict
+            Config JSON string
         """
-        return cast(dict[str, Any], json.loads(device.config))
+        return device.config
 
     def cache_secret_for_rotation(self, device: Device, secret: str) -> None:
         """Cache a secret for potential rollback during rotation.

@@ -79,7 +79,9 @@ def create_device_model(
     try:
         data = DeviceModelCreateSchema.model_validate(request.get_json())
         model = device_model_service.create_device_model(
-            code=data.code, name=data.name
+            code=data.code,
+            name=data.name,
+            config_schema=data.config_schema,
         )
 
         return DeviceModelResponseSchema.model_validate(model).model_dump(), 201
@@ -146,7 +148,11 @@ def update_device_model(
 
     try:
         data = DeviceModelUpdateSchema.model_validate(request.get_json())
-        model = device_model_service.update_device_model(model_id, name=data.name)
+        model = device_model_service.update_device_model(
+            model_id,
+            name=data.name,
+            config_schema=data.config_schema,
+        )
 
         return DeviceModelResponseSchema.model_validate(model).model_dump()
 

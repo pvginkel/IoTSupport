@@ -505,3 +505,254 @@ class TestDeviceServiceSecretCaching:
                 cached = device_service.get_cached_secret(device)
 
                 assert cached is None
+
+
+class TestDeviceServiceFieldExtraction:
+    """Tests for config field extraction."""
+
+    def test_create_device_extracts_fields(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that creating a device extracts fields from config."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="extract1", name="Extract Test")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+                config = '{"deviceName": "Living Room Sensor", "deviceEntityId": "sensor.living_room", "enableOTA": true}'
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config=config
+                )
+
+                assert device.device_name == "Living Room Sensor"
+                assert device.device_entity_id == "sensor.living_room"
+                assert device.enable_ota is True
+
+    def test_update_device_extracts_fields(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that updating a device extracts fields from config."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="extract2", name="Extract Test 2")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"deviceName": "Old Name"}'
+                )
+
+                assert device.device_name == "Old Name"
+
+                # Update with new values
+                updated = device_service.update_device(
+                    device.id,
+                    config='{"deviceName": "New Name", "enableOTA": false}'
+                )
+
+                assert updated.device_name == "New Name"
+                assert updated.enable_ota is False
+
+    def test_create_device_handles_missing_fields(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that missing config fields result in None values."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="extract3", name="Extract Test 3")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"otherField": "value"}'
+                )
+
+                assert device.device_name is None
+                assert device.device_entity_id is None
+                assert device.enable_ota is None
+
+
+class TestDeviceServiceSchemaValidation:
+    """Tests for JSON schema validation."""
+
+    def test_create_device_with_schema_valid_config(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test creating a device with valid config matching schema."""
+        with app.app_context():
+            schema = '''{
+                "type": "object",
+                "required": ["deviceName"],
+                "properties": {
+                    "deviceName": {"type": "string"},
+                    "enableOTA": {"type": "boolean"}
+                }
+            }'''
+
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(
+                code="schema1", name="Schema Test", config_schema=schema
+            )
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"deviceName": "Test Device", "enableOTA": true}'
+                )
+
+                assert device.id is not None
+                assert device.device_name == "Test Device"
+
+    def test_create_device_with_schema_invalid_config_raises(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test creating a device with invalid config fails schema validation."""
+        with app.app_context():
+            schema = '''{
+                "type": "object",
+                "required": ["deviceName"],
+                "properties": {
+                    "deviceName": {"type": "string"}
+                }
+            }'''
+
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(
+                code="schema2", name="Schema Test 2", config_schema=schema
+            )
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+
+                # Missing required field "deviceName"
+                with pytest.raises(ValidationException) as exc_info:
+                    device_service.create_device(
+                        device_model_id=model.id,
+                        config='{"otherField": "value"}'
+                    )
+
+                assert "deviceName" in str(exc_info.value)
+
+    def test_create_device_with_schema_wrong_type_raises(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test creating a device with wrong type fails schema validation."""
+        with app.app_context():
+            schema = '''{
+                "type": "object",
+                "properties": {
+                    "enableOTA": {"type": "boolean"}
+                }
+            }'''
+
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(
+                code="schema3", name="Schema Test 3", config_schema=schema
+            )
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+
+                # enableOTA should be boolean, not string
+                with pytest.raises(ValidationException) as exc_info:
+                    device_service.create_device(
+                        device_model_id=model.id,
+                        config='{"enableOTA": "yes"}'
+                    )
+
+                assert "enableOTA" in str(exc_info.value) or "boolean" in str(exc_info.value)
+
+    def test_update_device_with_schema_validates(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test updating a device validates against schema."""
+        with app.app_context():
+            schema = '''{
+                "type": "object",
+                "required": ["deviceName"],
+                "properties": {
+                    "deviceName": {"type": "string"}
+                }
+            }'''
+
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(
+                code="schema4", name="Schema Test 4", config_schema=schema
+            )
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"deviceName": "Original"}'
+                )
+
+                # Update with invalid config (missing required field)
+                with pytest.raises(ValidationException):
+                    device_service.update_device(device.id, config='{"other": "value"}')
+
+    def test_create_device_without_schema_skips_validation(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test creating a device without schema accepts any valid JSON."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(
+                code="schema5", name="Schema Test 5"
+                # No config_schema
+            )
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+                # Any JSON should be accepted
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"anything": "goes", "nested": {"ok": true}}'
+                )
+
+                assert device.id is not None

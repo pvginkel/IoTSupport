@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
@@ -36,6 +36,9 @@ class DeviceModel(db.Model):  # type: ignore[name-defined]
     # Firmware version extracted from uploaded binary (nullable until firmware uploaded)
     firmware_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
+    # JSON schema for validating device configuration (optional)
+    config_schema: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now()
@@ -56,6 +59,11 @@ class DeviceModel(db.Model):  # type: ignore[name-defined]
     def device_count(self) -> int:
         """Count of devices using this model."""
         return len(self.devices)
+
+    @property
+    def has_config_schema(self) -> bool:
+        """Whether this model has a config schema defined."""
+        return self.config_schema is not None
 
     def __repr__(self) -> str:
         """Return string representation of DeviceModel."""
