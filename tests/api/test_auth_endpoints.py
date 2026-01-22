@@ -2,6 +2,7 @@
 
 
 import pytest
+from sqlalchemy.pool import StaticPool
 
 from app.config import Settings
 
@@ -11,7 +12,13 @@ class TestAuthEndpoints:
 
     @pytest.fixture
     def auth_enabled_settings(self, test_settings: Settings) -> Settings:
-        """Create settings with OIDC enabled."""
+        """Create settings with OIDC enabled and SQLite support."""
+        # Clone settings and configure for SQLite
+        test_settings.DATABASE_URL = "sqlite://"
+        test_settings.set_engine_options_override({
+            "poolclass": StaticPool,
+            "connect_args": {"check_same_thread": False},
+        })
         test_settings.OIDC_ENABLED = True
         test_settings.OIDC_ISSUER_URL = "https://auth.example.com/realms/iot"
         test_settings.OIDC_CLIENT_ID = "iot-backend"
@@ -42,7 +49,13 @@ class TestAuthEndpoints:
             mock_response.raise_for_status = MagicMock()
             mock_get.return_value = mock_response
 
-            app = create_app(auth_enabled_settings)
+            app = create_app(auth_enabled_settings, skip_background_services=True)
+
+            # Create database tables for this fresh app
+            with app.app_context():
+                from app.extensions import db
+                db.create_all()
+
             client = app.test_client()
 
             response = client.get("/api/auth/self")
@@ -61,7 +74,13 @@ class TestAuthEndpoints:
             mock_response.raise_for_status = MagicMock()
             mock_get.return_value = mock_response
 
-            app = create_app(auth_enabled_settings)
+            app = create_app(auth_enabled_settings, skip_background_services=True)
+
+            # Create database tables for this fresh app
+            with app.app_context():
+                from app.extensions import db
+                db.create_all()
+
             client = app.test_client()
 
             response = client.get("/api/auth/login")
@@ -82,7 +101,13 @@ class TestAuthEndpoints:
             mock_response.raise_for_status = MagicMock()
             mock_get.return_value = mock_response
 
-            app = create_app(auth_enabled_settings)
+            app = create_app(auth_enabled_settings, skip_background_services=True)
+
+            # Create database tables for this fresh app
+            with app.app_context():
+                from app.extensions import db
+                db.create_all()
+
             client = app.test_client()
 
             response = client.get("/api/auth/login?redirect=https://evil.com")

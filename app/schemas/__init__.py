@@ -1,19 +1,19 @@
 """Pydantic schemas for request/response validation."""
 
 from app.schemas.config import (
-    ConfigDetailSchema,
+    ConfigCreateRequestSchema,
     ConfigListResponseSchema,
     ConfigResponseSchema,
-    ConfigSaveRequestSchema,
     ConfigSummarySchema,
+    ConfigUpdateRequestSchema,
 )
 from app.schemas.error import ErrorResponseSchema
 
 __all__ = [
     "ConfigSummarySchema",
     "ConfigListResponseSchema",
-    "ConfigDetailSchema",
-    "ConfigSaveRequestSchema",
+    "ConfigCreateRequestSchema",
+    "ConfigUpdateRequestSchema",
     "ConfigResponseSchema",
     "ErrorResponseSchema",
 ]

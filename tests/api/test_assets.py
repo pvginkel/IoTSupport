@@ -50,19 +50,28 @@ def signing_key_path(tmp_path: Path, test_keypair: tuple) -> Path:
 
 @pytest.fixture
 def test_settings_with_assets(
-    config_dir: Path, assets_dir: Path, signing_key_path: Path
+    assets_dir: Path, signing_key_path: Path
 ) -> Settings:
     """Create test settings with asset upload configuration."""
+    from sqlalchemy.pool import StaticPool
+
     # Use _env_file=None to prevent reading from .env file during tests
-    return Settings(
+    settings = Settings(
         _env_file=None,  # type: ignore[call-arg]
-        ESP32_CONFIGS_DIR=config_dir,
+        DATABASE_URL="sqlite://",
         ASSETS_DIR=assets_dir,
         SIGNING_KEY_PATH=signing_key_path,
         TIMESTAMP_TOLERANCE_SECONDS=300,
         SECRET_KEY="test-secret-key",
         CORS_ORIGINS=["http://localhost:3000"],
+        FLASK_ENV="testing",
     )
+    # Configure for SQLite in-memory testing
+    settings.set_engine_options_override({
+        "poolclass": StaticPool,
+        "connect_args": {"check_same_thread": False},
+    })
+    return settings
 
 
 @pytest.fixture
@@ -70,7 +79,14 @@ def app_with_assets(test_settings_with_assets: Settings) -> Flask:
     """Create Flask app with asset upload configuration."""
     from app import create_app
 
-    return create_app(test_settings_with_assets)
+    app = create_app(test_settings_with_assets, skip_background_services=True)
+
+    # Create database tables for this fresh app
+    with app.app_context():
+        from app.extensions import db
+        db.create_all()
+
+    return app
 
 
 @pytest.fixture

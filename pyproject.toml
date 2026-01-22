@@ -8,10 +8,12 @@ packages = [{include = "app"}]
 
 [tool.poetry.scripts]
 dev = "run:main"
+iotsupport-cli = "app.cli:main"
 
 [tool.poetry.dependencies]
 python = "^3.11"
 flask = "^3.0.0"
+flask-sqlalchemy = "^3.1.0"
 pydantic = "^2.5.0"
 pydantic-settings = "^2.1.0"
 spectree = "^1.2.0"
@@ -26,6 +28,8 @@ pypng = "^0.20220715.0"
 lz4 = "^4.3.0"
 paho-mqtt = "^2.1.0"
 pyjwt = {extras = ["crypto"], version = "^2.8.0"}
+psycopg = {extras = ["binary"], version = "^3.1.0"}
+alembic = "^1.13.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.0"
@@ -105,6 +109,18 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "paho.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "alembic.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "flask_sqlalchemy.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["sqlalchemy", "sqlalchemy.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

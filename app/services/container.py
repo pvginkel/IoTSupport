@@ -1,6 +1,7 @@
 """Dependency injection container for services."""
 
 from dependency_injector import containers, providers
+from sqlalchemy.orm import sessionmaker
 
 from app.config import Settings
 from app.services.asset_upload_service import AssetUploadService
@@ -11,6 +12,7 @@ from app.services.metrics_service import MetricsService
 from app.services.mqtt_service import MqttService
 from app.services.oidc_client_service import OidcClientService
 from app.services.testing_service import TestingService
+from app.services.test_data_service import TestDataService
 
 
 class ServiceContainer(containers.DeclarativeContainer):
@@ -18,6 +20,12 @@ class ServiceContainer(containers.DeclarativeContainer):
 
     # Configuration provider - Singleton for app settings
     config = providers.Dependency(instance_of=Settings)
+
+    # Database session providers
+    session_maker = providers.Dependency(instance_of=sessionmaker)
+    db_session = providers.ContextLocalSingleton(
+        session_maker.provided.call()
+    )
 
     # MetricsService - Singleton for app lifetime
     metrics_service = providers.Singleton(MetricsService)
@@ -38,10 +46,16 @@ class ServiceContainer(containers.DeclarativeContainer):
         timestamp_tolerance_seconds=config.provided.TIMESTAMP_TOLERANCE_SECONDS,
     )
 
-    # ConfigService - Factory creates new instance per request for thread safety
+    # ConfigService - Factory creates new instance per request with database session
     config_service = providers.Factory(
         ConfigService,
-        config_dir=config.provided.ESP32_CONFIGS_DIR,
+        db=db_session,
+    )
+
+    # TestDataService - Factory creates new instance per request with database session
+    test_data_service = providers.Factory(
+        TestDataService,
+        db=db_session,
     )
 
     # ImageProxyService - Factory creates new instance per request for thread safety
