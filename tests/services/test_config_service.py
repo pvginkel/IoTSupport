@@ -1,5 +1,6 @@
 """Tests for ConfigService with database backend."""
 
+import json
 from typing import Any
 
 import pytest
@@ -25,7 +26,7 @@ class TestConfigServiceList:
             configs = service.list_configs()
             assert configs == []
 
-    def test_list_configs_with_data(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+    def test_list_configs_with_data(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str):
         """Test listing configs returns all configs sorted by MAC."""
         with app.app_context():
             service = container.config_service()
@@ -45,7 +46,7 @@ class TestConfigServiceList:
 class TestConfigServiceGetById:
     """Tests for ConfigService.get_config_by_id()."""
 
-    def test_get_config_by_id_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+    def test_get_config_by_id_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str, sample_config_dict: dict[str, Any], valid_mac: str):
         """Test getting config by ID returns correct config."""
         with app.app_context():
             service = container.config_service()
@@ -55,7 +56,7 @@ class TestConfigServiceGetById:
 
             assert config.id == created.id
             assert config.mac_address == valid_mac
-            assert config.device_name == sample_config["deviceName"]
+            assert config.device_name == sample_config_dict["deviceName"]
 
     def test_get_config_by_id_not_found(self, app: Flask, session: Session, container: ServiceContainer):
         """Test getting non-existent config raises RecordNotFoundException."""
@@ -72,7 +73,7 @@ class TestConfigServiceGetById:
 class TestConfigServiceGetByMac:
     """Tests for ConfigService.get_config_by_mac()."""
 
-    def test_get_config_by_mac_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+    def test_get_config_by_mac_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str, sample_config_dict: dict[str, Any], valid_mac: str):
         """Test getting config by MAC address."""
         with app.app_context():
             service = container.config_service()
@@ -81,9 +82,9 @@ class TestConfigServiceGetByMac:
             config = service.get_config_by_mac(valid_mac)
 
             assert config.mac_address == valid_mac
-            assert config.device_name == sample_config["deviceName"]
+            assert config.device_name == sample_config_dict["deviceName"]
 
-    def test_get_config_by_mac_uppercase_normalization(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+    def test_get_config_by_mac_uppercase_normalization(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str):
         """Test MAC address is normalized to lowercase."""
         with app.app_context():
             service = container.config_service()
@@ -94,7 +95,7 @@ class TestConfigServiceGetByMac:
 
             assert config.mac_address == "aa:bb:cc:dd:ee:ff"
 
-    def test_get_config_by_mac_dash_separator_normalization(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+    def test_get_config_by_mac_dash_separator_normalization(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str):
         """Test dash-separated MAC is normalized to colon-separated."""
         with app.app_context():
             service = container.config_service()
@@ -129,7 +130,7 @@ class TestConfigServiceGetByMac:
 class TestConfigServiceGetRaw:
     """Tests for ConfigService.get_raw_config()."""
 
-    def test_get_raw_config_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+    def test_get_raw_config_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str, sample_config_dict: dict[str, Any], valid_mac: str):
         """Test getting raw config content."""
         with app.app_context():
             service = container.config_service()
@@ -137,9 +138,9 @@ class TestConfigServiceGetRaw:
 
             content = service.get_raw_config(valid_mac)
 
-            assert content == sample_config
+            assert content == sample_config_dict
 
-    def test_get_raw_config_with_dash_separator(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+    def test_get_raw_config_with_dash_separator(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str, sample_config_dict: dict[str, Any]):
         """Test raw config works with dash-separated MAC for backward compatibility."""
         with app.app_context():
             service = container.config_service()
@@ -147,13 +148,13 @@ class TestConfigServiceGetRaw:
 
             content = service.get_raw_config("aa-bb-cc-dd-ee-ff")
 
-            assert content == sample_config
+            assert content == sample_config_dict
 
 
 class TestConfigServiceCreate:
     """Tests for ConfigService.create_config()."""
 
-    def test_create_config_full_data(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+    def test_create_config_full_data(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str, sample_config_dict: dict[str, Any], valid_mac: str):
         """Test creating config with all fields."""
         with app.app_context():
             service = container.config_service()
@@ -162,13 +163,14 @@ class TestConfigServiceCreate:
 
             assert config.id is not None
             assert config.mac_address == valid_mac
-            assert config.device_name == sample_config["deviceName"]
-            assert config.device_entity_id == sample_config["deviceEntityId"]
-            assert config.enable_ota == sample_config["enableOTA"]
+            assert config.device_name == sample_config_dict["deviceName"]
+            assert config.device_entity_id == sample_config_dict["deviceEntityId"]
+            assert config.enable_ota == sample_config_dict["enableOTA"]
+            assert config.content == sample_config  # Stored verbatim
             assert config.created_at is not None
             assert config.updated_at is not None
 
-    def test_create_config_minimal(self, app: Flask, session: Session, container: ServiceContainer, sample_config_minimal: dict[str, Any], valid_mac: str):
+    def test_create_config_minimal(self, app: Flask, session: Session, container: ServiceContainer, sample_config_minimal: str, valid_mac: str):
         """Test creating config with minimal fields."""
         with app.app_context():
             service = container.config_service()
@@ -181,7 +183,7 @@ class TestConfigServiceCreate:
             assert config.device_entity_id is None
             assert config.enable_ota is None
 
-    def test_create_config_normalizes_mac(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+    def test_create_config_normalizes_mac(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str):
         """Test MAC address is normalized to lowercase colon-separated."""
         with app.app_context():
             service = container.config_service()
@@ -190,7 +192,7 @@ class TestConfigServiceCreate:
 
             assert config.mac_address == "aa:bb:cc:dd:ee:ff"
 
-    def test_create_config_duplicate_mac_raises(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+    def test_create_config_duplicate_mac_raises(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str, valid_mac: str):
         """Test creating config with duplicate MAC raises RecordExistsException."""
         with app.app_context():
             service = container.config_service()
@@ -202,7 +204,7 @@ class TestConfigServiceCreate:
             assert "Config" in str(exc_info.value.message)
             assert valid_mac in str(exc_info.value.message)
 
-    def test_create_config_invalid_mac_format(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+    def test_create_config_invalid_mac_format(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str):
         """Test creating config with invalid MAC raises InvalidOperationException."""
         with app.app_context():
             service = container.config_service()
@@ -212,7 +214,7 @@ class TestConfigServiceCreate:
 
             assert "invalid format" in str(exc_info.value.message)
 
-    def test_create_config_short_mac(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+    def test_create_config_short_mac(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str):
         """Test creating config with short MAC raises error."""
         with app.app_context():
             service = container.config_service()
@@ -224,33 +226,34 @@ class TestConfigServiceCreate:
 class TestConfigServiceUpdate:
     """Tests for ConfigService.update_config()."""
 
-    def test_update_config_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+    def test_update_config_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str, valid_mac: str):
         """Test updating config content."""
         with app.app_context():
             service = container.config_service()
             created = service.create_config(valid_mac, sample_config)
 
-            new_content = {
+            new_content = json.dumps({
                 "deviceName": "Updated Name",
                 "deviceEntityId": "sensor.updated",
                 "enableOTA": False,
                 "mqttBroker": "mqtt.new",
-            }
+            })
 
             updated = service.update_config(created.id, new_content)
 
             assert updated.device_name == "Updated Name"
             assert updated.device_entity_id == "sensor.updated"
             assert updated.enable_ota is False
+            assert updated.content == new_content  # Stored verbatim
 
-    def test_update_config_removes_optional_fields(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+    def test_update_config_removes_optional_fields(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str, valid_mac: str):
         """Test updating config with content lacking optional fields sets them to None."""
         with app.app_context():
             service = container.config_service()
             created = service.create_config(valid_mac, sample_config)
 
             # Update with content lacking deviceName, deviceEntityId, enableOTA
-            minimal_content = {"mqttBroker": "mqtt.local"}
+            minimal_content = json.dumps({"mqttBroker": "mqtt.local"})
 
             updated = service.update_config(created.id, minimal_content)
 
@@ -258,7 +261,7 @@ class TestConfigServiceUpdate:
             assert updated.device_entity_id is None
             assert updated.enable_ota is None
 
-    def test_update_config_not_found(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+    def test_update_config_not_found(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str):
         """Test updating non-existent config raises RecordNotFoundException."""
         with app.app_context():
             service = container.config_service()
@@ -272,7 +275,7 @@ class TestConfigServiceUpdate:
 class TestConfigServiceDelete:
     """Tests for ConfigService.delete_config()."""
 
-    def test_delete_config_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+    def test_delete_config_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str, valid_mac: str):
         """Test deleting config removes it from database."""
         with app.app_context():
             service = container.config_service()
@@ -306,7 +309,7 @@ class TestConfigServiceCount:
             count = service.count_configs()
             assert count == 0
 
-    def test_count_configs_with_data(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+    def test_count_configs_with_data(self, app: Flask, session: Session, container: ServiceContainer, sample_config: str):
         """Test counting configs with data."""
         with app.app_context():
             service = container.config_service()
@@ -361,7 +364,7 @@ class TestConfigServiceContentExtraction:
         """Test deviceName is extracted from content."""
         with app.app_context():
             service = container.config_service()
-            content = {"deviceName": "Test Device", "mqttBroker": "mqtt.local"}
+            content = json.dumps({"deviceName": "Test Device", "mqttBroker": "mqtt.local"})
 
             config = service.create_config(valid_mac, content)
 
@@ -371,7 +374,7 @@ class TestConfigServiceContentExtraction:
         """Test deviceEntityId is extracted from content."""
         with app.app_context():
             service = container.config_service()
-            content = {"deviceEntityId": "sensor.test", "mqttBroker": "mqtt.local"}
+            content = json.dumps({"deviceEntityId": "sensor.test", "mqttBroker": "mqtt.local"})
 
             config = service.create_config(valid_mac, content)
 
@@ -381,7 +384,7 @@ class TestConfigServiceContentExtraction:
         """Test enableOTA is extracted from content."""
         with app.app_context():
             service = container.config_service()
-            content = {"enableOTA": True, "mqttBroker": "mqtt.local"}
+            content = json.dumps({"enableOTA": True, "mqttBroker": "mqtt.local"})
 
             config = service.create_config(valid_mac, content)
 
@@ -391,10 +394,22 @@ class TestConfigServiceContentExtraction:
         """Test missing optional fields are set to None."""
         with app.app_context():
             service = container.config_service()
-            content = {"mqttBroker": "mqtt.local"}
+            content = json.dumps({"mqttBroker": "mqtt.local"})
 
             config = service.create_config(valid_mac, content)
 
             assert config.device_name is None
             assert config.device_entity_id is None
             assert config.enable_ota is None
+
+    def test_content_stored_verbatim(self, app: Flask, session: Session, container: ServiceContainer, valid_mac: str):
+        """Test content is stored exactly as provided."""
+        with app.app_context():
+            service = container.config_service()
+            # Use a specific format with specific whitespace
+            content = '{"deviceName":"Test","extra":  123}'
+
+            config = service.create_config(valid_mac, content)
+
+            # Content should be stored verbatim
+            assert config.content == content
