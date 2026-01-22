@@ -115,6 +115,11 @@ class Settings(BaseSettings):
         description="SameSite attribute for cookie"
     )
 
+    @property
+    def is_testing(self) -> bool:
+        """Check if the application is running in testing mode."""
+        return self.FLASK_ENV == "testing"
+
 
 @lru_cache
 def get_settings() -> Settings:
