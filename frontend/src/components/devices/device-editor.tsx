@@ -3,12 +3,15 @@ import { useNavigate, useBlocker } from '@tanstack/react-router'
 import Editor from '@monaco-editor/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useSaveDevice, useDeleteDevice } from '@/hooks/use-devices'
+import { useCreateDevice, useUpdateDevice } from '@/hooks/use-devices'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { useConfirm } from '@/hooks/use-confirm'
 
 interface DeviceEditorProps {
   mode: 'new' | 'edit' | 'duplicate'
+  // For edit mode: the device ID (required for updates)
+  deviceId?: number
+  // MAC address (read-only in edit mode, editable in new/duplicate mode)
   initialMacAddress?: string
   initialConfig?: Record<string, unknown>
   duplicateFrom?: string
@@ -24,6 +27,7 @@ const DEFAULT_TEMPLATE = {
 
 export function DeviceEditor({
   mode,
+  deviceId,
   initialMacAddress = '',
   initialConfig = DEFAULT_TEMPLATE,
   duplicateFrom,
@@ -31,10 +35,11 @@ export function DeviceEditor({
   onCancel: onCancelCallback
 }: DeviceEditorProps) {
   const navigate = useNavigate()
-  const saveDevice = useSaveDevice()
-  const deleteDevice = useDeleteDevice()
+  const createDevice = useCreateDevice()
+  const updateDevice = useUpdateDevice()
   const { confirm, confirmProps } = useConfirm()
 
+  // MAC address is only editable for new devices (including duplicate)
   const [macAddress, setMacAddress] = useState(mode === 'duplicate' ? '' : initialMacAddress)
   const [jsonConfig, setJsonConfig] = useState(JSON.stringify(initialConfig, null, 2))
   const [jsonError, setJsonError] = useState<string | null>(null)
@@ -44,12 +49,15 @@ export function DeviceEditor({
 
   // Track dirty state - computed from state
   const isDirty = useMemo(() => {
+    // In edit mode, MAC address is not editable, so only check JSON
+    if (mode === 'edit') {
+      return jsonConfig !== originalJson
+    }
     const macChanged = macAddress !== originalMac
     const jsonChanged = jsonConfig !== originalJson
     return macChanged || jsonChanged
-  }, [macAddress, jsonConfig, originalMac, originalJson])
+  }, [macAddress, jsonConfig, originalMac, originalJson, mode])
 
-  const originalMacRef = useRef(initialMacAddress)
   // Use ref to track if we're intentionally navigating (bypassing blocker)
   const isNavigatingRef = useRef(false)
 
@@ -94,7 +102,8 @@ export function DeviceEditor({
   }, [validateJson])
 
   const handleSave = useCallback(async () => {
-    if (!macAddress.trim()) {
+    // MAC address validation only for new devices
+    if (mode !== 'edit' && !macAddress.trim()) {
       setJsonError('MAC address is required')
       return
     }
@@ -106,43 +115,30 @@ export function DeviceEditor({
     const configContent = JSON.parse(jsonConfig)
     isNavigatingRef.current = true
 
-    // Determine if we should prevent overwriting existing config:
-    // - For new devices: always set allow_overwrite to false
-    // - For edit mode with MAC change: set allow_overwrite to false (new MAC might exist)
-    // - For edit mode without MAC change: allow_overwrite to true
-    const isNewOrMacChanged = mode === 'new' || (mode === 'edit' && macAddress !== originalMacRef.current)
-    const allowOverwrite = !isNewOrMacChanged
-
-    // Build the config request
-    const configRequest = { content: configContent, allow_overwrite: allowOverwrite }
-
-    // Handle MAC rename for edit mode
-    if (mode === 'edit' && macAddress !== originalMacRef.current && originalMacRef.current) {
-      try {
-        // Save to new MAC
-        await saveDevice.mutateAsync({
-          macAddress,
-          config: configRequest
-        })
-
-        // Delete old MAC (partial success is acceptable - new device saved)
-        try {
-          await deleteDevice.mutateAsync({ macAddress: originalMacRef.current })
-        } catch {
-          // Partial success - new device saved but old not deleted
-          // User will see both devices in list, old one can be manually deleted
-        }
-
-        onSaveCallback?.()
-        navigate({ to: '/devices' })
-      } catch {
-        // Error already handled by mutation hook toast
+    if (mode === 'edit') {
+      // Update existing device by ID
+      if (deviceId === undefined) {
+        setJsonError('Device ID is required for update')
         isNavigatingRef.current = false
+        return
       }
+
+      updateDevice.mutate(
+        { id: deviceId, content: configContent },
+        {
+          onSuccess: () => {
+            onSaveCallback?.()
+            navigate({ to: '/devices' })
+          },
+          onError: () => {
+            isNavigatingRef.current = false
+          }
+        }
+      )
     } else {
-      // Normal save (new or edit without MAC change)
-      saveDevice.mutate(
-        { macAddress, config: configRequest },
+      // Create new device (new or duplicate mode)
+      createDevice.mutate(
+        { macAddress, content: configContent },
         {
           onSuccess: () => {
             onSaveCallback?.()
@@ -154,7 +150,7 @@ export function DeviceEditor({
         }
       )
     }
-  }, [macAddress, jsonConfig, mode, saveDevice, deleteDevice, validateJson, onSaveCallback, navigate])
+  }, [macAddress, jsonConfig, mode, deviceId, createDevice, updateDevice, validateJson, onSaveCallback, navigate])
 
   const handleCancel = useCallback(async () => {
     if (isDirty) {
@@ -187,7 +183,8 @@ export function DeviceEditor({
     })
   }, [jsonConfig, initialMacAddress, navigate])
 
-  const isValid = !!macAddress.trim() && !jsonError && !saveDevice.isPending
+  const isPending = createDevice.isPending || updateDevice.isPending
+  const isValid = (mode === 'edit' || !!macAddress.trim()) && !jsonError && !isPending
 
   // Title based on mode
   const getTitle = () => {
@@ -211,7 +208,7 @@ export function DeviceEditor({
             <Button
               variant="outline"
               onClick={handleCancel}
-              disabled={saveDevice.isPending}
+              disabled={isPending}
               data-testid="devices.editor.cancel"
             >
               Cancel
@@ -220,7 +217,7 @@ export function DeviceEditor({
               <Button
                 variant="outline"
                 onClick={handleDuplicate}
-                disabled={saveDevice.isPending}
+                disabled={isPending}
                 data-testid="devices.editor.duplicate"
               >
                 Duplicate
@@ -230,7 +227,7 @@ export function DeviceEditor({
               variant="primary"
               onClick={handleSave}
               disabled={!isValid}
-              loading={saveDevice.isPending}
+              loading={isPending}
               data-testid="devices.editor.save"
             >
               Save
@@ -245,15 +242,27 @@ export function DeviceEditor({
             <label htmlFor="mac-address" className="block text-sm font-medium text-zinc-300 mb-2">
               MAC Address
             </label>
-            <Input
-              id="mac-address"
-              value={macAddress}
-              onChange={(e) => setMacAddress(e.target.value)}
-              placeholder="aa-bb-cc-dd-ee-ff"
-              disabled={saveDevice.isPending}
-              data-testid="devices.editor.mac-input"
-            />
-            <p className="mt-1 text-xs text-zinc-500">Format: aa-bb-cc-dd-ee-ff (hyphen-separated, lowercase)</p>
+            {mode === 'edit' ? (
+              // In edit mode, MAC address is read-only (tied to the device ID)
+              <div className="flex items-center">
+                <span className="font-mono text-zinc-50" data-testid="devices.editor.mac-display">
+                  {initialMacAddress}
+                </span>
+                <span className="ml-2 text-xs text-zinc-500">(cannot be changed)</span>
+              </div>
+            ) : (
+              <>
+                <Input
+                  id="mac-address"
+                  value={macAddress}
+                  onChange={(e) => setMacAddress(e.target.value)}
+                  placeholder="aa:bb:cc:dd:ee:ff"
+                  disabled={isPending}
+                  data-testid="devices.editor.mac-input"
+                />
+                <p className="mt-1 text-xs text-zinc-500">Format: aa:bb:cc:dd:ee:ff (colon-separated, lowercase)</p>
+              </>
+            )}
           </div>
 
           <div>

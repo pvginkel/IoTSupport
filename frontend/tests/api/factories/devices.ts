@@ -9,6 +9,12 @@ export interface DeviceFactoryOptions {
   enableOTA?: boolean;
 }
 
+export interface CreatedDevice {
+  id: number;
+  macAddress: string;
+  config: Record<string, unknown>;
+}
+
 export class DevicesFactory {
   private client: ApiClient;
 
@@ -22,21 +28,21 @@ export class DevicesFactory {
 
   /**
    * Generate a random MAC address for testing
-   * Format: XX-XX-XX-XX-XX-XX (6 pairs of hex digits with hyphen separators)
+   * Format: XX:XX:XX:XX:XX:XX (6 pairs of hex digits with colon separators)
    */
   randomMacAddress(): string {
-    const id = ulid().slice(0, 12).toUpperCase();
-    return `${id.slice(0, 2)}-${id.slice(2, 4)}-${id.slice(4, 6)}-${id.slice(6, 8)}-${id.slice(8, 10)}-${id.slice(10, 12)}`;
+    // Generate 6 random hex bytes
+    const bytes = Array.from({ length: 6 }, () =>
+      Math.floor(Math.random() * 256).toString(16).padStart(2, '0')
+    );
+    return bytes.join(':').toLowerCase();
   }
 
   /**
    * Create a device configuration
    * Note: Backend normalizes MAC addresses to lowercase
    */
-  async create(options: DeviceFactoryOptions = {}): Promise<{
-    macAddress: string;
-    config: Record<string, unknown>;
-  }> {
+  async create(options: DeviceFactoryOptions = {}): Promise<CreatedDevice> {
     const inputMac = options.macAddress || this.randomMacAddress();
     // Backend normalizes to lowercase
     const macAddress = inputMac.toLowerCase();
@@ -46,35 +52,41 @@ export class DevicesFactory {
       enableOTA: options.enableOTA ?? false,
     };
 
-    await apiRequest(() =>
-      this.client.PUT('/api/configs/{mac_address}', {
-        params: { path: { mac_address: macAddress } },
-        body: { content: config, allow_overwrite: true },
+    const result = await apiRequest(() =>
+      this.client.POST('/api/configs', {
+        body: {
+          mac_address: macAddress,
+          content: JSON.stringify(config),
+        },
       })
     );
 
-    return { macAddress, config };
+    return {
+      id: result.data!.id,
+      macAddress: result.data!.mac_address,
+      config,
+    };
   }
 
   /**
-   * Delete a device configuration
+   * Delete a device configuration by ID
    */
-  async delete(macAddress: string): Promise<void> {
+  async delete(id: number): Promise<void> {
     await apiRequest(() =>
-      this.client.DELETE('/api/configs/{mac_address}', {
-        params: { path: { mac_address: macAddress } },
+      this.client.DELETE('/api/configs/{config_id}', {
+        params: { path: { config_id: id } },
       })
     );
   }
 
   /**
-   * Get a device configuration
+   * Get a device configuration by ID
    */
-  async get(macAddress: string): Promise<Record<string, unknown> | null> {
+  async get(id: number): Promise<Record<string, unknown> | null> {
     try {
       const { data } = await apiRequest(() =>
-        this.client.GET('/api/configs/{mac_address}', {
-          params: { path: { mac_address: macAddress } },
+        this.client.GET('/api/configs/{config_id}', {
+        params: { path: { config_id: id } },
         })
       );
       return data?.content || null;
@@ -91,12 +103,39 @@ export class DevicesFactory {
    * List all device configurations
    */
   async list(): Promise<Array<{
+    id: number;
     mac_address: string;
     device_name: string | null;
     device_entity_id: string | null;
     enable_ota: boolean | null;
   }>> {
-    const { data } = await apiRequest(() => this.client.GET('/api/configs'));
-    return data?.configs || [];
+    const result = await apiRequest(() =>
+      this.client.GET('/api/configs')
+    );
+
+    return result.data?.configs || [];
+  }
+
+  /**
+   * Find a device by MAC address and return its ID
+   * Useful for cleanup after creating devices via UI
+   */
+  async findIdByMac(macAddress: string): Promise<number | null> {
+    const configs = await this.list();
+    // Normalize MAC address for comparison (lowercase)
+    const normalizedMac = macAddress.toLowerCase();
+    const config = configs.find(c => c.mac_address.toLowerCase() === normalizedMac);
+    return config?.id ?? null;
+  }
+
+  /**
+   * Delete a device by MAC address (looks up the ID first)
+   * Useful for cleanup in tests that create devices via UI
+   */
+  async deleteByMac(macAddress: string): Promise<void> {
+    const id = await this.findIdByMac(macAddress);
+    if (id !== null) {
+      await this.delete(id);
+    }
   }
 }

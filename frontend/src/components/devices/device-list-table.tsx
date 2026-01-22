@@ -11,7 +11,7 @@ interface DeviceListTableProps {
   isLoading: boolean
   sortPreference: SortPreference
   onSortChange: (column: SortPreference['column']) => void
-  onDelete: (macAddress: string) => void
+  onDelete: (device: DeviceConfig) => void
 }
 
 export function DeviceListTable({
@@ -84,9 +84,10 @@ export function DeviceListTable({
         <tbody>
           {sortedDevices.map((device) => (
             <tr
-              key={device.macAddress}
+              key={device.id}
               className="border-b border-zinc-800 hover:bg-zinc-900"
               data-testid="devices.list.row"
+              data-device-id={device.id}
             >
               <td className="px-4 py-3 text-sm text-zinc-50 font-mono">{device.macAddress}</td>
               <td className="px-4 py-3 text-sm text-zinc-300">{device.deviceName || '—'}</td>
@@ -98,7 +99,7 @@ export function DeviceListTable({
               </td>
               <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
-                  <Link to="/devices/$macAddress" params={{ macAddress: device.macAddress }}>
+                  <Link to="/devices/$deviceId" params={{ deviceId: String(device.id) }}>
                     <Button
                       variant="outline"
                       size="sm"
@@ -111,7 +112,7 @@ export function DeviceListTable({
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => onDelete(device.macAddress)}
+                    onClick={() => onDelete(device)}
                     data-testid="devices.list.row.delete-button"
                     title="Delete device"
                   >

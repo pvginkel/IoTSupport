@@ -3,13 +3,25 @@ import { DeviceEditor } from '@/components/devices/device-editor'
 import { useDevice } from '@/hooks/use-devices'
 import { Button } from '@/components/ui/button'
 
-export const Route = createFileRoute('/devices/$macAddress/duplicate')({
-  component: DuplicateDeviceRoute,
+export const Route = createFileRoute('/devices/$deviceId')({
+  component: EditDeviceRoute,
 })
 
-function DuplicateDeviceRoute() {
-  const { macAddress } = Route.useParams()
-  const { config, isLoading, error } = useDevice(macAddress)
+function EditDeviceRoute() {
+  const { deviceId } = Route.useParams()
+  const numericId = parseInt(deviceId, 10)
+  const { device, config, isLoading, error } = useDevice(isNaN(numericId) ? undefined : numericId)
+
+  if (isNaN(numericId)) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4">
+        <p className="text-red-400">Invalid device ID</p>
+        <Link to="/devices">
+          <Button variant="outline">Back to Device List</Button>
+        </Link>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (
@@ -19,7 +31,7 @@ function DuplicateDeviceRoute() {
     )
   }
 
-  if (error || !config) {
+  if (error || !device || !config) {
     const errorMessage = error?.message || 'Device not found'
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
@@ -33,7 +45,12 @@ function DuplicateDeviceRoute() {
 
   return (
     <div className="flex h-full flex-col">
-      <DeviceEditor mode="duplicate" initialMacAddress={macAddress} initialConfig={config} />
+      <DeviceEditor
+        mode="edit"
+        deviceId={device.id}
+        initialMacAddress={device.macAddress}
+        initialConfig={config}
+      />
     </div>
   )
 }

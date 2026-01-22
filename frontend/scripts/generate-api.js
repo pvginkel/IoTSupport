@@ -185,12 +185,14 @@ function generateMutationHook(path, method, operation, operationId, summary, spe
   const pathParams = extractPathParams(path);
   const hasBody = operation.requestBody;
   const hasPathParams = pathParams.length > 0;
+  // Check for query parameters in the operation
+  const hasQueryParams = operation.parameters && operation.parameters.some(p => p.in === 'query');
 
   let variablesType = 'void';
   let pathWithParams = `'${path}' as const`;
   let mutationArgs = '';
 
-  if (hasPathParams || hasBody) {
+  if (hasPathParams || hasBody || hasQueryParams) {
     const parts = [];
     if (hasPathParams) {
       const parameterTypeAlias = parameterTypeMap.get(`${path}:${method}`);
@@ -198,6 +200,14 @@ function generateMutationHook(path, method, operation, operationId, summary, spe
         parts.push(`path: ${parameterTypeAlias}['path']`);
       } else {
         parts.push(`path: paths['${path}']['${method}']['parameters']['path']`);
+      }
+    }
+    if (hasQueryParams) {
+      const parameterTypeAlias = parameterTypeMap.get(`${path}:${method}`);
+      if (parameterTypeAlias) {
+        parts.push(`query: ${parameterTypeAlias}['query']`);
+      } else {
+        parts.push(`query: paths['${path}']['${method}']['parameters']['query']`);
       }
     }
     if (hasBody) {
@@ -212,8 +222,11 @@ function generateMutationHook(path, method, operation, operationId, summary, spe
 
     // Build mutation arguments
     const argParts = [];
-    if (hasPathParams) {
-      argParts.push('params: { path: variables.path }');
+    if (hasPathParams || hasQueryParams) {
+      const paramParts = [];
+      if (hasPathParams) paramParts.push('path: variables.path');
+      if (hasQueryParams) paramParts.push('query: variables.query');
+      argParts.push(`params: { ${paramParts.join(', ')} }`);
     }
     if (hasBody) {
       argParts.push('body: variables.body');
@@ -288,6 +301,9 @@ function transformOperationId(operationId) {
 
   // Replace hyphens and dots with underscores
   baseName = baseName.replace(/[-\.]/g, '_');
+
+  // Replace periods (e.g., from .json extension) with underscores
+  baseName = baseName.replace(/\./g, '_');
 
   // Clean up multiple consecutive underscores
   baseName = baseName.replace(/_+/g, '_');

@@ -68,10 +68,24 @@ export function createPlaywrightFetch(requestContext: APIRequestContext): typeof
     });
 
     // Convert Playwright APIResponse to standard Response
-    // Convert Buffer to Uint8Array for compatibility with the Response constructor
+    const status = playwrightResponse.status();
+
+    // 204 No Content responses must have a null body
+    // (Response constructor throws if you try to provide a body for 204)
+    if (status === 204) {
+      return new Response(null, {
+        status,
+        statusText: playwrightResponse.statusText(),
+        headers: Object.fromEntries(
+          Object.entries(playwrightResponse.headers())
+        ),
+      });
+    }
+
+    // For other responses, convert Buffer to Uint8Array for compatibility
     const responseBody = await playwrightResponse.body();
     return new Response(new Uint8Array(responseBody), {
-      status: playwrightResponse.status(),
+      status,
       statusText: playwrightResponse.statusText(),
       headers: Object.fromEntries(
         Object.entries(playwrightResponse.headers())

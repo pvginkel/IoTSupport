@@ -12,12 +12,12 @@ export class DevicesPage {
     await this.page.goto('/devices/new');
   }
 
-  async gotoEdit(macAddress: string) {
-    await this.page.goto(`/devices/${encodeURIComponent(macAddress)}`);
+  async gotoEdit(deviceId: number) {
+    await this.page.goto(`/devices/${deviceId}`);
   }
 
-  async gotoDuplicate(macAddress: string) {
-    await this.page.goto(`/devices/${encodeURIComponent(macAddress)}/duplicate`);
+  async gotoDuplicate(deviceId: number) {
+    await this.page.goto(`/devices/${deviceId}/duplicate`);
   }
 
   // Locators - List
@@ -56,6 +56,10 @@ export class DevicesPage {
 
   get macInput(): Locator {
     return this.page.locator('[data-testid="devices.editor.mac-input"]');
+  }
+
+  get macDisplay(): Locator {
+    return this.page.locator('[data-testid="devices.editor.mac-display"]');
   }
 
   get jsonEditorContainer(): Locator {

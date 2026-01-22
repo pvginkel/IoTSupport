@@ -37,6 +37,27 @@
         "title": "AssetUploadResponseSchema",
         "type": "object"
       },
+      "ConfigCreateRequestSchema.6be28b6": {
+        "description": "Request for POST /api/configs (create new config).",
+        "properties": {
+          "content": {
+            "description": "JSON configuration content as string (stored verbatim)",
+            "title": "Content",
+            "type": "string"
+          },
+          "mac_address": {
+            "description": "Device MAC address (colon-separated)",
+            "title": "Mac Address",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mac_address",
+          "content"
+        ],
+        "title": "ConfigCreateRequestSchema",
+        "type": "object"
+      },
       "ConfigListResponseSchema.6be28b6": {
         "description": "Response for list endpoint.",
         "properties": {
@@ -101,25 +122,38 @@
             "description": "OTA update enabled",
             "title": "Enable Ota"
           },
+          "id": {
+            "description": "Config surrogate ID",
+            "title": "Id",
+            "type": "integer"
+          },
           "mac_address": {
-            "description": "Device MAC address (filename)",
+            "description": "Device MAC address (colon-separated)",
             "title": "Mac Address",
             "type": "string"
           }
         },
         "required": [
+          "id",
           "mac_address"
         ],
         "title": "ConfigSummarySchema",
         "type": "object"
       },
       "ConfigResponseSchema.6be28b6": {
-        "description": "Response for get/save endpoints.",
+        "description": "Response for get/create/update endpoints.",
         "properties": {
           "content": {
             "additionalProperties": true,
+            "description": "JSON configuration content",
             "title": "Content",
             "type": "object"
+          },
+          "created_at": {
+            "description": "Creation timestamp",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
           },
           "device_entity_id": {
             "anyOf": [
@@ -131,6 +165,7 @@
               }
             ],
             "default": null,
+            "description": "Device entity ID",
             "title": "Device Entity Id"
           },
           "device_name": {
@@ -143,6 +178,7 @@
               }
             ],
             "default": null,
+            "description": "Device name from config",
             "title": "Device Name"
           },
           "enable_ota": {
@@ -155,40 +191,49 @@
               }
             ],
             "default": null,
+            "description": "OTA update enabled",
             "title": "Enable Ota"
           },
+          "id": {
+            "description": "Config surrogate ID",
+            "title": "Id",
+            "type": "integer"
+          },
           "mac_address": {
+            "description": "Device MAC address (colon-separated)",
             "title": "Mac Address",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "Last update timestamp",
+            "format": "date-time",
+            "title": "Updated At",
             "type": "string"
           }
         },
         "required": [
+          "id",
           "mac_address",
-          "content"
+          "content",
+          "created_at",
+          "updated_at"
         ],
         "title": "ConfigResponseSchema",
         "type": "object"
       },
-      "ConfigSaveRequestSchema.6be28b6": {
-        "description": "Request for save endpoint.",
+      "ConfigUpdateRequestSchema.6be28b6": {
+        "description": "Request for PUT /api/configs/<id> (update existing config).",
         "properties": {
-          "allow_overwrite": {
-            "default": true,
-            "description": "If false, returns error when config already exists",
-            "title": "Allow Overwrite",
-            "type": "boolean"
-          },
           "content": {
-            "additionalProperties": true,
-            "description": "JSON configuration content",
+            "description": "JSON configuration content as string (stored verbatim)",
             "title": "Content",
-            "type": "object"
+            "type": "string"
           }
         },
         "required": [
           "content"
         ],
-        "title": "ConfigSaveRequestSchema",
+        "title": "ConfigUpdateRequestSchema",
         "type": "object"
       },
       "ErrorResponseSchema.8c5cd6b": {
@@ -244,6 +289,21 @@
           "error"
         ],
         "title": "ErrorResponseSchema",
+        "type": "object"
+      },
+      "ForceErrorQuerySchema.355d24f": {
+        "description": "Query parameters for force-error endpoint.",
+        "properties": {
+          "status": {
+            "description": "HTTP status code to return on next /api/auth/self request",
+            "title": "Status",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ForceErrorQuerySchema",
         "type": "object"
       },
       "LvglImageQuerySchema.bf1914b": {
@@ -316,6 +376,105 @@
           "url"
         ],
         "title": "LvglImageQuerySchema",
+        "type": "object"
+      },
+      "TestSessionCreateSchema.355d24f": {
+        "description": "Request schema for creating a test authentication session.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "User email address",
+            "title": "Email"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "User display name",
+            "title": "Name"
+          },
+          "roles": {
+            "description": "User roles",
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "subject": {
+            "description": "User subject identifier (sub claim)",
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject"
+        ],
+        "title": "TestSessionCreateSchema",
+        "type": "object"
+      },
+      "TestSessionResponseSchema.355d24f": {
+        "description": "Response schema for test session creation.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "User email address",
+            "title": "Email"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "User display name",
+            "title": "Name"
+          },
+          "roles": {
+            "description": "User roles",
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "subject": {
+            "description": "User subject identifier",
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "roles"
+        ],
+        "title": "TestSessionResponseSchema",
         "type": "object"
       },
       "UserInfoResponseSchema.a535b8c": {
@@ -499,7 +658,7 @@
     },
     "/api/auth/logout": {
       "get": {
-        "description": "Clears access token cookie and redirects to specified URL.\n\nQuery Parameters:     redirect: URL to redirect to after logout (default: /)\n\nReturns:     302: Redirect to logout URL with cookie cleared",
+        "description": "Clears access token cookie and redirects to OIDC provider's logout endpoint to terminate the session at the IdP level.\n\nQuery Parameters:     redirect: URL to redirect to after logout (default: /)\n\nReturns:     302: Redirect to OIDC logout endpoint (or direct redirect if OIDC disabled)",
         "operationId": "get__api_auth_logout",
         "parameters": [],
         "responses": {},
@@ -567,20 +726,70 @@
         },
         "summary": "List all configurations with summary data.",
         "tags": []
+      },
+      "post": {
+        "description": "",
+        "operationId": "post__api_configs",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigCreateRequestSchema.6be28b6"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigResponseSchema.6be28b6"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        },
+        "summary": "Create a new configuration.",
+        "tags": []
       }
     },
-    "/api/configs/{mac_address}": {
+    "/api/configs/{config_id}": {
       "delete": {
         "description": "",
-        "operationId": "delete__api_configs_{mac_address}",
+        "operationId": "delete__api_configs_{config_id}",
         "parameters": [
           {
             "description": "",
             "in": "path",
-            "name": "mac_address",
+            "name": "config_id",
             "required": true,
             "schema": {
-              "type": "string"
+              "format": "int32",
+              "type": "integer"
             }
           }
         ],
@@ -592,7 +801,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
                 }
               }
             },
@@ -609,20 +818,21 @@
             "description": "Not Found"
           }
         },
-        "summary": "Delete configuration by MAC address.",
+        "summary": "Delete configuration by ID.",
         "tags": []
       },
       "get": {
         "description": "",
-        "operationId": "get__api_configs_{mac_address}",
+        "operationId": "get__api_configs_{config_id}",
         "parameters": [
           {
             "description": "",
             "in": "path",
-            "name": "mac_address",
+            "name": "config_id",
             "required": true,
             "schema": {
-              "type": "string"
+              "format": "int32",
+              "type": "integer"
             }
           }
         ],
@@ -641,7 +851,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
                 }
               }
             },
@@ -658,20 +868,21 @@
             "description": "Not Found"
           }
         },
-        "summary": "Get single configuration by MAC address.",
+        "summary": "Get single configuration by ID.",
         "tags": []
       },
       "put": {
         "description": "",
-        "operationId": "put__api_configs_{mac_address}",
+        "operationId": "put__api_configs_{config_id}",
         "parameters": [
           {
             "description": "",
             "in": "path",
-            "name": "mac_address",
+            "name": "config_id",
             "required": true,
             "schema": {
-              "type": "string"
+              "format": "int32",
+              "type": "integer"
             }
           }
         ],
@@ -679,7 +890,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConfigSaveRequestSchema.6be28b6"
+                "$ref": "#/components/schemas/ConfigUpdateRequestSchema.6be28b6"
               }
             }
           },
@@ -706,7 +917,7 @@
             },
             "description": "Bad Request"
           },
-          "409": {
+          "404": {
             "content": {
               "application/json": {
                 "schema": {
@@ -714,16 +925,16 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "Not Found"
           }
         },
-        "summary": "Create or update configuration (upsert).",
+        "summary": "Update configuration by ID.",
         "tags": []
       }
     },
     "/api/configs/{mac_address}.json": {
       "get": {
-        "description": "This endpoint returns the raw config content without wrapping, suitable for direct consumption by ESP32 devices.",
+        "description": "This endpoint returns the raw config content without wrapping, suitable for direct consumption by ESP32 devices. Accepts both colon-separated and dash-separated MAC formats.",
         "operationId": "get__api_configs_{mac_address}.json",
         "parameters": [
           {
@@ -743,7 +954,7 @@
     },
     "/api/health": {
       "get": {
-        "description": "Returns 200 when config directory is accessible. Returns 503 when config directory is not accessible.",
+        "description": "Returns 200 when database is accessible. Returns 503 when database is not accessible.",
         "operationId": "get__api_health",
         "parameters": [],
         "responses": {},
@@ -878,6 +1089,79 @@
           }
         },
         "summary": "Fetch and convert an image to LVGL binary format.",
+        "tags": []
+      }
+    },
+    "/api/testing/auth/clear": {
+      "post": {
+        "description": "Returns:     204: Session cleared successfully with cookie invalidated",
+        "operationId": "post__api_testing_auth_clear",
+        "parameters": [],
+        "responses": {},
+        "summary": "Clear the current test session for test isolation.",
+        "tags": []
+      }
+    },
+    "/api/testing/auth/force-error": {
+      "post": {
+        "description": "This is a single-shot error - subsequent requests will behave normally.\n\nQuery Parameters:     status: HTTP status code to return (e.g., 500, 503)\n\nReturns:     204: Error configured successfully",
+        "operationId": "post__api_testing_auth_force-error",
+        "parameters": [
+          {
+            "description": "HTTP status code to return on next /api/auth/self request",
+            "in": "query",
+            "name": "status",
+            "required": true,
+            "schema": {
+              "description": "HTTP status code to return on next /api/auth/self request",
+              "title": "Status",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Configure /api/auth/self to return an error on the next request.",
+        "tags": []
+      }
+    },
+    "/api/testing/auth/session": {
+      "post": {
+        "description": "This endpoint creates a test session with controllable user fields and sets the same session cookie that the real OIDC callback would set.\n\nRequest Body:     subject: User subject identifier (required)     name: User display name (optional)     email: User email address (optional)     roles: User roles (optional, defaults to empty list)\n\nReturns:     201: Session created successfully with session cookie set",
+        "operationId": "post__api_testing_auth_session",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestSessionCreateSchema.355d24f"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestSessionResponseSchema.355d24f"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Create an authenticated test session, bypassing the real OIDC flow.",
         "tags": []
       }
     },

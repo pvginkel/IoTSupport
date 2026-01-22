@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useDevices, useDeleteDevice } from '@/hooks/use-devices'
+import { useDevices, useDeleteDevice, type DeviceConfig } from '@/hooks/use-devices'
 import { DeviceListTable } from '@/components/devices/device-list-table'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -40,16 +40,16 @@ function DeviceList() {
     })
   }, [])
 
-  const handleDelete = useCallback(async (macAddress: string) => {
+  const handleDelete = useCallback(async (device: DeviceConfig) => {
     const confirmed = await confirm({
       title: 'Delete Device',
-      description: `Delete device ${macAddress}? This action cannot be undone.`,
+      description: `Delete device ${device.macAddress}? This action cannot be undone.`,
       confirmText: 'Delete',
       destructive: true
     })
 
     if (confirmed) {
-      deleteDevice.mutate({ macAddress })
+      deleteDevice.mutate({ id: device.id })
     }
   }, [confirm, deleteDevice])
 
