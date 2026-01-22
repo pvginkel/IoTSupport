@@ -8,10 +8,11 @@ from flask import Blueprint, request
 from spectree import Response as SpectreeResponse
 
 from app.schemas.config import (
+    ConfigCreateRequestSchema,
     ConfigListResponseSchema,
     ConfigResponseSchema,
-    ConfigSaveRequestSchema,
     ConfigSummarySchema,
+    ConfigUpdateRequestSchema,
 )
 from app.schemas.error import ErrorResponseSchema
 from app.services.config_service import ConfigService
@@ -45,12 +46,7 @@ def list_configs(
 
         # Convert to response schema
         config_summaries = [
-            ConfigSummarySchema(
-                mac_address=c.mac_address,
-                device_name=c.device_name,
-                device_entity_id=c.device_entity_id,
-                enable_ota=c.enable_ota,
-            )
+            ConfigSummarySchema.model_validate(c)
             for c in configs
         ]
 
@@ -67,6 +63,49 @@ def list_configs(
         metrics_service.record_operation("list", status, duration)
 
 
+@configs_bp.route("", methods=["POST"])
+@api.validate(
+    json=ConfigCreateRequestSchema,
+    resp=SpectreeResponse(
+        HTTP_201=ConfigResponseSchema,
+        HTTP_400=ErrorResponseSchema,
+        HTTP_409=ErrorResponseSchema,
+    ),
+)
+@handle_api_errors
+@inject
+def create_config(
+    config_service: ConfigService = Provide[ServiceContainer.config_service],
+    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+    mqtt_service: MqttService = Provide[ServiceContainer.mqtt_service],
+) -> Any:
+    """Create a new configuration."""
+    start_time = time.perf_counter()
+    status = "success"
+
+    try:
+        data = ConfigCreateRequestSchema.model_validate(request.get_json())
+
+        config = config_service.create_config(data.mac_address, data.content)
+
+        # Update config count after create
+        config_count = config_service.count_configs()
+        metrics_service.update_config_count(config_count)
+
+        # Publish MQTT notification after successful create
+        mqtt_service.publish_config_update(f"{config.mac_address}.json")
+
+        return ConfigResponseSchema.model_validate(config).model_dump(), 201
+
+    except Exception:
+        status = "error"
+        raise
+
+    finally:
+        duration = time.perf_counter() - start_time
+        metrics_service.record_operation("create", status, duration)
+
+
 @configs_bp.route("/<mac_address>.json", methods=["GET"])
 @public
 @handle_api_errors
@@ -80,15 +119,16 @@ def get_config_raw(
 
     This endpoint returns the raw config content without wrapping,
     suitable for direct consumption by ESP32 devices.
+    Accepts both colon-separated and dash-separated MAC formats.
     """
     start_time = time.perf_counter()
     status = "success"
 
     try:
-        config = config_service.get_config(mac_address)
+        content = config_service.get_raw_config(mac_address)
 
         # Return raw content dict with Cache-Control header
-        response = (config.content, 200, {"Cache-Control": "no-cache"})
+        response = (content, 200, {"Cache-Control": "no-cache"})
         return response
 
     except Exception:
@@ -100,31 +140,25 @@ def get_config_raw(
         metrics_service.record_operation("get_raw", status, duration)
 
 
-@configs_bp.route("/<mac_address>", methods=["GET"])
+@configs_bp.route("/<int:config_id>", methods=["GET"])
 @api.validate(
-    resp=SpectreeResponse(HTTP_200=ConfigResponseSchema, HTTP_400=ErrorResponseSchema, HTTP_404=ErrorResponseSchema)
+    resp=SpectreeResponse(HTTP_200=ConfigResponseSchema, HTTP_404=ErrorResponseSchema)
 )
 @handle_api_errors
 @inject
 def get_config(
-    mac_address: str,
+    config_id: int,
     config_service: ConfigService = Provide[ServiceContainer.config_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
 ) -> Any:
-    """Get single configuration by MAC address."""
+    """Get single configuration by ID."""
     start_time = time.perf_counter()
     status = "success"
 
     try:
-        config = config_service.get_config(mac_address)
+        config = config_service.get_config_by_id(config_id)
 
-        return ConfigResponseSchema(
-            mac_address=config.mac_address,
-            device_name=config.device_name,
-            device_entity_id=config.device_entity_id,
-            enable_ota=config.enable_ota,
-            content=config.content,
-        ).model_dump()
+        return ConfigResponseSchema.model_validate(config).model_dump()
 
     except Exception:
         status = "error"
@@ -135,49 +169,36 @@ def get_config(
         metrics_service.record_operation("get", status, duration)
 
 
-@configs_bp.route("/<mac_address>", methods=["PUT"])
+@configs_bp.route("/<int:config_id>", methods=["PUT"])
 @api.validate(
-    json=ConfigSaveRequestSchema,
+    json=ConfigUpdateRequestSchema,
     resp=SpectreeResponse(
         HTTP_200=ConfigResponseSchema,
         HTTP_400=ErrorResponseSchema,
-        HTTP_409=ErrorResponseSchema,
+        HTTP_404=ErrorResponseSchema,
     ),
 )
 @handle_api_errors
 @inject
-def save_config(
-    mac_address: str,
+def update_config(
+    config_id: int,
     config_service: ConfigService = Provide[ServiceContainer.config_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
     mqtt_service: MqttService = Provide[ServiceContainer.mqtt_service],
 ) -> Any:
-    """Create or update configuration (upsert)."""
+    """Update configuration by ID."""
     start_time = time.perf_counter()
     status = "success"
 
     try:
-        # Spectree validates the request, but we still need to access the data
-        data = ConfigSaveRequestSchema.model_validate(request.get_json())
+        data = ConfigUpdateRequestSchema.model_validate(request.get_json())
 
-        config = config_service.save_config(
-            mac_address, data.content, allow_overwrite=data.allow_overwrite
-        )
+        config = config_service.update_config(config_id, data.content)
 
-        # Update config count after save
-        configs = config_service.list_configs()
-        metrics_service.update_config_count(len(configs))
+        # Publish MQTT notification after successful update
+        mqtt_service.publish_config_update(f"{config.mac_address}.json")
 
-        # Publish MQTT notification after successful save and metrics update
-        mqtt_service.publish_config_update(f"{mac_address}.json")
-
-        return ConfigResponseSchema(
-            mac_address=config.mac_address,
-            device_name=config.device_name,
-            device_entity_id=config.device_entity_id,
-            enable_ota=config.enable_ota,
-            content=config.content,
-        ).model_dump()
+        return ConfigResponseSchema.model_validate(config).model_dump()
 
     except Exception:
         status = "error"
@@ -185,30 +206,30 @@ def save_config(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("save", status, duration)
+        metrics_service.record_operation("update", status, duration)
 
 
-@configs_bp.route("/<mac_address>", methods=["DELETE"])
+@configs_bp.route("/<int:config_id>", methods=["DELETE"])
 @api.validate(
-    resp=SpectreeResponse(HTTP_204=None, HTTP_400=ErrorResponseSchema, HTTP_404=ErrorResponseSchema)
+    resp=SpectreeResponse(HTTP_204=None, HTTP_404=ErrorResponseSchema)
 )
 @handle_api_errors
 @inject
 def delete_config(
-    mac_address: str,
+    config_id: int,
     config_service: ConfigService = Provide[ServiceContainer.config_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
 ) -> Any:
-    """Delete configuration by MAC address."""
+    """Delete configuration by ID."""
     start_time = time.perf_counter()
     status = "success"
 
     try:
-        config_service.delete_config(mac_address)
+        config_service.delete_config(config_id)
 
         # Update config count after delete
-        configs = config_service.list_configs()
-        metrics_service.update_config_count(len(configs))
+        config_count = config_service.count_configs()
+        metrics_service.update_config_count(config_count)
 
         return "", 204
 

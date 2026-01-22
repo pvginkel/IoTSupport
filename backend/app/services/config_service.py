@@ -1,119 +1,84 @@
-"""Configuration service for managing ESP32 device config files."""
+"""Configuration service for managing ESP32 device configurations in database."""
 
 import json
 import logging
-import os
 import re
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from app.exceptions import (
     InvalidOperationException,
     RecordExistsException,
     RecordNotFoundException,
 )
+from app.models.config import Config
 
 logger = logging.getLogger(__name__)
 
-# MAC address pattern: lowercase, hyphen-separated (xx-xx-xx-xx-xx-xx)
-MAC_ADDRESS_PATTERN = re.compile(r"^[0-9a-f]{2}(-[0-9a-f]{2}){5}$")
-
-
-@dataclass
-class ConfigSummary:
-    """Summary of a configuration file for list endpoint."""
-
-    mac_address: str
-    device_name: str | None
-    device_entity_id: str | None
-    enable_ota: bool | None
-
-
-@dataclass
-class ConfigDetail:
-    """Full configuration detail."""
-
-    mac_address: str
-    device_name: str | None
-    device_entity_id: str | None
-    enable_ota: bool | None
-    content: dict[str, Any]
+# MAC address pattern: lowercase, colon-separated (aa:bb:cc:dd:ee:ff)
+MAC_ADDRESS_PATTERN = re.compile(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
 
 
 class ConfigService:
-    """Service for managing ESP32 device configuration files."""
+    """Service for managing ESP32 device configurations in database."""
 
-    def __init__(self, config_dir: Path) -> None:
-        """Initialize service with configuration directory.
-
-        Args:
-            config_dir: Path to the configuration files directory
-        """
-        self.config_dir = config_dir
-
-    def list_configs(self) -> list[ConfigSummary]:
-        """List all config files with summary data.
-
-        Returns:
-            List of ConfigSummary objects sorted by MAC address
-
-        Note:
-            Invalid JSON files are skipped with a warning logged.
-        """
-        configs: list[ConfigSummary] = []
-
-        if not self.config_dir.exists():
-            return configs
-
-        for file_path in sorted(self.config_dir.glob("*.json")):
-            mac_address = file_path.stem
-
-            # Validate MAC address format
-            if not self.validate_mac_address(mac_address):
-                logger.warning(
-                    "Skipping file with invalid MAC address format: %s", file_path.name
-                )
-                continue
-
-            try:
-                with open(file_path, encoding="utf-8") as f:
-                    content = json.load(f)
-
-                # Extract summary fields, defaulting to None if missing
-                summary = ConfigSummary(
-                    mac_address=mac_address,
-                    device_name=content.get("deviceName"),
-                    device_entity_id=content.get("deviceEntityId"),
-                    enable_ota=content.get("enableOTA"),
-                )
-                configs.append(summary)
-
-            except json.JSONDecodeError as e:
-                logger.warning(
-                    "Skipping invalid JSON file %s: %s", file_path.name, str(e)
-                )
-                continue
-            except OSError as e:
-                logger.warning("Error reading file %s: %s", file_path.name, str(e))
-                continue
-
-        return configs
-
-    def get_config(self, mac_address: str) -> ConfigDetail:
-        """Get full config content by MAC address.
+    def __init__(self, db: Session):
+        """Initialize service with database session.
 
         Args:
-            mac_address: Device MAC address
+            db: SQLAlchemy database session
+        """
+        self.db = db
+
+    def list_configs(self) -> list[Config]:
+        """List all configs from database.
 
         Returns:
-            ConfigDetail with full content
+            List of Config model instances sorted by MAC address
+        """
+        stmt = select(Config).order_by(Config.mac_address)
+        return list(self.db.scalars(stmt).all())
+
+    def get_config_by_id(self, config_id: int) -> Config:
+        """Get config by surrogate ID.
+
+        Args:
+            config_id: Config surrogate ID
+
+        Returns:
+            Config model instance
+
+        Raises:
+            RecordNotFoundException: If config with ID does not exist
+        """
+        stmt = select(Config).where(Config.id == config_id)
+        config = self.db.scalars(stmt).one_or_none()
+
+        if config is None:
+            raise RecordNotFoundException("Config", str(config_id))
+
+        return config
+
+    def get_config_by_mac(self, mac_address: str) -> Config:
+        """Get config by MAC address.
+
+        This method is primarily used by the ESP32 device raw endpoint.
+        It accepts both colon-separated and dash-separated MAC formats
+        for backward compatibility with existing devices.
+
+        Args:
+            mac_address: Device MAC address (colon or dash separated)
+
+        Returns:
+            Config model instance
 
         Raises:
             InvalidOperationException: If MAC address format is invalid
-            RecordNotFoundException: If config file does not exist
+            RecordNotFoundException: If config for MAC does not exist
         """
-        # Normalize to lowercase before validation
+        # Normalize MAC address (convert dash to colon, lowercase)
         mac_address = self.normalize_mac_address(mac_address)
 
         if not self.validate_mac_address(mac_address):
@@ -121,147 +86,153 @@ class ConfigService:
                 "get config", f"MAC address '{mac_address}' has invalid format"
             )
 
-        file_path = self.config_dir / f"{mac_address}.json"
+        stmt = select(Config).where(Config.mac_address == mac_address)
+        config = self.db.scalars(stmt).one_or_none()
 
-        if not file_path.exists():
+        if config is None:
             raise RecordNotFoundException("Config", mac_address)
 
-        try:
-            with open(file_path, encoding="utf-8") as f:
-                content = json.load(f)
-        except json.JSONDecodeError as e:
-            raise InvalidOperationException(
-                "get config", f"config file contains invalid JSON: {e}"
-            ) from e
+        return config
 
-        return ConfigDetail(
-            mac_address=mac_address,
-            device_name=content.get("deviceName"),
-            device_entity_id=content.get("deviceEntityId"),
-            enable_ota=content.get("enableOTA"),
-            content=content,
-        )
+    def get_raw_config(self, mac_address: str) -> dict[str, Any]:
+        """Get raw JSON config content by MAC address.
 
-    def config_exists(self, mac_address: str) -> bool:
-        """Check if a config file exists for the given MAC address.
+        Used by ESP32 devices to fetch their configuration.
 
         Args:
-            mac_address: Device MAC address (will be normalized)
+            mac_address: Device MAC address (colon or dash separated)
 
         Returns:
-            True if config exists, False otherwise
-        """
-        mac_address = self.normalize_mac_address(mac_address)
-        file_path = self.config_dir / f"{mac_address}.json"
-        return file_path.exists()
-
-    def save_config(
-        self,
-        mac_address: str,
-        content: dict[str, Any],
-        allow_overwrite: bool = True,
-    ) -> ConfigDetail:
-        """Create or update config (upsert).
-
-        Args:
-            mac_address: Device MAC address
-            content: Configuration content as a dictionary
-            allow_overwrite: If False, raises error when config already exists
-
-        Returns:
-            ConfigDetail with saved content
+            Parsed JSON content dict
 
         Raises:
             InvalidOperationException: If MAC address format is invalid
-            RecordExistsException: If allow_overwrite is False and config exists
+            RecordNotFoundException: If config for MAC does not exist
+        """
+        config = self.get_config_by_mac(mac_address)
+        return json.loads(config.content)
+
+    def create_config(self, mac_address: str, content: dict[str, Any]) -> Config:
+        """Create a new device configuration.
+
+        Args:
+            mac_address: Device MAC address (colon-separated format)
+            content: Configuration content as a dictionary
+
+        Returns:
+            Created Config model instance
+
+        Raises:
+            InvalidOperationException: If MAC address format is invalid
+            RecordExistsException: If config for MAC already exists
         """
         # Normalize to lowercase before validation
         mac_address = self.normalize_mac_address(mac_address)
 
         if not self.validate_mac_address(mac_address):
             raise InvalidOperationException(
-                "save config", f"MAC address '{mac_address}' has invalid format"
+                "create config", f"MAC address '{mac_address}' has invalid format"
             )
 
-        file_path = self.config_dir / f"{mac_address}.json"
+        # Check if config already exists
+        stmt = select(Config).where(Config.mac_address == mac_address)
+        existing = self.db.scalars(stmt).one_or_none()
 
-        # Check if config exists when overwrite is disallowed
-        if not allow_overwrite and file_path.exists():
+        if existing is not None:
             raise RecordExistsException("Config", mac_address)
 
-        # Write atomically using temp file + rename
-        self._write_atomic(file_path, content)
+        # Extract optional fields from content
+        device_name = content.get("deviceName")
+        device_entity_id = content.get("deviceEntityId")
+        enable_ota = content.get("enableOTA")
 
-        return ConfigDetail(
+        # Create new config
+        config = Config(
             mac_address=mac_address,
-            device_name=content.get("deviceName"),
-            device_entity_id=content.get("deviceEntityId"),
-            enable_ota=content.get("enableOTA"),
-            content=content,
+            device_name=device_name,
+            device_entity_id=device_entity_id,
+            enable_ota=enable_ota,
+            content=json.dumps(content),
         )
 
-    def delete_config(self, mac_address: str) -> None:
-        """Delete config by MAC address.
+        self.db.add(config)
+        self.db.flush()  # Get ID immediately
+
+        return config
+
+    def update_config(self, config_id: int, content: dict[str, Any]) -> Config:
+        """Update an existing configuration by ID.
 
         Args:
-            mac_address: Device MAC address
+            config_id: Config surrogate ID
+            content: New configuration content
+
+        Returns:
+            Updated Config model instance
 
         Raises:
-            InvalidOperationException: If MAC address format is invalid
-            RecordNotFoundException: If config file does not exist
+            RecordNotFoundException: If config with ID does not exist
         """
-        # Normalize to lowercase before validation
-        mac_address = self.normalize_mac_address(mac_address)
+        config = self.get_config_by_id(config_id)
 
-        if not self.validate_mac_address(mac_address):
-            raise InvalidOperationException(
-                "delete config", f"MAC address '{mac_address}' has invalid format"
-            )
+        # Extract optional fields from content
+        config.device_name = content.get("deviceName")
+        config.device_entity_id = content.get("deviceEntityId")
+        config.enable_ota = content.get("enableOTA")
+        config.content = json.dumps(content)
 
-        file_path = self.config_dir / f"{mac_address}.json"
+        self.db.flush()
 
-        if not file_path.exists():
-            raise RecordNotFoundException("Config", mac_address)
+        return config
 
-        file_path.unlink()
-
-    def _write_atomic(self, file_path: Path, content: dict[str, Any]) -> None:
-        """Write file atomically using temp file + rename.
+    def delete_config(self, config_id: int) -> str:
+        """Delete config by ID.
 
         Args:
-            file_path: Target file path
-            content: Content to write as JSON
+            config_id: Config surrogate ID
+
+        Returns:
+            MAC address of deleted config (for MQTT notification)
+
+        Raises:
+            RecordNotFoundException: If config with ID does not exist
         """
-        # Create temp file in SAME directory (required for atomic rename on same filesystem)
-        temp_path = file_path.with_suffix(".tmp")
+        config = self.get_config_by_id(config_id)
+        mac_address = config.mac_address
 
-        try:
-            with open(temp_path, "w", encoding="utf-8") as f:
-                json.dump(content, f, indent=2)
+        self.db.delete(config)
+        self.db.flush()
 
-            # os.replace() is atomic on POSIX and overwrites existing files
-            os.replace(temp_path, file_path)
+        return mac_address
 
-        finally:
-            # Clean up temp file if rename failed
-            if temp_path.exists():
-                temp_path.unlink()
+    def count_configs(self) -> int:
+        """Count total number of configs.
+
+        Returns:
+            Total count of configs in database
+        """
+        stmt = select(func.count()).select_from(Config)
+        result = self.db.execute(stmt).scalar()
+        return result or 0
 
     @staticmethod
     def normalize_mac_address(mac: str) -> str:
-        """Normalize MAC address to lowercase.
+        """Normalize MAC address to lowercase colon-separated format.
+
+        Accepts both dash-separated and colon-separated formats.
 
         Args:
             mac: MAC address string to normalize
 
         Returns:
-            Lowercase MAC address
+            Lowercase colon-separated MAC address
         """
-        return mac.lower()
+        # Convert to lowercase and replace dashes with colons
+        return mac.lower().replace("-", ":")
 
     @staticmethod
     def validate_mac_address(mac: str) -> bool:
-        """Validate MAC is lowercase, hyphen-separated format.
+        """Validate MAC is lowercase, colon-separated format.
 
         Args:
             mac: MAC address string to validate
@@ -270,25 +241,3 @@ class ConfigService:
             True if valid, False otherwise
         """
         return bool(MAC_ADDRESS_PATTERN.match(mac))
-
-    def is_config_dir_accessible(self) -> tuple[bool, str | None]:
-        """Check if the config directory is accessible.
-
-        Returns:
-            Tuple of (is_accessible, error_reason)
-        """
-        if not self.config_dir.exists():
-            return False, f"Directory does not exist: {self.config_dir}"
-
-        if not self.config_dir.is_dir():
-            return False, f"Path is not a directory: {self.config_dir}"
-
-        # Try to list directory to verify read access
-        try:
-            list(self.config_dir.iterdir())
-        except PermissionError:
-            return False, f"Permission denied: {self.config_dir}"
-        except OSError as e:
-            return False, f"Cannot access directory: {e}"
-
-        return True, None

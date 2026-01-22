@@ -1,10 +1,10 @@
-"""Tests for ConfigService."""
+"""Tests for ConfigService with database backend."""
 
-import json
-from pathlib import Path
 from typing import Any
 
 import pytest
+from flask import Flask
+from sqlalchemy.orm import Session
 
 from app.exceptions import (
     InvalidOperationException,
@@ -12,418 +12,389 @@ from app.exceptions import (
     RecordNotFoundException,
 )
 from app.services.config_service import ConfigService
+from app.services.container import ServiceContainer
 
 
-class TestConfigServiceListConfigs:
-    """Tests for list_configs method."""
-
-    def test_list_configs_empty(self, config_dir: Path):
-        """Empty directory returns empty list."""
-        service = ConfigService(config_dir)
-        result = service.list_configs()
-        assert result == []
-
-    def test_list_configs_multiple(
-        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any]
-    ):
-        """Multiple config files are returned."""
-        make_config_file("aa-bb-cc-dd-ee-ff", sample_config)
-        make_config_file("11-22-33-44-55-66", sample_config)
-
-        service = ConfigService(config_dir)
-        result = service.list_configs()
-
-        assert len(result) == 2
-        # Should be sorted by MAC address
-        assert result[0].mac_address == "11-22-33-44-55-66"
-        assert result[1].mac_address == "aa-bb-cc-dd-ee-ff"
-
-    def test_list_configs_extracts_fields(
-        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any]
-    ):
-        """Summary fields are correctly extracted from config content."""
-        make_config_file("aa-bb-cc-dd-ee-ff", sample_config)
-
-        service = ConfigService(config_dir)
-        result = service.list_configs()
-
-        assert len(result) == 1
-        assert result[0].mac_address == "aa-bb-cc-dd-ee-ff"
-        assert result[0].device_name == "Living Room Sensor"
-        assert result[0].device_entity_id == "sensor.living_room"
-        assert result[0].enable_ota is True
-
-    def test_list_configs_handles_missing_fields(
-        self, config_dir: Path, make_config_file: Any, sample_config_minimal: dict[str, Any]
-    ):
-        """Missing optional fields return None."""
-        make_config_file("aa-bb-cc-dd-ee-ff", sample_config_minimal)
-
-        service = ConfigService(config_dir)
-        result = service.list_configs()
-
-        assert len(result) == 1
-        assert result[0].device_name is None
-        assert result[0].device_entity_id is None
-        assert result[0].enable_ota is None
-
-    def test_list_configs_skips_invalid_json(
-        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any]
-    ):
-        """Invalid JSON files are skipped, not causing failure."""
-        make_config_file("aa-bb-cc-dd-ee-ff", sample_config)
+class TestConfigServiceList:
+    """Tests for ConfigService.list_configs()."""
 
-        # Create invalid JSON file
-        invalid_file = config_dir / "11-22-33-44-55-66.json"
-        invalid_file.write_text("not valid json {{{")
+    def test_list_configs_empty(self, app: Flask, session: Session, container: ServiceContainer):
+        """Test listing configs when database is empty."""
+        with app.app_context():
+            service = container.config_service()
+            configs = service.list_configs()
+            assert configs == []
 
-        service = ConfigService(config_dir)
-        result = service.list_configs()
-
-        # Only the valid config should be returned
-        assert len(result) == 1
-        assert result[0].mac_address == "aa-bb-cc-dd-ee-ff"
-
-    def test_list_configs_skips_invalid_mac_filenames(
-        self, config_dir: Path, sample_config: dict[str, Any]
-    ):
-        """Files with invalid MAC address names are skipped."""
-        # Valid MAC file
-        valid_file = config_dir / "aa-bb-cc-dd-ee-ff.json"
-        with open(valid_file, "w") as f:
-            json.dump(sample_config, f)
+    def test_list_configs_with_data(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+        """Test listing configs returns all configs sorted by MAC."""
+        with app.app_context():
+            service = container.config_service()
 
-        # Invalid MAC file (uppercase)
-        invalid_file = config_dir / "AA-BB-CC-DD-EE-FF.json"
-        with open(invalid_file, "w") as f:
-            json.dump(sample_config, f)
-
-        service = ConfigService(config_dir)
-        result = service.list_configs()
+            # Create two configs in non-alphabetical order
+            service.create_config("bb:bb:bb:bb:bb:bb", sample_config)
+            service.create_config("aa:aa:aa:aa:aa:aa", sample_config)
 
-        assert len(result) == 1
-        assert result[0].mac_address == "aa-bb-cc-dd-ee-ff"
+            configs = service.list_configs()
 
+            assert len(configs) == 2
+            # Should be sorted by MAC address
+            assert configs[0].mac_address == "aa:aa:aa:aa:aa:aa"
+            assert configs[1].mac_address == "bb:bb:bb:bb:bb:bb"
 
-class TestConfigServiceGetConfig:
-    """Tests for get_config method."""
 
-    def test_get_config_success(
-        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
-    ):
-        """Retrieve existing config returns full content."""
-        make_config_file(valid_mac, sample_config)
+class TestConfigServiceGetById:
+    """Tests for ConfigService.get_config_by_id()."""
 
-        service = ConfigService(config_dir)
-        result = service.get_config(valid_mac)
+    def test_get_config_by_id_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+        """Test getting config by ID returns correct config."""
+        with app.app_context():
+            service = container.config_service()
+            created = service.create_config(valid_mac, sample_config)
 
-        assert result.mac_address == valid_mac
-        assert result.device_name == "Living Room Sensor"
-        assert result.device_entity_id == "sensor.living_room"
-        assert result.enable_ota is True
-        assert result.content == sample_config
+            config = service.get_config_by_id(created.id)
 
-    def test_get_config_not_found(self, config_dir: Path, valid_mac: str):
-        """Non-existent config raises RecordNotFoundException."""
-        service = ConfigService(config_dir)
+            assert config.id == created.id
+            assert config.mac_address == valid_mac
+            assert config.device_name == sample_config["deviceName"]
 
-        with pytest.raises(RecordNotFoundException) as exc_info:
-            service.get_config(valid_mac)
+    def test_get_config_by_id_not_found(self, app: Flask, session: Session, container: ServiceContainer):
+        """Test getting non-existent config raises RecordNotFoundException."""
+        with app.app_context():
+            service = container.config_service()
 
-        assert valid_mac in str(exc_info.value)
+            with pytest.raises(RecordNotFoundException) as exc_info:
+                service.get_config_by_id(99999)
 
-    def test_get_config_invalid_mac(self, config_dir: Path):
-        """Invalid MAC format raises InvalidOperationException."""
-        service = ConfigService(config_dir)
+            assert "Config" in str(exc_info.value.message)
+            assert "99999" in str(exc_info.value.message)
 
-        with pytest.raises(InvalidOperationException) as exc_info:
-            service.get_config("invalid-mac")
 
-        assert "invalid format" in str(exc_info.value).lower()
+class TestConfigServiceGetByMac:
+    """Tests for ConfigService.get_config_by_mac()."""
 
-    def test_get_config_normalizes_uppercase_mac(
-        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any]
-    ):
-        """Uppercase MAC is normalized to find lowercase file."""
-        lowercase_mac = "aa-bb-cc-dd-ee-ff"
-        uppercase_mac = "AA-BB-CC-DD-EE-FF"
+    def test_get_config_by_mac_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+        """Test getting config by MAC address."""
+        with app.app_context():
+            service = container.config_service()
+            service.create_config(valid_mac, sample_config)
 
-        # Create file with lowercase name
-        make_config_file(lowercase_mac, sample_config)
+            config = service.get_config_by_mac(valid_mac)
 
-        service = ConfigService(config_dir)
-        result = service.get_config(uppercase_mac)
+            assert config.mac_address == valid_mac
+            assert config.device_name == sample_config["deviceName"]
 
-        # Should find the file and return lowercase MAC
-        assert result.mac_address == lowercase_mac
-        assert result.content == sample_config
+    def test_get_config_by_mac_uppercase_normalization(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+        """Test MAC address is normalized to lowercase."""
+        with app.app_context():
+            service = container.config_service()
+            service.create_config("aa:bb:cc:dd:ee:ff", sample_config)
 
+            # Request with uppercase should work
+            config = service.get_config_by_mac("AA:BB:CC:DD:EE:FF")
 
-class TestConfigServiceSaveConfig:
-    """Tests for save_config method."""
+            assert config.mac_address == "aa:bb:cc:dd:ee:ff"
 
-    def test_save_config_create(
-        self, config_dir: Path, sample_config: dict[str, Any], valid_mac: str
-    ):
-        """Create new config file."""
-        service = ConfigService(config_dir)
-        result = service.save_config(valid_mac, sample_config)
+    def test_get_config_by_mac_dash_separator_normalization(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+        """Test dash-separated MAC is normalized to colon-separated."""
+        with app.app_context():
+            service = container.config_service()
+            service.create_config("aa:bb:cc:dd:ee:ff", sample_config)
 
-        assert result.mac_address == valid_mac
-        assert result.content == sample_config
+            # Request with dashes should work (backward compatibility)
+            config = service.get_config_by_mac("aa-bb-cc-dd-ee-ff")
 
-        # Verify file was created
-        file_path = config_dir / f"{valid_mac}.json"
-        assert file_path.exists()
+            assert config.mac_address == "aa:bb:cc:dd:ee:ff"
 
-        with open(file_path) as f:
-            saved_content = json.load(f)
-        assert saved_content == sample_config
+    def test_get_config_by_mac_not_found(self, app: Flask, session: Session, container: ServiceContainer, valid_mac: str):
+        """Test getting non-existent MAC raises RecordNotFoundException."""
+        with app.app_context():
+            service = container.config_service()
 
-    def test_save_config_update(
-        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
-    ):
-        """Update existing config file."""
-        make_config_file(valid_mac, sample_config)
+            with pytest.raises(RecordNotFoundException) as exc_info:
+                service.get_config_by_mac(valid_mac)
 
-        service = ConfigService(config_dir)
+            assert "Config" in str(exc_info.value.message)
 
-        updated_config = {**sample_config, "deviceName": "Updated Name"}
-        result = service.save_config(valid_mac, updated_config)
+    def test_get_config_by_mac_invalid_format(self, app: Flask, session: Session, container: ServiceContainer):
+        """Test invalid MAC format raises InvalidOperationException."""
+        with app.app_context():
+            service = container.config_service()
 
-        assert result.device_name == "Updated Name"
+            with pytest.raises(InvalidOperationException) as exc_info:
+                service.get_config_by_mac("invalid-mac")
 
-        # Verify file was updated
-        file_path = config_dir / f"{valid_mac}.json"
-        with open(file_path) as f:
-            saved_content = json.load(f)
-        assert saved_content["deviceName"] == "Updated Name"
+            assert "invalid format" in str(exc_info.value.message)
 
-    def test_save_config_invalid_mac(self, config_dir: Path, sample_config: dict[str, Any]):
-        """Invalid MAC format raises InvalidOperationException."""
-        service = ConfigService(config_dir)
 
-        with pytest.raises(InvalidOperationException) as exc_info:
-            service.save_config("INVALID", sample_config)
+class TestConfigServiceGetRaw:
+    """Tests for ConfigService.get_raw_config()."""
 
-        assert "invalid format" in str(exc_info.value).lower()
+    def test_get_raw_config_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+        """Test getting raw config content."""
+        with app.app_context():
+            service = container.config_service()
+            service.create_config(valid_mac, sample_config)
 
-    def test_save_config_atomic_write(
-        self, config_dir: Path, sample_config: dict[str, Any], valid_mac: str
-    ):
-        """Temp file is cleaned up after successful write."""
-        service = ConfigService(config_dir)
-        service.save_config(valid_mac, sample_config)
+            content = service.get_raw_config(valid_mac)
 
-        # Ensure no .tmp files remain
-        tmp_files = list(config_dir.glob("*.tmp"))
-        assert len(tmp_files) == 0
+            assert content == sample_config
 
-    def test_save_config_normalizes_uppercase_mac(
-        self, config_dir: Path, sample_config: dict[str, Any]
-    ):
-        """Uppercase MAC is normalized to lowercase."""
-        service = ConfigService(config_dir)
-        uppercase_mac = "AA-BB-CC-DD-EE-FF"
-        lowercase_mac = "aa-bb-cc-dd-ee-ff"
+    def test_get_raw_config_with_dash_separator(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+        """Test raw config works with dash-separated MAC for backward compatibility."""
+        with app.app_context():
+            service = container.config_service()
+            service.create_config("aa:bb:cc:dd:ee:ff", sample_config)
 
-        result = service.save_config(uppercase_mac, sample_config)
+            content = service.get_raw_config("aa-bb-cc-dd-ee-ff")
 
-        # Result should have lowercase MAC
-        assert result.mac_address == lowercase_mac
+            assert content == sample_config
 
-        # File should be created with lowercase name
-        file_path = config_dir / f"{lowercase_mac}.json"
-        assert file_path.exists()
 
-        # Uppercase file should NOT exist
-        uppercase_file = config_dir / f"{uppercase_mac}.json"
-        assert not uppercase_file.exists()
+class TestConfigServiceCreate:
+    """Tests for ConfigService.create_config()."""
 
-    def test_save_config_allow_overwrite_false_new_config(
-        self, config_dir: Path, sample_config: dict[str, Any], valid_mac: str
-    ):
-        """With allow_overwrite=False, creating new config succeeds."""
-        service = ConfigService(config_dir)
-        result = service.save_config(valid_mac, sample_config, allow_overwrite=False)
+    def test_create_config_full_data(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+        """Test creating config with all fields."""
+        with app.app_context():
+            service = container.config_service()
 
-        assert result.mac_address == valid_mac
-        assert result.content == sample_config
+            config = service.create_config(valid_mac, sample_config)
 
-    def test_save_config_allow_overwrite_false_existing_config(
-        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
-    ):
-        """With allow_overwrite=False, updating existing config raises RecordExistsException."""
-        make_config_file(valid_mac, sample_config)
+            assert config.id is not None
+            assert config.mac_address == valid_mac
+            assert config.device_name == sample_config["deviceName"]
+            assert config.device_entity_id == sample_config["deviceEntityId"]
+            assert config.enable_ota == sample_config["enableOTA"]
+            assert config.created_at is not None
+            assert config.updated_at is not None
 
-        service = ConfigService(config_dir)
+    def test_create_config_minimal(self, app: Flask, session: Session, container: ServiceContainer, sample_config_minimal: dict[str, Any], valid_mac: str):
+        """Test creating config with minimal fields."""
+        with app.app_context():
+            service = container.config_service()
 
-        updated_config = {**sample_config, "deviceName": "Updated Name"}
-        with pytest.raises(RecordExistsException) as exc_info:
-            service.save_config(valid_mac, updated_config, allow_overwrite=False)
+            config = service.create_config(valid_mac, sample_config_minimal)
 
-        assert valid_mac in str(exc_info.value)
-        assert exc_info.value.error_code == "RECORD_EXISTS"
+            assert config.id is not None
+            assert config.mac_address == valid_mac
+            assert config.device_name is None
+            assert config.device_entity_id is None
+            assert config.enable_ota is None
 
-    def test_save_config_allow_overwrite_true_existing_config(
-        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
-    ):
-        """With allow_overwrite=True (default), updating existing config succeeds."""
-        make_config_file(valid_mac, sample_config)
+    def test_create_config_normalizes_mac(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+        """Test MAC address is normalized to lowercase colon-separated."""
+        with app.app_context():
+            service = container.config_service()
 
-        service = ConfigService(config_dir)
+            config = service.create_config("AA:BB:CC:DD:EE:FF", sample_config)
 
-        updated_config = {**sample_config, "deviceName": "Updated Name"}
-        result = service.save_config(valid_mac, updated_config, allow_overwrite=True)
+            assert config.mac_address == "aa:bb:cc:dd:ee:ff"
 
-        assert result.device_name == "Updated Name"
+    def test_create_config_duplicate_mac_raises(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+        """Test creating config with duplicate MAC raises RecordExistsException."""
+        with app.app_context():
+            service = container.config_service()
+            service.create_config(valid_mac, sample_config)
 
+            with pytest.raises(RecordExistsException) as exc_info:
+                service.create_config(valid_mac, sample_config)
 
-class TestConfigServiceConfigExists:
-    """Tests for config_exists method."""
+            assert "Config" in str(exc_info.value.message)
+            assert valid_mac in str(exc_info.value.message)
 
-    def test_config_exists_returns_true(
-        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
-    ):
-        """Returns True when config file exists."""
-        make_config_file(valid_mac, sample_config)
+    def test_create_config_invalid_mac_format(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+        """Test creating config with invalid MAC raises InvalidOperationException."""
+        with app.app_context():
+            service = container.config_service()
 
-        service = ConfigService(config_dir)
-        assert service.config_exists(valid_mac) is True
+            with pytest.raises(InvalidOperationException) as exc_info:
+                service.create_config("invalid", sample_config)
 
-    def test_config_exists_returns_false(self, config_dir: Path, valid_mac: str):
-        """Returns False when config file does not exist."""
-        service = ConfigService(config_dir)
-        assert service.config_exists(valid_mac) is False
-
-    def test_config_exists_normalizes_mac(
-        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any]
-    ):
-        """Normalizes MAC to lowercase for lookup."""
-        lowercase_mac = "aa-bb-cc-dd-ee-ff"
-        uppercase_mac = "AA-BB-CC-DD-EE-FF"
+            assert "invalid format" in str(exc_info.value.message)
 
-        make_config_file(lowercase_mac, sample_config)
+    def test_create_config_short_mac(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+        """Test creating config with short MAC raises error."""
+        with app.app_context():
+            service = container.config_service()
 
-        service = ConfigService(config_dir)
-        assert service.config_exists(uppercase_mac) is True
+            with pytest.raises(InvalidOperationException):
+                service.create_config("aa:bb:cc", sample_config)
 
 
-class TestConfigServiceDeleteConfig:
-    """Tests for delete_config method."""
+class TestConfigServiceUpdate:
+    """Tests for ConfigService.update_config()."""
 
-    def test_delete_config_success(
-        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
-    ):
-        """Delete existing config file."""
-        make_config_file(valid_mac, sample_config)
-        file_path = config_dir / f"{valid_mac}.json"
-        assert file_path.exists()
+    def test_update_config_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+        """Test updating config content."""
+        with app.app_context():
+            service = container.config_service()
+            created = service.create_config(valid_mac, sample_config)
 
-        service = ConfigService(config_dir)
-        service.delete_config(valid_mac)
+            new_content = {
+                "deviceName": "Updated Name",
+                "deviceEntityId": "sensor.updated",
+                "enableOTA": False,
+                "mqttBroker": "mqtt.new",
+            }
 
-        assert not file_path.exists()
+            updated = service.update_config(created.id, new_content)
 
-    def test_delete_config_not_found(self, config_dir: Path, valid_mac: str):
-        """Delete non-existent config raises RecordNotFoundException."""
-        service = ConfigService(config_dir)
+            assert updated.device_name == "Updated Name"
+            assert updated.device_entity_id == "sensor.updated"
+            assert updated.enable_ota is False
 
-        with pytest.raises(RecordNotFoundException) as exc_info:
-            service.delete_config(valid_mac)
+    def test_update_config_removes_optional_fields(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+        """Test updating config with content lacking optional fields sets them to None."""
+        with app.app_context():
+            service = container.config_service()
+            created = service.create_config(valid_mac, sample_config)
 
-        assert valid_mac in str(exc_info.value)
+            # Update with content lacking deviceName, deviceEntityId, enableOTA
+            minimal_content = {"mqttBroker": "mqtt.local"}
 
-    def test_delete_config_invalid_mac(self, config_dir: Path):
-        """Invalid MAC format raises InvalidOperationException."""
-        service = ConfigService(config_dir)
+            updated = service.update_config(created.id, minimal_content)
 
-        with pytest.raises(InvalidOperationException) as exc_info:
-            service.delete_config("bad-mac")
+            assert updated.device_name is None
+            assert updated.device_entity_id is None
+            assert updated.enable_ota is None
 
-        assert "invalid format" in str(exc_info.value).lower()
+    def test_update_config_not_found(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+        """Test updating non-existent config raises RecordNotFoundException."""
+        with app.app_context():
+            service = container.config_service()
 
-    def test_delete_config_normalizes_uppercase_mac(
-        self, config_dir: Path, make_config_file: Any, sample_config: dict[str, Any]
-    ):
-        """Uppercase MAC is normalized to delete lowercase file."""
-        lowercase_mac = "aa-bb-cc-dd-ee-ff"
-        uppercase_mac = "AA-BB-CC-DD-EE-FF"
+            with pytest.raises(RecordNotFoundException) as exc_info:
+                service.update_config(99999, sample_config)
 
-        # Create file with lowercase name
-        make_config_file(lowercase_mac, sample_config)
-        file_path = config_dir / f"{lowercase_mac}.json"
-        assert file_path.exists()
+            assert "Config" in str(exc_info.value.message)
 
-        service = ConfigService(config_dir)
-        service.delete_config(uppercase_mac)
 
-        # File should be deleted
-        assert not file_path.exists()
+class TestConfigServiceDelete:
+    """Tests for ConfigService.delete_config()."""
 
+    def test_delete_config_success(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any], valid_mac: str):
+        """Test deleting config removes it from database."""
+        with app.app_context():
+            service = container.config_service()
+            created = service.create_config(valid_mac, sample_config)
 
-class TestValidateMacAddress:
-    """Tests for validate_mac_address static method."""
+            mac_address = service.delete_config(created.id)
 
-    @pytest.mark.parametrize(
-        "mac",
-        [
-            "aa-bb-cc-dd-ee-ff",
-            "00-00-00-00-00-00",
-            "12-34-56-78-9a-bc",
-            "ff-ff-ff-ff-ff-ff",
-        ],
-    )
-    def test_validate_mac_address_valid(self, mac: str):
-        """Valid MAC addresses are accepted."""
-        assert ConfigService.validate_mac_address(mac) is True
+            assert mac_address == valid_mac
 
-    @pytest.mark.parametrize(
-        "mac",
-        [
-            "AA-BB-CC-DD-EE-FF",  # Uppercase
-            "aa:bb:cc:dd:ee:ff",  # Colon separator
-            "aabbccddeeff",  # No separator
-            "aa-bb-cc-dd-ee",  # Too short
-            "aa-bb-cc-dd-ee-ff-00",  # Too long
-            "gg-bb-cc-dd-ee-ff",  # Invalid hex
-            "aa-bb-cc-dd-ee-f",  # Incomplete octet
-            "",  # Empty
-            "invalid",  # Random string
-        ],
-    )
-    def test_validate_mac_address_invalid(self, mac: str):
-        """Invalid MAC addresses are rejected."""
-        assert ConfigService.validate_mac_address(mac) is False
+            with pytest.raises(RecordNotFoundException):
+                service.get_config_by_id(created.id)
 
+    def test_delete_config_not_found(self, app: Flask, session: Session, container: ServiceContainer):
+        """Test deleting non-existent config raises RecordNotFoundException."""
+        with app.app_context():
+            service = container.config_service()
 
-class TestConfigDirAccessible:
-    """Tests for is_config_dir_accessible method."""
+            with pytest.raises(RecordNotFoundException) as exc_info:
+                service.delete_config(99999)
 
-    def test_config_dir_accessible(self, config_dir: Path):
-        """Accessible directory returns True."""
-        service = ConfigService(config_dir)
-        is_accessible, error = service.is_config_dir_accessible()
+            assert "Config" in str(exc_info.value.message)
 
-        assert is_accessible is True
-        assert error is None
 
-    def test_config_dir_not_exists(self, tmp_path: Path):
-        """Non-existent directory returns False with reason."""
-        non_existent = tmp_path / "does_not_exist"
-        service = ConfigService(non_existent)
-        is_accessible, error = service.is_config_dir_accessible()
+class TestConfigServiceCount:
+    """Tests for ConfigService.count_configs()."""
 
-        assert is_accessible is False
-        assert "does not exist" in error.lower()
+    def test_count_configs_empty(self, app: Flask, session: Session, container: ServiceContainer):
+        """Test counting configs when empty."""
+        with app.app_context():
+            service = container.config_service()
+            count = service.count_configs()
+            assert count == 0
 
-    def test_config_dir_is_file(self, tmp_path: Path):
-        """Path that is a file returns False with reason."""
-        file_path = tmp_path / "not_a_dir"
-        file_path.touch()
+    def test_count_configs_with_data(self, app: Flask, session: Session, container: ServiceContainer, sample_config: dict[str, Any]):
+        """Test counting configs with data."""
+        with app.app_context():
+            service = container.config_service()
+            service.create_config("aa:aa:aa:aa:aa:aa", sample_config)
+            service.create_config("bb:bb:bb:bb:bb:bb", sample_config)
 
-        service = ConfigService(file_path)
-        is_accessible, error = service.is_config_dir_accessible()
+            count = service.count_configs()
+            assert count == 2
 
-        assert is_accessible is False
-        assert "not a directory" in error.lower()
+
+class TestConfigServiceMacValidation:
+    """Tests for MAC address validation and normalization."""
+
+    def test_normalize_mac_lowercase(self):
+        """Test normalization converts to lowercase."""
+        result = ConfigService.normalize_mac_address("AA:BB:CC:DD:EE:FF")
+        assert result == "aa:bb:cc:dd:ee:ff"
+
+    def test_normalize_mac_dash_to_colon(self):
+        """Test normalization converts dashes to colons."""
+        result = ConfigService.normalize_mac_address("aa-bb-cc-dd-ee-ff")
+        assert result == "aa:bb:cc:dd:ee:ff"
+
+    def test_normalize_mac_combined(self):
+        """Test normalization handles uppercase and dashes together."""
+        result = ConfigService.normalize_mac_address("AA-BB-CC-DD-EE-FF")
+        assert result == "aa:bb:cc:dd:ee:ff"
+
+    def test_validate_mac_valid(self):
+        """Test validation accepts valid MAC."""
+        assert ConfigService.validate_mac_address("aa:bb:cc:dd:ee:ff") is True
+
+    def test_validate_mac_invalid_format(self):
+        """Test validation rejects invalid format."""
+        assert ConfigService.validate_mac_address("invalid") is False
+        assert ConfigService.validate_mac_address("aa:bb:cc") is False
+        assert ConfigService.validate_mac_address("aa:bb:cc:dd:ee:ff:gg") is False
+
+    def test_validate_mac_rejects_dash_format(self):
+        """Test validation rejects dash-separated format (must be normalized first)."""
+        assert ConfigService.validate_mac_address("aa-bb-cc-dd-ee-ff") is False
+
+    def test_validate_mac_rejects_uppercase(self):
+        """Test validation rejects uppercase (must be normalized first)."""
+        assert ConfigService.validate_mac_address("AA:BB:CC:DD:EE:FF") is False
+
+
+class TestConfigServiceContentExtraction:
+    """Tests for content field extraction."""
+
+    def test_extracts_device_name(self, app: Flask, session: Session, container: ServiceContainer, valid_mac: str):
+        """Test deviceName is extracted from content."""
+        with app.app_context():
+            service = container.config_service()
+            content = {"deviceName": "Test Device", "mqttBroker": "mqtt.local"}
+
+            config = service.create_config(valid_mac, content)
+
+            assert config.device_name == "Test Device"
+
+    def test_extracts_device_entity_id(self, app: Flask, session: Session, container: ServiceContainer, valid_mac: str):
+        """Test deviceEntityId is extracted from content."""
+        with app.app_context():
+            service = container.config_service()
+            content = {"deviceEntityId": "sensor.test", "mqttBroker": "mqtt.local"}
+
+            config = service.create_config(valid_mac, content)
+
+            assert config.device_entity_id == "sensor.test"
+
+    def test_extracts_enable_ota(self, app: Flask, session: Session, container: ServiceContainer, valid_mac: str):
+        """Test enableOTA is extracted from content."""
+        with app.app_context():
+            service = container.config_service()
+            content = {"enableOTA": True, "mqttBroker": "mqtt.local"}
+
+            config = service.create_config(valid_mac, content)
+
+            assert config.enable_ota is True
+
+    def test_missing_fields_are_none(self, app: Flask, session: Session, container: ServiceContainer, valid_mac: str):
+        """Test missing optional fields are set to None."""
+        with app.app_context():
+            service = container.config_service()
+            content = {"mqttBroker": "mqtt.local"}
+
+            config = service.create_config(valid_mac, content)
+
+            assert config.device_name is None
+            assert config.device_entity_id is None
+            assert config.enable_ota is None

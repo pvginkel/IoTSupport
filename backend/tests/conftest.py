@@ -1,6 +1,6 @@
 """Pytest configuration and fixtures."""
 
-import json
+import sqlite3
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -10,9 +10,12 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from flask import Flask
 from prometheus_client import REGISTRY
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
 from app import create_app
 from app.config import Settings
+from app.database import upgrade_database
 from app.services.container import ServiceContainer
 
 
@@ -42,46 +45,113 @@ def clear_prometheus_registry() -> Generator[None, None, None]:
             pass
 
 
-@pytest.fixture
-def config_dir(tmp_path: Path) -> Path:
-    """Create a temporary directory for test configs."""
-    return tmp_path
-
-
-@pytest.fixture
-def test_settings(config_dir: Path, tmp_path: Path) -> Settings:
-    """Create test settings with temporary config directory."""
+def _build_test_settings(tmp_path: Path) -> Settings:
+    """Construct base Settings object for tests."""
     # Create temporary assets directory and signing key for tests
     assets_dir = tmp_path / "assets"
-    assets_dir.mkdir()
+    assets_dir.mkdir(exist_ok=True)
 
     # Create a valid RSA signing key file for all tests
     signing_key_path = tmp_path / "test_signing_key.pem"
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-    signing_key_path.write_bytes(pem)
+    if not signing_key_path.exists():
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        signing_key_path.write_bytes(pem)
 
-    # Use _env_file=None to prevent reading from .env file during tests
     return Settings(
         _env_file=None,  # type: ignore[call-arg]
-        ESP32_CONFIGS_DIR=config_dir,
+        DATABASE_URL="sqlite:///:memory:",
+        SECRET_KEY="test-secret-key",
+        DEBUG=True,
+        FLASK_ENV="testing",
         ASSETS_DIR=assets_dir,
         SIGNING_KEY_PATH=signing_key_path,
         TIMESTAMP_TOLERANCE_SECONDS=300,
-        SECRET_KEY="test-secret-key",
         CORS_ORIGINS=["http://localhost:3000"],
     )
 
 
+@pytest.fixture(scope="session")
+def session_tmp_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Session-scoped temporary path for test fixtures."""
+    return tmp_path_factory.mktemp("session")
+
+
+@pytest.fixture(scope="session")
+def template_connection(session_tmp_path: Path) -> Generator[sqlite3.Connection, None, None]:
+    """Create a template SQLite database once and apply migrations."""
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+
+    settings = _build_test_settings(session_tmp_path).model_copy()
+    settings.DATABASE_URL = "sqlite://"
+    settings.set_engine_options_override({
+        "poolclass": StaticPool,
+        "creator": lambda: conn,
+    })
+
+    template_app = create_app(settings, skip_background_services=True)
+    with template_app.app_context():
+        upgrade_database(recreate=True)
+
+    yield conn
+
+    conn.close()
+
+
 @pytest.fixture
-def app(test_settings: Settings) -> Generator[Flask, None, None]:
-    """Create Flask app for testing."""
-    app = create_app(test_settings)
-    yield app
+def test_settings(tmp_path: Path) -> Settings:
+    """Create test settings with in-memory database."""
+    return _build_test_settings(tmp_path)
+
+
+@pytest.fixture
+def app(test_settings: Settings, template_connection: sqlite3.Connection) -> Generator[Flask, None, None]:
+    """Create Flask app for testing using a fresh copy of the template database."""
+    clone_conn = sqlite3.connect(":memory:", check_same_thread=False)
+    template_connection.backup(clone_conn)
+
+    settings = test_settings.model_copy()
+    settings.DATABASE_URL = "sqlite://"
+    settings.set_engine_options_override({
+        "poolclass": StaticPool,
+        "creator": lambda: clone_conn,
+    })
+
+    app = create_app(settings, skip_background_services=True)
+
+    try:
+        yield app
+    finally:
+        with app.app_context():
+            from app.extensions import db as flask_db
+
+            flask_db.session.remove()
+
+        clone_conn.close()
+
+
+@pytest.fixture
+def session(container: ServiceContainer) -> Generator[Session, None, None]:
+    """Create a new database session for a test."""
+    session = container.db_session()
+
+    exc = None
+    try:
+        yield session
+    except Exception as e:
+        exc = e
+
+    if exc:
+        session.rollback()
+    else:
+        session.commit()
+    session.close()
+
+    container.db_session.reset()
 
 
 @pytest.fixture
@@ -92,8 +162,22 @@ def client(app: Flask) -> Any:
 
 @pytest.fixture
 def container(app: Flask) -> ServiceContainer:
-    """Access to the DI container for testing."""
-    return app.container
+    """Access to the DI container for testing with session provided."""
+    container = app.container
+
+    with app.app_context():
+        # Ensure SessionLocal is initialized for tests
+        from sqlalchemy.orm import sessionmaker
+
+        from app.extensions import db as flask_db
+
+        SessionLocal = sessionmaker(
+            bind=flask_db.engine, autoflush=True, expire_on_commit=False
+        )
+
+    container.session_maker.override(SessionLocal)
+
+    return container
 
 
 @pytest.fixture
@@ -117,16 +201,15 @@ def sample_config_minimal() -> dict[str, Any]:
 
 
 @pytest.fixture
-def make_config_file(config_dir: Path) -> Any:
-    """Factory fixture for creating config files."""
+def valid_mac() -> str:
+    """Valid MAC address for testing (colon-separated)."""
+    return "aa:bb:cc:dd:ee:ff"
 
-    def _make(mac_address: str, content: dict[str, Any]) -> Path:
-        file_path = config_dir / f"{mac_address}.json"
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(content, f, indent=2)
-        return file_path
 
-    return _make
+@pytest.fixture
+def another_valid_mac() -> str:
+    """Another valid MAC address for testing (colon-separated)."""
+    return "11:22:33:44:55:66"
 
 
 @pytest.fixture
@@ -142,19 +225,7 @@ def make_asset_file(test_settings: Settings) -> Any:
 
 
 @pytest.fixture
-def valid_mac() -> str:
-    """Valid MAC address for testing."""
-    return "aa-bb-cc-dd-ee-ff"
-
-
-@pytest.fixture
-def another_valid_mac() -> str:
-    """Another valid MAC address for testing."""
-    return "11-22-33-44-55-66"
-
-
-@pytest.fixture
-def mock_oidc_discovery():
+def mock_oidc_discovery() -> dict[str, Any]:
     """Mock OIDC discovery document."""
     return {
         "issuer": "https://auth.example.com/realms/iot",
@@ -166,7 +237,7 @@ def mock_oidc_discovery():
 
 
 @pytest.fixture
-def mock_jwks():
+def mock_jwks() -> dict[str, Any]:
     """Mock JWKS (JSON Web Key Set)."""
     return {
         "keys": [
@@ -182,7 +253,7 @@ def mock_jwks():
 
 
 @pytest.fixture
-def generate_test_jwt(test_settings: Settings):
+def generate_test_jwt(test_settings: Settings) -> Any:
     """Factory fixture to generate test JWT tokens."""
     import time
 

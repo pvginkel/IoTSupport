@@ -2,8 +2,9 @@
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Project root directory (parent of app/)
@@ -23,10 +24,12 @@ class Settings(BaseSettings):
     # Flask settings
     SECRET_KEY: str = Field(default="dev-secret-key-change-in-production")
     FLASK_ENV: str = Field(default="development")
+    DEBUG: bool = Field(default=True)
 
-    # ESP32 configuration directory
-    ESP32_CONFIGS_DIR: Path = Field(
-        description="Path to ESP32 configuration files directory"
+    # Database settings
+    DATABASE_URL: str = Field(
+        default="postgresql+psycopg://postgres:postgres@localhost:5432/iotsupport",
+        description="PostgreSQL connection string",
     )
 
     # Asset upload settings
@@ -120,11 +123,48 @@ class Settings(BaseSettings):
         """Check if the application is running in testing mode."""
         return self.FLASK_ENV == "testing"
 
+    # Internal override for test fixtures (not set via env)
+    _engine_options_override: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def configure_environment_defaults(self) -> "Settings":
+        """Apply environment-specific defaults after validation."""
+        return self
+
+    @property
+    def SQLALCHEMY_DATABASE_URI(self) -> str:
+        """SQLAlchemy database URI."""
+        return self.DATABASE_URL
+
+    @property
+    def SQLALCHEMY_TRACK_MODIFICATIONS(self) -> bool:
+        """Disable SQLAlchemy track modifications."""
+        return False
+
+    @property
+    def SQLALCHEMY_ENGINE_OPTIONS(self) -> dict[str, Any]:
+        """SQLAlchemy engine options with connection pool configuration."""
+        # Allow test fixtures to fully override engine options (e.g., for SQLite)
+        if self._engine_options_override is not None:
+            return self._engine_options_override
+        return {
+            "pool_size": 5,
+            "max_overflow": 10,
+            "pool_timeout": 30,
+            "pool_pre_ping": True,  # Verify connections before use
+        }
+
+    def set_engine_options_override(self, options: dict[str, Any]) -> None:
+        """Override engine options (for test fixtures using SQLite)."""
+        object.__setattr__(self, "_engine_options_override", options)
+
+    @property
+    def is_testing(self) -> bool:
+        """Check if running in testing environment."""
+        return self.FLASK_ENV == "testing"
+
 
 @lru_cache
 def get_settings() -> Settings:
-    """Get cached settings instance.
-
-    Expects ESP32_CONFIGS_DIR to be set in environment.
-    """
+    """Get cached settings instance."""
     return Settings()  # type: ignore[call-arg]

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from flask import Flask
+from sqlalchemy.pool import StaticPool
 
 from app import create_app
 from app.config import Settings
@@ -15,7 +16,13 @@ class TestAuthenticationMiddleware:
 
     @pytest.fixture
     def auth_enabled_settings(self, test_settings: Settings) -> Settings:
-        """Create settings with OIDC enabled."""
+        """Create settings with OIDC enabled and SQLite support."""
+        # Configure SQLite engine options for testing
+        test_settings.DATABASE_URL = "sqlite://"
+        test_settings.set_engine_options_override({
+            "poolclass": StaticPool,
+            "connect_args": {"check_same_thread": False},
+        })
         test_settings.OIDC_ENABLED = True
         test_settings.OIDC_ISSUER_URL = "https://auth.example.com/realms/iot"
         test_settings.OIDC_CLIENT_ID = "iot-backend"
@@ -46,7 +53,13 @@ class TestAuthenticationMiddleware:
                 mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
                 mock_jwk_client_class.return_value = mock_jwk_client
 
-                app = create_app(auth_enabled_settings)
+                app = create_app(auth_enabled_settings, skip_background_services=True)
+
+                # Create database tables for tests
+                with app.app_context():
+                    from app.extensions import db
+                    db.create_all()
+
                 yield app
 
     def test_bearer_token_authentication(
@@ -201,9 +214,21 @@ class TestAuthenticationMiddleware:
 
     def test_oidc_disabled_bypasses_authentication(self, test_settings):
         """Test that OIDC_ENABLED=False bypasses all authentication."""
-        # Create app with OIDC disabled
+        # Configure SQLite engine options for testing
+        test_settings.DATABASE_URL = "sqlite://"
+        test_settings.set_engine_options_override({
+            "poolclass": StaticPool,
+            "connect_args": {"check_same_thread": False},
+        })
         test_settings.OIDC_ENABLED = False
-        app = create_app(test_settings)
+
+        app = create_app(test_settings, skip_background_services=True)
+
+        # Create database tables for this fresh app
+        with app.app_context():
+            from app.extensions import db
+            db.create_all()
+
         client = app.test_client()
 
         # Should access protected endpoints without token

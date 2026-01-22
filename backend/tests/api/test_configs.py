@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from flask import Flask
 from flask.testing import FlaskClient
+from sqlalchemy.orm import Session
 
 from app.services.container import ServiceContainer
 
@@ -12,8 +13,8 @@ from app.services.container import ServiceContainer
 class TestListConfigs:
     """Tests for GET /api/configs."""
 
-    def test_list_configs_empty(self, client: FlaskClient):
-        """Empty directory returns empty list with 200."""
+    def test_list_configs_empty(self, client: FlaskClient, session: Session):
+        """Empty database returns empty list with 200."""
         response = client.get("/api/configs")
 
         assert response.status_code == 200
@@ -22,10 +23,18 @@ class TestListConfigs:
         assert data["count"] == 0
 
     def test_list_configs_returns_summary(
-        self, client: FlaskClient, make_config_file: Any, sample_config: dict[str, Any]
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        container: ServiceContainer,
+        sample_config: dict[str, Any],
     ):
-        """Configs are returned with correct summary format."""
-        make_config_file("aa-bb-cc-dd-ee-ff", sample_config)
+        """Configs are returned with correct summary format including ID."""
+        with app.app_context():
+            service = container.config_service()
+            created = service.create_config("aa:bb:cc:dd:ee:ff", sample_config)
+            config_id = created.id
 
         response = client.get("/api/configs")
 
@@ -35,146 +44,112 @@ class TestListConfigs:
         assert len(data["configs"]) == 1
 
         config = data["configs"][0]
-        assert config["mac_address"] == "aa-bb-cc-dd-ee-ff"
+        assert config["id"] == config_id
+        assert config["mac_address"] == "aa:bb:cc:dd:ee:ff"
         assert config["device_name"] == "Living Room Sensor"
         assert config["device_entity_id"] == "sensor.living_room"
         assert config["enable_ota"] is True
 
-
-class TestGetConfig:
-    """Tests for GET /api/configs/<mac_address>."""
-
-    def test_get_config_success(
-        self, client: FlaskClient, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
+    def test_list_configs_sorted_by_mac(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        container: ServiceContainer,
+        sample_config: dict[str, Any],
     ):
-        """Existing config returns 200 with full content."""
-        make_config_file(valid_mac, sample_config)
+        """Configs are returned sorted by MAC address."""
+        with app.app_context():
+            service = container.config_service()
+            # Create in non-sorted order
+            service.create_config("cc:cc:cc:cc:cc:cc", sample_config)
+            service.create_config("aa:aa:aa:aa:aa:aa", sample_config)
+            service.create_config("bb:bb:bb:bb:bb:bb", sample_config)
 
-        response = client.get(f"/api/configs/{valid_mac}")
+        response = client.get("/api/configs")
 
         assert response.status_code == 200
         data = response.get_json()
-        assert data["mac_address"] == valid_mac
-        assert data["content"] == sample_config
+        assert data["count"] == 3
 
-    def test_get_config_not_found(self, client: FlaskClient, valid_mac: str):
-        """Non-existent config returns 404."""
-        response = client.get(f"/api/configs/{valid_mac}")
-
-        assert response.status_code == 404
-        data = response.get_json()
-        assert "error" in data
-        assert data["code"] == "RECORD_NOT_FOUND"
-
-    def test_get_config_invalid_mac(self, client: FlaskClient):
-        """Invalid MAC format returns 400."""
-        response = client.get("/api/configs/invalid-mac")
-
-        assert response.status_code == 400
-        data = response.get_json()
-        assert "error" in data
-        assert data["code"] == "INVALID_OPERATION"
+        macs = [c["mac_address"] for c in data["configs"]]
+        assert macs == ["aa:aa:aa:aa:aa:aa", "bb:bb:bb:bb:bb:bb", "cc:cc:cc:cc:cc:cc"]
 
 
-class TestSaveConfig:
-    """Tests for PUT /api/configs/<mac_address>."""
+class TestCreateConfig:
+    """Tests for POST /api/configs."""
 
-    def test_save_config_create(
-        self, client: FlaskClient, sample_config: dict[str, Any], valid_mac: str
+    def test_create_config_success(
+        self, client: FlaskClient, session: Session, sample_config: dict[str, Any], valid_mac: str
     ):
-        """Creating new config returns 200."""
-        response = client.put(
-            f"/api/configs/{valid_mac}",
-            json={"content": sample_config},
+        """Creating new config returns 201 with created config."""
+        response = client.post(
+            "/api/configs",
+            json={"mac_address": valid_mac, "content": sample_config},
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 201
         data = response.get_json()
+        assert data["id"] is not None
         assert data["mac_address"] == valid_mac
         assert data["content"] == sample_config
+        assert data["device_name"] == sample_config["deviceName"]
+        assert data["device_entity_id"] == sample_config["deviceEntityId"]
+        assert data["enable_ota"] == sample_config["enableOTA"]
+        assert "created_at" in data
+        assert "updated_at" in data
 
-    def test_save_config_update(
+    def test_create_config_minimal(
+        self, client: FlaskClient, session: Session, sample_config_minimal: dict[str, Any], valid_mac: str
+    ):
+        """Creating config with minimal content sets optional fields to None."""
+        response = client.post(
+            "/api/configs",
+            json={"mac_address": valid_mac, "content": sample_config_minimal},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data["mac_address"] == valid_mac
+        assert data["device_name"] is None
+        assert data["device_entity_id"] is None
+        assert data["enable_ota"] is None
+
+    def test_create_config_normalizes_mac(
+        self, client: FlaskClient, session: Session, sample_config: dict[str, Any]
+    ):
+        """MAC address is normalized to lowercase colon-separated."""
+        response = client.post(
+            "/api/configs",
+            json={"mac_address": "AA:BB:CC:DD:EE:FF", "content": sample_config},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data["mac_address"] == "aa:bb:cc:dd:ee:ff"
+
+    def test_create_config_duplicate_mac_returns_409(
         self,
+        app: Flask,
         client: FlaskClient,
-        make_config_file: Any,
+        session: Session,
+        container: ServiceContainer,
         sample_config: dict[str, Any],
         valid_mac: str,
     ):
-        """Updating existing config returns 200."""
-        make_config_file(valid_mac, sample_config)
+        """Creating config with duplicate MAC returns 409."""
+        # Create first config
+        with app.app_context():
+            service = container.config_service()
+            service.create_config(valid_mac, sample_config)
 
-        updated_config = {**sample_config, "deviceName": "Updated Name"}
-        response = client.put(
-            f"/api/configs/{valid_mac}",
-            json={"content": updated_config},
-            content_type="application/json",
-        )
-
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["device_name"] == "Updated Name"
-
-    def test_save_config_invalid_mac(self, client: FlaskClient, sample_config: dict[str, Any]):
-        """Invalid MAC format returns 400."""
-        response = client.put(
-            "/api/configs/INVALID-MAC",
-            json={"content": sample_config},
-            content_type="application/json",
-        )
-
-        assert response.status_code == 400
-        data = response.get_json()
-        assert data["code"] == "INVALID_OPERATION"
-
-    def test_save_config_invalid_json(self, client: FlaskClient, valid_mac: str):
-        """Invalid request body returns 400."""
-        response = client.put(
-            f"/api/configs/{valid_mac}",
-            data="not json",
-            content_type="application/json",
-        )
-
-        assert response.status_code == 400
-
-    def test_save_config_missing_content(self, client: FlaskClient, valid_mac: str):
-        """Missing content field returns 400."""
-        response = client.put(
-            f"/api/configs/{valid_mac}",
-            json={},
-            content_type="application/json",
-        )
-
-        assert response.status_code == 400
-
-    def test_save_config_allow_overwrite_false_new(
-        self, client: FlaskClient, sample_config: dict[str, Any], valid_mac: str
-    ):
-        """Creating new config with allow_overwrite=false returns 200."""
-        response = client.put(
-            f"/api/configs/{valid_mac}",
-            json={"content": sample_config, "allow_overwrite": False},
-            content_type="application/json",
-        )
-
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["mac_address"] == valid_mac
-
-    def test_save_config_allow_overwrite_false_existing(
-        self,
-        client: FlaskClient,
-        make_config_file: Any,
-        sample_config: dict[str, Any],
-        valid_mac: str,
-    ):
-        """Updating existing config with allow_overwrite=false returns 409."""
-        make_config_file(valid_mac, sample_config)
-
-        updated_config = {**sample_config, "deviceName": "Updated Name"}
-        response = client.put(
-            f"/api/configs/{valid_mac}",
-            json={"content": updated_config, "allow_overwrite": False},
+        # Try to create duplicate
+        response = client.post(
+            "/api/configs",
+            json={"mac_address": valid_mac, "content": sample_config},
             content_type="application/json",
         )
 
@@ -183,117 +158,425 @@ class TestSaveConfig:
         assert data["code"] == "RECORD_EXISTS"
         assert valid_mac in data["error"]
 
-    def test_save_config_allow_overwrite_defaults_true(
-        self,
-        client: FlaskClient,
-        make_config_file: Any,
-        sample_config: dict[str, Any],
-        valid_mac: str,
+    def test_create_config_invalid_mac_returns_400(
+        self, client: FlaskClient, session: Session, sample_config: dict[str, Any]
     ):
-        """Updating existing config without allow_overwrite param returns 200 (default True)."""
-        make_config_file(valid_mac, sample_config)
-
-        updated_config = {**sample_config, "deviceName": "Updated Name"}
-        response = client.put(
-            f"/api/configs/{valid_mac}",
-            json={"content": updated_config},
+        """Creating config with invalid MAC format returns 400."""
+        response = client.post(
+            "/api/configs",
+            json={"mac_address": "invalid-mac", "content": sample_config},
             content_type="application/json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 400
         data = response.get_json()
-        assert data["device_name"] == "Updated Name"
+        assert data["code"] == "INVALID_OPERATION"
+        assert "invalid format" in data["error"].lower()
 
-
-class TestDeleteConfig:
-    """Tests for DELETE /api/configs/<mac_address>."""
-
-    def test_delete_config_success(
-        self, client: FlaskClient, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
+    def test_create_config_short_mac_returns_400(
+        self, client: FlaskClient, session: Session, sample_config: dict[str, Any]
     ):
-        """Deleting existing config returns 204."""
-        make_config_file(valid_mac, sample_config)
-
-        response = client.delete(f"/api/configs/{valid_mac}")
-
-        assert response.status_code == 204
-
-        # Verify it's gone
-        response = client.get(f"/api/configs/{valid_mac}")
-        assert response.status_code == 404
-
-    def test_delete_config_not_found(self, client: FlaskClient, valid_mac: str):
-        """Deleting non-existent config returns 404."""
-        response = client.delete(f"/api/configs/{valid_mac}")
-
-        assert response.status_code == 404
-        data = response.get_json()
-        assert data["code"] == "RECORD_NOT_FOUND"
-
-    def test_delete_config_invalid_mac(self, client: FlaskClient):
-        """Invalid MAC format returns 400."""
-        response = client.delete("/api/configs/bad-mac")
+        """Creating config with short MAC returns 400."""
+        response = client.post(
+            "/api/configs",
+            json={"mac_address": "aa:bb:cc", "content": sample_config},
+            content_type="application/json",
+        )
 
         assert response.status_code == 400
         data = response.get_json()
         assert data["code"] == "INVALID_OPERATION"
 
+    def test_create_config_missing_mac_address_returns_400(
+        self, client: FlaskClient, session: Session, sample_config: dict[str, Any]
+    ):
+        """Missing mac_address field returns 400."""
+        response = client.post(
+            "/api/configs",
+            json={"content": sample_config},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+
+    def test_create_config_missing_content_returns_400(
+        self, client: FlaskClient, session: Session, valid_mac: str
+    ):
+        """Missing content field returns 400."""
+        response = client.post(
+            "/api/configs",
+            json={"mac_address": valid_mac},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+
+    def test_create_config_invalid_json_returns_400(
+        self, client: FlaskClient, session: Session
+    ):
+        """Invalid JSON body returns 400."""
+        response = client.post(
+            "/api/configs",
+            data="not json",
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+
+
+class TestGetConfigById:
+    """Tests for GET /api/configs/<config_id>."""
+
+    def test_get_config_success(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        container: ServiceContainer,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+    ):
+        """Existing config returns 200 with full content."""
+        with app.app_context():
+            service = container.config_service()
+            created = service.create_config(valid_mac, sample_config)
+            config_id = created.id
+
+        response = client.get(f"/api/configs/{config_id}")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["id"] == config_id
+        assert data["mac_address"] == valid_mac
+        assert data["content"] == sample_config
+        assert data["device_name"] == sample_config["deviceName"]
+
+    def test_get_config_not_found(self, client: FlaskClient, session: Session):
+        """Non-existent config ID returns 404."""
+        response = client.get("/api/configs/99999")
+
+        assert response.status_code == 404
+        data = response.get_json()
+        assert data["code"] == "RECORD_NOT_FOUND"
+        assert "Config" in data["error"]
+        assert "99999" in data["error"]
+
+
+class TestUpdateConfig:
+    """Tests for PUT /api/configs/<config_id>."""
+
+    def test_update_config_success(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        container: ServiceContainer,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+    ):
+        """Updating config returns 200 with updated content."""
+        with app.app_context():
+            service = container.config_service()
+            created = service.create_config(valid_mac, sample_config)
+            config_id = created.id
+
+        updated_content = {
+            "deviceName": "Updated Name",
+            "deviceEntityId": "sensor.updated",
+            "enableOTA": False,
+            "mqttBroker": "mqtt.new",
+        }
+
+        response = client.put(
+            f"/api/configs/{config_id}",
+            json={"content": updated_content},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["id"] == config_id
+        assert data["mac_address"] == valid_mac  # MAC unchanged
+        assert data["content"] == updated_content
+        assert data["device_name"] == "Updated Name"
+        assert data["device_entity_id"] == "sensor.updated"
+        assert data["enable_ota"] is False
+
+    def test_update_config_removes_optional_fields(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        container: ServiceContainer,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+    ):
+        """Update with content lacking optional fields sets them to None."""
+        with app.app_context():
+            service = container.config_service()
+            created = service.create_config(valid_mac, sample_config)
+            config_id = created.id
+
+        minimal_content = {"mqttBroker": "mqtt.local"}
+
+        response = client.put(
+            f"/api/configs/{config_id}",
+            json={"content": minimal_content},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["device_name"] is None
+        assert data["device_entity_id"] is None
+        assert data["enable_ota"] is None
+
+    def test_update_config_not_found(
+        self, client: FlaskClient, session: Session, sample_config: dict[str, Any]
+    ):
+        """Updating non-existent config returns 404."""
+        response = client.put(
+            "/api/configs/99999",
+            json={"content": sample_config},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 404
+        data = response.get_json()
+        assert data["code"] == "RECORD_NOT_FOUND"
+
+    def test_update_config_missing_content_returns_400(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        container: ServiceContainer,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+    ):
+        """Missing content field returns 400."""
+        with app.app_context():
+            service = container.config_service()
+            created = service.create_config(valid_mac, sample_config)
+            config_id = created.id
+
+        response = client.put(
+            f"/api/configs/{config_id}",
+            json={},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+
+
+class TestDeleteConfig:
+    """Tests for DELETE /api/configs/<config_id>."""
+
+    def test_delete_config_success(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        container: ServiceContainer,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+    ):
+        """Deleting existing config returns 204."""
+        with app.app_context():
+            service = container.config_service()
+            created = service.create_config(valid_mac, sample_config)
+            config_id = created.id
+
+        response = client.delete(f"/api/configs/{config_id}")
+
+        assert response.status_code == 204
+
+        # Verify it's gone
+        response = client.get(f"/api/configs/{config_id}")
+        assert response.status_code == 404
+
+    def test_delete_config_not_found(self, client: FlaskClient, session: Session):
+        """Deleting non-existent config returns 404."""
+        response = client.delete("/api/configs/99999")
+
+        assert response.status_code == 404
+        data = response.get_json()
+        assert data["code"] == "RECORD_NOT_FOUND"
+
+
+class TestGetConfigRaw:
+    """Tests for GET /api/configs/<mac_address>.json (raw endpoint for ESP32 devices)."""
+
+    def test_get_config_raw_success_colon_format(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        container: ServiceContainer,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+    ):
+        """Existing config returns 200 with raw JSON content and Cache-Control header."""
+        with app.app_context():
+            service = container.config_service()
+            service.create_config(valid_mac, sample_config)
+
+        response = client.get(f"/api/configs/{valid_mac}.json")
+
+        assert response.status_code == 200
+        # Response should be raw JSON content, not wrapped
+        data = response.get_json()
+        assert data == sample_config
+        # Verify Cache-Control header is present
+        assert response.headers.get("Cache-Control") == "no-cache"
+
+    def test_get_config_raw_dash_format_backward_compat(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        container: ServiceContainer,
+        sample_config: dict[str, Any],
+    ):
+        """Dash-separated MAC is normalized to colon format (backward compatibility)."""
+        # Create config with colon-separated MAC
+        with app.app_context():
+            service = container.config_service()
+            service.create_config("aa:bb:cc:dd:ee:ff", sample_config)
+
+        # Request with dash-separated MAC
+        response = client.get("/api/configs/aa-bb-cc-dd-ee-ff.json")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data == sample_config
+
+    def test_get_config_raw_uppercase_normalized(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        container: ServiceContainer,
+        sample_config: dict[str, Any],
+    ):
+        """Uppercase MAC is normalized to lowercase."""
+        with app.app_context():
+            service = container.config_service()
+            service.create_config("aa:bb:cc:dd:ee:ff", sample_config)
+
+        # Request with uppercase MAC
+        response = client.get("/api/configs/AA:BB:CC:DD:EE:FF.json")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data == sample_config
+
+    def test_get_config_raw_not_found(self, client: FlaskClient, session: Session, valid_mac: str):
+        """Non-existent config returns 404."""
+        response = client.get(f"/api/configs/{valid_mac}.json")
+
+        assert response.status_code == 404
+        data = response.get_json()
+        assert data["code"] == "RECORD_NOT_FOUND"
+
+    def test_get_config_raw_invalid_mac(self, client: FlaskClient, session: Session):
+        """Invalid MAC format returns 400."""
+        response = client.get("/api/configs/invalid-mac.json")
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["code"] == "INVALID_OPERATION"
+
+    def test_get_config_raw_minimal_fields(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        container: ServiceContainer,
+        sample_config_minimal: dict[str, Any],
+        valid_mac: str,
+    ):
+        """Config with minimal fields returns correctly."""
+        with app.app_context():
+            service = container.config_service()
+            service.create_config(valid_mac, sample_config_minimal)
+
+        response = client.get(f"/api/configs/{valid_mac}.json")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data == sample_config_minimal
+
 
 class TestConfigsWithMqtt:
     """Tests for MQTT integration in config API endpoints."""
 
-    def test_save_config_publishes_mqtt_notification(
-        self, app: Flask, client: FlaskClient, sample_config: dict[str, Any], valid_mac: str, container: ServiceContainer
-    ):
-        """Successful config save publishes MQTT notification."""
-        # Get the mqtt_service from container and mock its publish method
-        mqtt_service = container.mqtt_service()
-        with patch.object(mqtt_service, "publish_config_update") as mock_publish:
-            response = client.put(
-                f"/api/configs/{valid_mac}",
-                json={"content": sample_config},
-                content_type="application/json",
-            )
-
-            assert response.status_code == 200
-
-            # Verify MQTT notification was published with correct filename
-            mock_publish.assert_called_once_with(f"{valid_mac}.json")
-
-    def test_save_config_update_publishes_mqtt_notification(
+    def test_create_config_publishes_mqtt_notification(
         self,
         app: Flask,
         client: FlaskClient,
-        make_config_file: Any,
+        session: Session,
         sample_config: dict[str, Any],
         valid_mac: str,
         container: ServiceContainer,
     ):
-        """Updating existing config publishes MQTT notification."""
-        make_config_file(valid_mac, sample_config)
+        """Successful config create publishes MQTT notification."""
+        mqtt_service = container.mqtt_service()
+        with patch.object(mqtt_service, "publish_config_update") as mock_publish:
+            response = client.post(
+                "/api/configs",
+                json={"mac_address": valid_mac, "content": sample_config},
+                content_type="application/json",
+            )
+
+            assert response.status_code == 201
+
+            # Verify MQTT notification was published with correct filename
+            mock_publish.assert_called_once_with(f"{valid_mac}.json")
+
+    def test_update_config_publishes_mqtt_notification(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+        container: ServiceContainer,
+    ):
+        """Updating config publishes MQTT notification."""
+        # Create config first
+        with app.app_context():
+            service = container.config_service()
+            created = service.create_config(valid_mac, sample_config)
+            config_id = created.id
 
         mqtt_service = container.mqtt_service()
         with patch.object(mqtt_service, "publish_config_update") as mock_publish:
-            updated_config = {**sample_config, "deviceName": "Updated Name"}
+            updated_content = {**sample_config, "deviceName": "Updated Name"}
             response = client.put(
-                f"/api/configs/{valid_mac}",
-                json={"content": updated_config},
+                f"/api/configs/{config_id}",
+                json={"content": updated_content},
                 content_type="application/json",
             )
 
             assert response.status_code == 200
             mock_publish.assert_called_once_with(f"{valid_mac}.json")
 
-    def test_save_config_failure_does_not_publish_mqtt(
-        self, app: Flask, client: FlaskClient, valid_mac: str, container: ServiceContainer
+    def test_create_config_failure_does_not_publish_mqtt(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        valid_mac: str,
+        container: ServiceContainer,
     ):
-        """Failed config save does not publish MQTT notification."""
+        """Failed config create does not publish MQTT notification."""
         mqtt_service = container.mqtt_service()
         with patch.object(mqtt_service, "publish_config_update") as mock_publish:
             # Invalid request - missing content
-            response = client.put(
-                f"/api/configs/{valid_mac}",
-                json={},
+            response = client.post(
+                "/api/configs",
+                json={"mac_address": valid_mac},
                 content_type="application/json",
             )
 
@@ -306,125 +589,108 @@ class TestConfigsWithMqtt:
         self,
         app: Flask,
         client: FlaskClient,
-        make_config_file: Any,
+        session: Session,
         sample_config: dict[str, Any],
         valid_mac: str,
         container: ServiceContainer,
     ):
         """Config deletion does NOT publish MQTT notification."""
-        make_config_file(valid_mac, sample_config)
+        with app.app_context():
+            service = container.config_service()
+            created = service.create_config(valid_mac, sample_config)
+            config_id = created.id
 
         mqtt_service = container.mqtt_service()
         with patch.object(mqtt_service, "publish_config_update") as mock_publish:
-            response = client.delete(f"/api/configs/{valid_mac}")
+            response = client.delete(f"/api/configs/{config_id}")
 
             assert response.status_code == 204
 
             # MQTT should NOT be published on delete
             mock_publish.assert_not_called()
 
-    def test_save_config_mqtt_disabled_succeeds(
-        self, app: Flask, client: FlaskClient, sample_config: dict[str, Any], valid_mac: str, container: ServiceContainer
+    def test_create_config_mqtt_disabled_succeeds(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+        container: ServiceContainer,
     ):
-        """Config save succeeds when MQTT is disabled."""
+        """Config create succeeds when MQTT is disabled."""
         mqtt_service = container.mqtt_service()
 
         # Disable MQTT by setting enabled flag
         mqtt_service.enabled = False
 
-        response = client.put(
-            f"/api/configs/{valid_mac}",
-            json={"content": sample_config},
+        response = client.post(
+            "/api/configs",
+            json={"mac_address": valid_mac, "content": sample_config},
             content_type="application/json",
         )
 
         # API should return success when MQTT is disabled
-        assert response.status_code == 200
+        assert response.status_code == 201
 
 
-class TestGetConfigRaw:
-    """Tests for GET /api/configs/<mac_address>.json (raw endpoint for ESP32 devices)."""
+class TestConfigsMetrics:
+    """Tests for metrics recording in config API endpoints."""
 
-    def test_get_config_raw_success(
-        self, client: FlaskClient, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
+    def test_list_configs_records_metrics(
+        self, client: FlaskClient, session: Session, container: ServiceContainer
     ):
-        """Existing config returns 200 with raw JSON content and Cache-Control header."""
-        make_config_file(valid_mac, sample_config)
+        """List configs records operation metrics."""
+        metrics_service = container.metrics_service()
+        with patch.object(metrics_service, "record_operation") as mock_record:
+            response = client.get("/api/configs")
 
-        response = client.get(f"/api/configs/{valid_mac}.json")
+            assert response.status_code == 200
 
-        assert response.status_code == 200
-        # Response should be raw JSON content, not wrapped
-        data = response.get_json()
-        assert data == sample_config
-        # Verify Cache-Control header is present
-        assert response.headers.get("Cache-Control") == "no-cache"
+            # Verify metrics were recorded
+            mock_record.assert_called_once()
+            args = mock_record.call_args[0]
+            assert args[0] == "list"
+            assert args[1] == "success"
+            assert args[2] > 0  # duration should be positive
 
-    def test_get_config_raw_not_found(self, client: FlaskClient, valid_mac: str):
-        """Non-existent config returns 404."""
-        response = client.get(f"/api/configs/{valid_mac}.json")
-
-        assert response.status_code == 404
-        data = response.get_json()
-        assert "error" in data
-        assert data["code"] == "RECORD_NOT_FOUND"
-
-    def test_get_config_raw_invalid_mac(self, client: FlaskClient):
-        """Invalid MAC format returns 400."""
-        response = client.get("/api/configs/invalid-mac.json")
-
-        assert response.status_code == 400
-        data = response.get_json()
-        assert "error" in data
-        assert data["code"] == "INVALID_OPERATION"
-
-    def test_get_config_raw_uppercase_mac_normalized(
-        self, client: FlaskClient, make_config_file: Any, sample_config: dict[str, Any]
+    def test_create_config_records_metrics_success(
+        self,
+        client: FlaskClient,
+        session: Session,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+        container: ServiceContainer,
     ):
-        """Uppercase MAC is normalized to lowercase."""
-        # Create config with lowercase MAC
-        make_config_file("aa-bb-cc-dd-ee-ff", sample_config)
+        """Successful config create records metrics with success status."""
+        metrics_service = container.metrics_service()
+        with patch.object(metrics_service, "record_operation") as mock_record:
+            response = client.post(
+                "/api/configs",
+                json={"mac_address": valid_mac, "content": sample_config},
+                content_type="application/json",
+            )
 
-        # Request with uppercase MAC
-        response = client.get("/api/configs/AA-BB-CC-DD-EE-FF.json")
+            assert response.status_code == 201
 
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data == sample_config
-
-    def test_get_config_raw_minimal_fields(
-        self, client: FlaskClient, make_config_file: Any, sample_config_minimal: dict[str, Any], valid_mac: str
-    ):
-        """Config with minimal fields returns correctly."""
-        make_config_file(valid_mac, sample_config_minimal)
-
-        response = client.get(f"/api/configs/{valid_mac}.json")
-
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data == sample_config_minimal
-
-    def test_get_config_wrapped_still_works(
-        self, client: FlaskClient, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str
-    ):
-        """Existing wrapped endpoint (without .json) still returns wrapped response."""
-        make_config_file(valid_mac, sample_config)
-
-        response = client.get(f"/api/configs/{valid_mac}")
-
-        assert response.status_code == 200
-        data = response.get_json()
-        # Wrapped response has mac_address, content, etc.
-        assert "mac_address" in data
-        assert "content" in data
-        assert data["mac_address"] == valid_mac
-        assert data["content"] == sample_config
+            mock_record.assert_called_once()
+            args = mock_record.call_args[0]
+            assert args[0] == "create"
+            assert args[1] == "success"
 
     def test_get_config_raw_records_metrics_success(
-        self, client: FlaskClient, make_config_file: Any, sample_config: dict[str, Any], valid_mac: str, container: ServiceContainer
+        self,
+        app: Flask,
+        client: FlaskClient,
+        session: Session,
+        sample_config: dict[str, Any],
+        valid_mac: str,
+        container: ServiceContainer,
     ):
         """Successful raw config get records metrics with success status."""
-        make_config_file(valid_mac, sample_config)
+        with app.app_context():
+            service = container.config_service()
+            service.create_config(valid_mac, sample_config)
 
         metrics_service = container.metrics_service()
         with patch.object(metrics_service, "record_operation") as mock_record:
@@ -432,15 +698,13 @@ class TestGetConfigRaw:
 
             assert response.status_code == 200
 
-            # Verify metrics were recorded
             mock_record.assert_called_once()
             args = mock_record.call_args[0]
             assert args[0] == "get_raw"
             assert args[1] == "success"
-            assert args[2] > 0  # duration should be positive
 
     def test_get_config_raw_records_metrics_error(
-        self, client: FlaskClient, valid_mac: str, container: ServiceContainer
+        self, client: FlaskClient, session: Session, valid_mac: str, container: ServiceContainer
     ):
         """Failed raw config get records metrics with error status."""
         metrics_service = container.metrics_service()
@@ -450,9 +714,7 @@ class TestGetConfigRaw:
 
             assert response.status_code == 404
 
-            # Verify metrics were recorded with error status
             mock_record.assert_called_once()
             args = mock_record.call_args[0]
             assert args[0] == "get_raw"
             assert args[1] == "error"
-            assert args[2] > 0  # duration should be positive
