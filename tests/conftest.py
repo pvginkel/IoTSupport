@@ -3,9 +3,12 @@
 import sqlite3
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
+
+if TYPE_CHECKING:
+    from app.services.config_service import ConfigService
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from flask import Flask
@@ -216,6 +219,37 @@ def sample_config_minimal_dict() -> dict[str, Any]:
 def valid_mac() -> str:
     """Valid MAC address for testing (colon-separated)."""
     return "aa:bb:cc:dd:ee:ff"
+
+
+@pytest.fixture
+def config_service(session: Session) -> "ConfigService":
+    """Create ConfigService instance backed by the test session.
+
+    Use this fixture in service tests to avoid app.app_context() boilerplate.
+    """
+    from app.services.config_service import ConfigService
+
+    return ConfigService(session)
+
+
+@pytest.fixture
+def make_config(session: Session) -> Any:
+    """Factory fixture for creating config records in tests.
+
+    Use this fixture in API tests to set up test data without app.app_context() boilerplate.
+
+    Usage:
+        config = make_config("aa:bb:cc:dd:ee:ff", sample_config)
+    """
+    from app.models.config import Config
+    from app.services.config_service import ConfigService
+
+    service = ConfigService(session)
+
+    def _make(mac_address: str, content: str) -> Config:
+        return service.create_config(mac_address, content)
+
+    return _make
 
 
 @pytest.fixture
