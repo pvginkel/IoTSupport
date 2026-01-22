@@ -163,7 +163,8 @@ class RotationService:
 
         try:
             # Step 1: Check CRON schedule
-            if self._should_trigger_scheduled_rotation(last_scheduled_at):
+            # Trigger if never scheduled before OR if schedule indicates it's time
+            if not last_scheduled_at or self._should_trigger_scheduled_rotation(last_scheduled_at):
                 queued_count = self.trigger_fleet_rotation()
                 result.scheduled_rotation_triggered = True
                 logger.info("Scheduled rotation triggered, queued %d devices", queued_count)
@@ -209,14 +210,17 @@ class RotationService:
             logger.error("Rotation job failed after %.3fs: %s", duration, e)
             raise
 
-    def _should_trigger_scheduled_rotation(self, last_scheduled_at: datetime | None) -> bool:
+    def _should_trigger_scheduled_rotation(self, last_scheduled_at: datetime) -> bool:
         """Check if CRON schedule triggers a new rotation cycle.
 
+        This method requires last_scheduled_at to be non-None. The caller should
+        handle the first-run case (when last_scheduled_at is None) separately.
+
         Args:
-            last_scheduled_at: When the last scheduled rotation was triggered
+            last_scheduled_at: When the last scheduled rotation was triggered (required)
 
         Returns:
-            True if a new rotation should be triggered
+            True if a new rotation should be triggered based on CRON schedule
         """
         try:
             now = datetime.utcnow()
@@ -225,12 +229,7 @@ class RotationService:
             # Get the most recent scheduled time before now
             prev_time = cron_iter.get_prev(datetime)
 
-            # If we haven't triggered since the last scheduled time, trigger now
-            if last_scheduled_at is None:
-                # First run, trigger if we're within 5 minutes of a scheduled time
-                diff = abs((now - prev_time).total_seconds())
-                return diff < 300  # 5 minutes grace period
-
+            # Trigger if there's a scheduled time after last_scheduled_at
             return prev_time > last_scheduled_at
 
         except Exception as e:
@@ -342,10 +341,15 @@ class RotationService:
     def _rotate_device(self, device: Device) -> None:
         """Initiate rotation for a device.
 
-        1. Cache current secret for rollback
-        2. Regenerate secret in Keycloak
-        3. Update device state to PENDING
-        4. Send MQTT notification
+        This method only sets up the rotation - the actual secret regeneration
+        happens when the device calls /iot/provisioning. This prevents bricking
+        devices that might be restarting when we change their credentials.
+
+        Flow:
+        1. Update device state to PENDING
+        2. Send MQTT notification to trigger device
+        3. Device calls /iot/provisioning where secret is cached and regenerated
+        4. Device writes new secret, reboots, calls /iot/config to confirm
 
         Args:
             device: Device to rotate
@@ -354,30 +358,14 @@ class RotationService:
 
         logger.info("Starting rotation for device %s (client: %s)", device.key, client_id)
 
-        # Get and cache current secret
-        try:
-            current_secret = self.keycloak_admin_service.get_client_secret(client_id)
-            self.device_service.cache_secret_for_rotation(device, current_secret)
-        except ExternalServiceException as e:
-            logger.error("Failed to cache secret for device %s: %s", device.key, e)
-            raise
-
-        # Regenerate secret in Keycloak
-        try:
-            self.keycloak_admin_service.regenerate_secret(client_id)
-            logger.debug("Regenerated secret for device %s", device.key)
-        except ExternalServiceException as e:
-            # Rollback cached secret
-            self.device_service.clear_cached_secret(device)
-            logger.error("Failed to regenerate secret for device %s: %s", device.key, e)
-            raise
-
-        # Update device state
+        # Update device state to PENDING
+        # Secret caching and regeneration happens in /iot/provisioning
         device.rotation_state = RotationState.PENDING.value
         device.last_rotation_attempt_at = datetime.utcnow()
         self.db.flush()
 
         # Send MQTT notification (fire-and-forget)
+        # Device receives this, calls /iot/provisioning to get new credentials
         topic = f"{self.ROTATION_TOPIC_PREFIX}/{client_id}/{self.ROTATION_TOPIC_SUFFIX}"
         self._publish_rotation_notification(topic)
 

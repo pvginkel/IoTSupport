@@ -14,10 +14,10 @@ from datetime import datetime
 from typing import Any
 
 from dependency_injector.wiring import Provide, inject
-from flask import Blueprint, Response
+from flask import Blueprint, send_file
 
 from app.config import Settings
-from app.exceptions import AuthenticationException, RecordNotFoundException
+from app.exceptions import AuthenticationException
 from app.models.device import RotationState
 from app.services.auth_service import AuthService
 from app.services.container import ServiceContainer
@@ -181,19 +181,15 @@ def get_firmware(
         else:
             model_code = device_ctx.model_code
 
-        # Get firmware content
-        if not firmware_service.firmware_exists(model_code):
-            raise RecordNotFoundException("Firmware", model_code)
+        # Get firmware stream
+        stream = firmware_service.get_firmware_stream(model_code)
 
-        content = firmware_service.get_firmware(model_code)
-
-        return Response(
-            content,
+        # Use send_file with BytesIO stream
+        return send_file(
+            stream,
             mimetype="application/octet-stream",
-            headers={
-                "Content-Disposition": f"attachment; filename=firmware-{model_code}.bin",
-                "Cache-Control": "no-cache",
-            },
+            as_attachment=True,
+            download_name=f"firmware-{model_code}.bin",
         )
 
     except Exception:
@@ -203,6 +199,53 @@ def get_firmware(
     finally:
         duration = time.perf_counter() - start_time
         metrics_service.record_operation("iot_get_firmware", status, duration)
+
+
+@iot_bp.route("/firmware-version", methods=["GET"])
+@handle_api_errors
+@inject
+def get_firmware_version(
+    device_service: DeviceService = Provide[ServiceContainer.device_service],
+    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+) -> Any:
+    """Get the current firmware version for the device's model.
+
+    This lightweight endpoint allows devices to check if new firmware
+    is available without downloading the binary. Devices can poll this
+    periodically and only download firmware when the version changes.
+
+    Returns JSON with the firmware version string.
+    """
+    start_time = time.perf_counter()
+    status = "success"
+
+    try:
+        device_ctx = get_device_auth_context()
+
+        # If OIDC is disabled (testing), get device from query param
+        if device_ctx is None:
+            from flask import request
+            device_key = request.args.get("device_key")
+            if not device_key:
+                raise AuthenticationException("Device authentication required")
+            device = device_service.get_device_by_key(device_key)
+            model = device.device_model
+        else:
+            device = device_service.get_device_by_key(device_ctx.device_key)
+            model = device.device_model
+
+        # Return firmware version (may be None if no firmware uploaded)
+        return {
+            "firmware_version": model.firmware_version,
+        }
+
+    except Exception:
+        status = "error"
+        raise
+
+    finally:
+        duration = time.perf_counter() - start_time
+        metrics_service.record_operation("iot_get_firmware_version", status, duration)
 
 
 @iot_bp.route("/provisioning", methods=["GET"])
@@ -241,8 +284,17 @@ def get_provisioning_for_rotation(
             device = device_service.get_device_by_key(device_ctx.device_key)
             client_id = device_ctx.client_id
 
+        # Cache current secret for rollback in case of timeout
+        # This must happen right before regeneration so we have the exact secret to restore
+        current_secret = keycloak_admin_service.get_client_secret(client_id)
+        device_service.cache_secret_for_rotation(device, current_secret)
+
         # Regenerate secret in Keycloak
+        # This is the critical moment - the device's old secret becomes invalid
         new_secret = keycloak_admin_service.regenerate_secret(client_id)
+
+        # Update secret_created_at to track when this secret was issued
+        device.secret_created_at = datetime.utcnow()
 
         # Build provisioning package
         package = {
