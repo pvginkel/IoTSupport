@@ -40,6 +40,7 @@ class TokenResponse:
     """Token response from OIDC provider."""
 
     access_token: str
+    id_token: str | None  # ID token for logout
     refresh_token: str | None
     token_type: str
     expires_in: int
@@ -294,6 +295,7 @@ class OidcClientService:
 
             return TokenResponse(
                 access_token=str(access_token),
+                id_token=token_data.get("id_token"),
                 refresh_token=token_data.get("refresh_token"),
                 token_type=token_data.get("token_type", "Bearer"),
                 expires_in=int(token_data.get("expires_in", 300)),
@@ -363,6 +365,7 @@ class OidcClientService:
 
             return TokenResponse(
                 access_token=str(access_token),
+                id_token=token_data.get("id_token"),
                 refresh_token=token_data.get("refresh_token", refresh_token),
                 token_type=token_data.get("token_type", "Bearer"),
                 expires_in=int(token_data.get("expires_in", 300)),
