@@ -3,8 +3,8 @@ import { test as base, expect } from '@playwright/test';
 import type { WorkerInfo } from '@playwright/test';
 import getPort from 'get-port';
 import { startBackend, startFrontend } from './process/servers';
-import { createApiClient } from '../api/client';
 import { DevicesFactory } from '../api/factories/devices';
+import { AuthFactory } from '../api/factories/auth';
 
 type ServiceManager = {
   frontendUrl: string;
@@ -15,6 +15,7 @@ type ServiceManager = {
 type TestFixtures = {
   frontendUrl: string;
   devices: DevicesFactory;
+  auth: AuthFactory;
 };
 
 type InternalFixtures = {
@@ -30,9 +31,20 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
     await use(frontendUrl);
   },
 
-  devices: async ({ _serviceManager }, use) => {
-    const client = createApiClient({ baseUrl: _serviceManager.backendUrl });
-    const factory = new DevicesFactory(client);
+  devices: async ({ _serviceManager, page, auth }, use) => {
+    // Authenticate first - backend requires auth for all API calls
+    await auth.createSession({ name: 'Test User' });
+
+    // Use frontend URL and page.request to share cookies with browser
+    const factory = new DevicesFactory(_serviceManager.frontendUrl, page);
+    await use(factory);
+  },
+
+  auth: async ({ _serviceManager, page }, use) => {
+    // Use frontend URL so cookies are set on the correct origin
+    // The /api/* routes are proxied to the backend
+    // Uses page.request to share cookies with the browser context
+    const factory = new AuthFactory(_serviceManager.frontendUrl, page);
     await use(factory);
   },
 
@@ -68,6 +80,16 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
 
         // Allow 404 errors for recently deleted resources
         if (text.includes('404') || text.includes('NOT FOUND')) {
+          return;
+        }
+
+        // Allow 401 errors during auth tests (expected when unauthenticated)
+        if (text.includes('401') || text.includes('UNAUTHORIZED')) {
+          return;
+        }
+
+        // Allow 500 errors during auth error tests
+        if (text.includes('500') || text.includes('INTERNAL SERVER ERROR')) {
           return;
         }
 

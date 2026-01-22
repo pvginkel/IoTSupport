@@ -318,6 +318,56 @@
         "title": "LvglImageQuerySchema",
         "type": "object"
       },
+      "UserInfoResponseSchema.a535b8c": {
+        "description": "Response schema for current user information.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "User email address",
+            "title": "Email"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "User display name",
+            "title": "Name"
+          },
+          "roles": {
+            "description": "User roles",
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "subject": {
+            "description": "User subject (sub claim from JWT)",
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "email",
+          "name",
+          "roles"
+        ],
+        "title": "UserInfoResponseSchema",
+        "type": "object"
+      },
       "ValidationError.6a07bef": {
         "description": "Model of a validation error response.",
         "items": {
@@ -404,6 +454,87 @@
           }
         },
         "summary": "Upload asset file with cryptographic signature verification.",
+        "tags": []
+      }
+    },
+    "/api/assets/{filename}": {
+      "get": {
+        "description": "This endpoint serves binary firmware files directly to devices. Validates filename to prevent path traversal attacks.",
+        "operationId": "get__api_assets_{filename}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "filename",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Serve raw asset file for ESP32 device consumption.",
+        "tags": []
+      }
+    },
+    "/api/auth/callback": {
+      "get": {
+        "description": "Exchanges authorization code for tokens and sets access token cookie.\n\nQuery Parameters:     code: Authorization code from OIDC provider     state: CSRF token from OIDC provider\n\nReturns:     302: Redirect to original redirect URL with access token cookie set     400: Invalid or missing callback parameters     401: Token exchange failed",
+        "operationId": "get__api_auth_callback",
+        "parameters": [],
+        "responses": {},
+        "summary": "Handle OIDC callback after user authorization.",
+        "tags": []
+      }
+    },
+    "/api/auth/login": {
+      "get": {
+        "description": "Generates authorization URL and redirects to OIDC provider. Stores PKCE state in signed cookie.\n\nQuery Parameters:     redirect: URL to redirect to after successful login (required)\n\nReturns:     302: Redirect to OIDC provider authorization endpoint     400: Missing or invalid redirect parameter",
+        "operationId": "get__api_auth_login",
+        "parameters": [],
+        "responses": {},
+        "summary": "Initiate OIDC login flow with PKCE.",
+        "tags": []
+      }
+    },
+    "/api/auth/logout": {
+      "get": {
+        "description": "Clears access token cookie and redirects to specified URL.\n\nQuery Parameters:     redirect: URL to redirect to after logout (default: /)\n\nReturns:     302: Redirect to logout URL with cookie cleared",
+        "operationId": "get__api_auth_logout",
+        "parameters": [],
+        "responses": {},
+        "summary": "Log out current user.",
+        "tags": []
+      }
+    },
+    "/api/auth/self": {
+      "get": {
+        "description": "Returns user information from the validated JWT token in the cookie.\n\nThis endpoint is marked @public because it handles authentication explicitly - it returns 401 if not authenticated rather than relying on the before_request hook.\n\nReturns:     200: User information from validated token     401: No valid token provided or token invalid",
+        "operationId": "get__api_auth_self",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserInfoResponseSchema.a535b8c"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Get current authenticated user information.",
         "tags": []
       }
     },
@@ -587,6 +718,26 @@
           }
         },
         "summary": "Create or update configuration (upsert).",
+        "tags": []
+      }
+    },
+    "/api/configs/{mac_address}.json": {
+      "get": {
+        "description": "This endpoint returns the raw config content without wrapping, suitable for direct consumption by ESP32 devices.",
+        "operationId": "get__api_configs_{mac_address}.json",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "mac_address",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Get raw JSON configuration for ESP32 device consumption.",
         "tags": []
       }
     },

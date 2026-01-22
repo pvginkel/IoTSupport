@@ -167,9 +167,9 @@ export function ${hookName}(${paramsArg}${(hasParams || supportsQueryParams) ? '
   return useQuery({
     queryKey: ['${transformedOperationId}'${(hasParams || supportsQueryParams) ? ', params' : ''}],
     queryFn: async () => {
-      const { data, error } = await api.${method.toUpperCase()}(${pathWithParams}${queryOptions});
-      if (error) throw toApiError(error);
-      return data;
+      const result = await api.${method.toUpperCase()}(${pathWithParams}${queryOptions}) as { data?: unknown; error?: unknown; response: Response };
+      if (result.error) throw toApiError(result.error, result.response.status);
+      return result.data;
     },
     ...options
   });
@@ -232,9 +232,9 @@ export function ${hookName}(options?: Omit<Parameters<typeof useMutation>[0], 'm
   // @ts-ignore
   return useMutation({
     mutationFn: async (${(variablesType == 'void' ? '' : 'variables: ' + variablesType)}) => {
-      const { data, error } = await api.${method.toUpperCase()}(${pathWithParams}${mutationArgs});
-      if (error) throw toApiError(error);
-      return data;
+      const result = await api.${method.toUpperCase()}(${pathWithParams}${mutationArgs}) as { data?: unknown; error?: unknown; response: Response };
+      if (result.error) throw toApiError(result.error, result.response.status);
+      return result.data;
     },
     onSuccess: () => {
       // Invalidate relevant queries after successful mutation
@@ -286,8 +286,8 @@ function transformOperationId(operationId) {
   let baseName = operationId.replace(/\{[^}]+\}/g, '_');
   baseName = baseName.replace(/__api/g, '');
 
-  // Replace hyphens with underscores
-  baseName = baseName.replace(/-/g, '_');
+  // Replace hyphens and dots with underscores
+  baseName = baseName.replace(/[-\.]/g, '_');
 
   // Clean up multiple consecutive underscores
   baseName = baseName.replace(/_+/g, '_');

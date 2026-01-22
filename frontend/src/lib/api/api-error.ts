@@ -39,8 +39,20 @@ export class ApiError extends Error {
   }
 }
 
-export function toApiError(error: unknown): Error {
-  return error instanceof Error ? error : new ApiError(error)
+export function toApiError(error: unknown, status?: number): Error {
+  if (error instanceof Error) {
+    // If we have a status, attach it to the existing error
+    if (status !== undefined) {
+      (error as Error & { status?: number }).status = status
+    }
+    return error
+  }
+  const apiError = new ApiError(error)
+  // Override status from response if provided (more reliable than parsing body)
+  if (status !== undefined) {
+    apiError.status = status
+  }
+  return apiError
 }
 
 /**

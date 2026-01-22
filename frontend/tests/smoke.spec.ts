@@ -1,13 +1,17 @@
 import { test, expect } from './support/fixtures';
 
 test.describe('Smoke Tests', () => {
-  test('frontend loads and shows app shell', async ({ page }) => {
+  test('frontend loads and shows app shell', async ({ page, auth }) => {
+    // Authenticate first
+    await auth.createSession({ name: 'Test User' });
+
     await page.goto('/');
 
     // Check page title
     await expect(page).toHaveTitle(/IoT Support/);
 
-    // Check sidebar is visible
+    // Check sidebar is visible (on desktop)
+    await page.setViewportSize({ width: 1280, height: 720 });
     const sidebar = page.getByTestId('app-shell.sidebar');
     await expect(sidebar).toBeVisible();
 
@@ -16,7 +20,9 @@ test.describe('Smoke Tests', () => {
     await expect(devicesLink).toBeVisible();
   });
 
-  test('root redirects to /devices', async ({ page }) => {
+  test('root redirects to /devices', async ({ page, auth }) => {
+    await auth.createSession({ name: 'Test User' });
+
     await page.goto('/');
 
     // Should redirect to /devices
@@ -33,7 +39,10 @@ test.describe('Smoke Tests', () => {
     expect(response.ok()).toBeTruthy();
   });
 
-  test('sidebar navigation shows active state', async ({ page }) => {
+  test('sidebar navigation shows active state', async ({ page, auth }) => {
+    await auth.createSession({ name: 'Test User' });
+
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/devices');
 
     // The devices link should show active state
