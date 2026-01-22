@@ -1,0 +1,461 @@
+"""Device service for managing IoT devices."""
+
+import base64
+import hashlib
+import json
+import logging
+import secrets
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, cast
+
+from cryptography.fernet import Fernet
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.exceptions import (
+    ExternalServiceException,
+    InvalidOperationException,
+    RecordNotFoundException,
+    ValidationException,
+)
+from app.models.device import Device, RotationState
+
+if TYPE_CHECKING:
+    from app.config import Settings
+    from app.services.device_model_service import DeviceModelService
+    from app.services.keycloak_admin_service import KeycloakAdminService
+
+logger = logging.getLogger(__name__)
+
+
+def _derive_fernet_key(secret_key: str) -> bytes:
+    """Derive a Fernet-compatible key from SECRET_KEY.
+
+    Args:
+        secret_key: Application SECRET_KEY
+
+    Returns:
+        32-byte URL-safe base64 encoded key
+    """
+    # Use SHA256 to derive a 32-byte key from the secret
+    key_bytes = hashlib.sha256(secret_key.encode()).digest()
+    return base64.urlsafe_b64encode(key_bytes)
+
+
+class DeviceService:
+    """Service for managing IoT devices.
+
+    Handles device CRUD operations, Keycloak client lifecycle,
+    and provisioning package generation.
+    """
+
+    def __init__(
+        self,
+        db: Session,
+        config: "Settings",
+        device_model_service: "DeviceModelService",
+        keycloak_admin_service: "KeycloakAdminService",
+    ) -> None:
+        """Initialize service with dependencies.
+
+        Args:
+            db: SQLAlchemy database session
+            config: Application settings
+            device_model_service: Service for device model operations
+            keycloak_admin_service: Service for Keycloak operations
+        """
+        self.db = db
+        self.config = config
+        self.device_model_service = device_model_service
+        self.keycloak_admin_service = keycloak_admin_service
+
+        # Initialize Fernet cipher for secret encryption
+        fernet_key = config.FERNET_KEY
+        if fernet_key:
+            self._fernet = Fernet(fernet_key.encode())
+        else:
+            # Derive from SECRET_KEY
+            derived_key = _derive_fernet_key(config.SECRET_KEY)
+            self._fernet = Fernet(derived_key)
+
+    def _generate_device_key(self, max_attempts: int = 3) -> str:
+        """Generate a unique 8-character device key.
+
+        Uses cryptographically secure random bytes encoded as base32.
+
+        Args:
+            max_attempts: Maximum retry attempts for uniqueness
+
+        Returns:
+            Unique 8-character lowercase alphanumeric key
+
+        Raises:
+            InvalidOperationException: If unable to generate unique key
+        """
+        for _ in range(max_attempts):
+            # Generate 5 random bytes (40 bits), encode as base32 (8 chars)
+            random_bytes = secrets.token_bytes(5)
+            key = base64.b32encode(random_bytes).decode().lower()[:8]
+
+            # Verify uniqueness
+            stmt = select(Device).where(Device.key == key)
+            existing = self.db.scalars(stmt).one_or_none()
+
+            if existing is None:
+                return key
+
+        raise InvalidOperationException(
+            "generate device key",
+            "unable to generate unique key after multiple attempts"
+        )
+
+    def _encrypt_secret(self, secret: str) -> str:
+        """Encrypt a secret for storage in cached_secret.
+
+        Args:
+            secret: Plain text secret
+
+        Returns:
+            Encrypted secret string
+        """
+        return self._fernet.encrypt(secret.encode()).decode()
+
+    def _decrypt_secret(self, encrypted: str) -> str:
+        """Decrypt a cached secret.
+
+        Args:
+            encrypted: Encrypted secret string
+
+        Returns:
+            Plain text secret
+        """
+        return self._fernet.decrypt(encrypted.encode()).decode()
+
+    def list_devices(
+        self,
+        model_id: int | None = None,
+        rotation_state: str | None = None,
+    ) -> list[Device]:
+        """List devices with optional filtering.
+
+        Args:
+            model_id: Filter by device model ID
+            rotation_state: Filter by rotation state
+
+        Returns:
+            List of Device instances
+        """
+        stmt = select(Device).order_by(Device.key)
+
+        if model_id is not None:
+            stmt = stmt.where(Device.device_model_id == model_id)
+
+        if rotation_state is not None:
+            stmt = stmt.where(Device.rotation_state == rotation_state)
+
+        return list(self.db.scalars(stmt).all())
+
+    def get_device(self, device_id: int) -> Device:
+        """Get a device by ID.
+
+        Args:
+            device_id: Device ID
+
+        Returns:
+            Device instance
+
+        Raises:
+            RecordNotFoundException: If device doesn't exist
+        """
+        stmt = select(Device).where(Device.id == device_id)
+        device = self.db.scalars(stmt).one_or_none()
+
+        if device is None:
+            raise RecordNotFoundException("Device", str(device_id))
+
+        return device
+
+    def get_device_by_key(self, key: str) -> Device:
+        """Get a device by key.
+
+        Args:
+            key: Device key
+
+        Returns:
+            Device instance
+
+        Raises:
+            RecordNotFoundException: If device doesn't exist
+        """
+        stmt = select(Device).where(Device.key == key)
+        device = self.db.scalars(stmt).one_or_none()
+
+        if device is None:
+            raise RecordNotFoundException("Device", key)
+
+        return device
+
+    def create_device(self, device_model_id: int, config: str) -> Device:
+        """Create a new device with Keycloak client.
+
+        Args:
+            device_model_id: ID of the device model
+            config: Device configuration JSON string
+
+        Returns:
+            Created Device instance
+
+        Raises:
+            RecordNotFoundException: If model doesn't exist
+            ValidationException: If config is invalid JSON
+            ExternalServiceException: If Keycloak client creation fails
+        """
+        # Validate model exists
+        model = self.device_model_service.get_device_model(device_model_id)
+
+        # Validate config JSON
+        try:
+            json.loads(config)
+        except json.JSONDecodeError as e:
+            raise ValidationException(f"config must be valid JSON: {e}") from e
+
+        # Generate unique device key
+        key = self._generate_device_key()
+
+        # Build client ID
+        client_id = f"iotdevice-{model.code}-{key}"
+
+        # Create Keycloak client first
+        try:
+            self.keycloak_admin_service.create_client(client_id)
+        except ExternalServiceException as e:
+            logger.error("Failed to create Keycloak client for device: %s", e)
+            raise
+
+        # Create device record
+        try:
+            device = Device(
+                key=key,
+                device_model_id=device_model_id,
+                config=config,
+                rotation_state=RotationState.OK.value,
+                secret_created_at=datetime.utcnow(),
+            )
+            self.db.add(device)
+            self.db.flush()
+
+            logger.info("Created device %s for model %s", key, model.code)
+            return device
+
+        except Exception as e:
+            # Attempt to clean up Keycloak client on failure
+            logger.warning("DB insert failed, attempting to cleanup Keycloak client %s", client_id)
+            try:
+                self.keycloak_admin_service.delete_client(client_id)
+                logger.info("Cleaned up orphaned Keycloak client %s", client_id)
+            except ExternalServiceException as cleanup_error:
+                logger.warning(
+                    "Failed to cleanup Keycloak client %s: %s - manual cleanup may be required",
+                    client_id,
+                    cleanup_error,
+                )
+            raise ExternalServiceException(
+                "create device",
+                f"database operation failed: {e}"
+            ) from e
+
+    def update_device(self, device_id: int, config: str) -> Device:
+        """Update a device's configuration.
+
+        Args:
+            device_id: Device ID
+            config: New configuration JSON string
+
+        Returns:
+            Updated Device instance
+
+        Raises:
+            RecordNotFoundException: If device doesn't exist
+            ValidationException: If config is invalid JSON
+        """
+        device = self.get_device(device_id)
+
+        # Validate config JSON
+        try:
+            json.loads(config)
+        except json.JSONDecodeError as e:
+            raise ValidationException(f"config must be valid JSON: {e}") from e
+
+        device.config = config
+        self.db.flush()
+
+        logger.info("Updated device %s config", device.key)
+        return device
+
+    def delete_device(self, device_id: int) -> str:
+        """Delete a device and its Keycloak client.
+
+        Args:
+            device_id: Device ID
+
+        Returns:
+            Deleted device key
+
+        Raises:
+            RecordNotFoundException: If device doesn't exist
+            ExternalServiceException: If Keycloak client deletion fails
+        """
+        device = self.get_device(device_id)
+        client_id = device.client_id
+        key = device.key
+
+        # Delete database record first
+        self.db.delete(device)
+        self.db.flush()
+
+        # Delete Keycloak client (best-effort)
+        try:
+            self.keycloak_admin_service.delete_client(client_id)
+            logger.info("Deleted device %s and Keycloak client %s", key, client_id)
+        except ExternalServiceException as e:
+            logger.warning(
+                "Failed to delete Keycloak client %s: %s - may require manual cleanup",
+                client_id,
+                e,
+            )
+
+        return key
+
+    def get_provisioning_package(self, device_id: int) -> dict[str, Any]:
+        """Generate provisioning package for a device.
+
+        Retrieves the current client secret from Keycloak.
+
+        Args:
+            device_id: Device ID
+
+        Returns:
+            Provisioning package dict
+
+        Raises:
+            RecordNotFoundException: If device doesn't exist
+            ExternalServiceException: If Keycloak secret retrieval fails
+        """
+        device = self.get_device(device_id)
+        client_id = device.client_id
+
+        # Get current secret from Keycloak
+        secret = self.keycloak_admin_service.get_client_secret(client_id)
+
+        return {
+            "device_key": device.key,
+            "client_id": client_id,
+            "client_secret": secret,
+            "token_url": self.config.OIDC_TOKEN_URL,
+            "base_url": self.config.BASEURL,
+            "mqtt_url": self.config.MQTT_URL,
+            "wifi_ssid": self.config.WIFI_SSID,
+            "wifi_password": self.config.WIFI_PASSWORD,
+        }
+
+    def trigger_rotation(self, device_id: int) -> str:
+        """Trigger rotation for a single device.
+
+        Sets the device to QUEUED state if currently OK or TIMEOUT.
+        Does nothing if already QUEUED or PENDING.
+
+        Args:
+            device_id: Device ID
+
+        Returns:
+            "queued" if rotation was triggered, "already_pending" if already in progress
+
+        Raises:
+            RecordNotFoundException: If device doesn't exist
+        """
+        device = self.get_device(device_id)
+        current_state = RotationState(device.rotation_state)
+
+        if current_state in (RotationState.QUEUED, RotationState.PENDING):
+            return "already_pending"
+
+        device.rotation_state = RotationState.QUEUED.value
+        self.db.flush()
+
+        logger.info("Queued device %s for rotation", device.key)
+        return "queued"
+
+    def get_device_by_client_id(self, client_id: str) -> Device:
+        """Get a device by its Keycloak client ID.
+
+        Extracts the device key from the client ID and looks up the device.
+
+        Args:
+            client_id: Keycloak client ID (format: iotdevice-<model>-<key>)
+
+        Returns:
+            Device instance
+
+        Raises:
+            ValidationException: If client ID format is invalid
+            RecordNotFoundException: If device doesn't exist
+        """
+        # Parse client ID: iotdevice-<model_code>-<device_key>
+        if not client_id.startswith("iotdevice-"):
+            raise ValidationException(
+                f"Invalid client ID format: {client_id}"
+            )
+
+        parts = client_id.split("-")
+        if len(parts) < 3:
+            raise ValidationException(
+                f"Invalid client ID format: {client_id}"
+            )
+
+        # Device key is the last part
+        device_key = parts[-1]
+
+        return self.get_device_by_key(device_key)
+
+    def get_config_for_device(self, device: Device) -> dict[str, Any]:
+        """Get parsed config for a device.
+
+        Args:
+            device: Device instance
+
+        Returns:
+            Parsed config dict
+        """
+        return cast(dict[str, Any], json.loads(device.config))
+
+    def cache_secret_for_rotation(self, device: Device, secret: str) -> None:
+        """Cache a secret for potential rollback during rotation.
+
+        Args:
+            device: Device instance
+            secret: Secret to cache (will be encrypted)
+        """
+        device.cached_secret = self._encrypt_secret(secret)
+        self.db.flush()
+
+    def get_cached_secret(self, device: Device) -> str | None:
+        """Get the cached secret for a device.
+
+        Args:
+            device: Device instance
+
+        Returns:
+            Decrypted cached secret or None if not set
+        """
+        if device.cached_secret is None:
+            return None
+        return self._decrypt_secret(device.cached_secret)
+
+    def clear_cached_secret(self, device: Device) -> None:
+        """Clear the cached secret for a device.
+
+        Args:
+            device: Device instance
+        """
+        device.cached_secret = None
+        self.db.flush()

@@ -6,11 +6,15 @@ from sqlalchemy.orm import sessionmaker
 from app.config import Settings
 from app.services.asset_upload_service import AssetUploadService
 from app.services.auth_service import AuthService
-from app.services.config_service import ConfigService
+from app.services.device_model_service import DeviceModelService
+from app.services.device_service import DeviceService
+from app.services.firmware_service import FirmwareService
 from app.services.image_proxy_service import ImageProxyService
+from app.services.keycloak_admin_service import KeycloakAdminService
 from app.services.metrics_service import MetricsService
 from app.services.mqtt_service import MqttService
 from app.services.oidc_client_service import OidcClientService
+from app.services.rotation_service import RotationService
 from app.services.test_data_service import TestDataService
 from app.services.testing_service import TestingService
 
@@ -46,12 +50,6 @@ class ServiceContainer(containers.DeclarativeContainer):
         timestamp_tolerance_seconds=config.provided.TIMESTAMP_TOLERANCE_SECONDS,
     )
 
-    # ConfigService - Factory creates new instance per request with database session
-    config_service = providers.Factory(
-        ConfigService,
-        db=db_session,
-    )
-
     # TestDataService - Factory creates new instance per request with database session
     test_data_service = providers.Factory(
         TestDataService,
@@ -80,3 +78,43 @@ class ServiceContainer(containers.DeclarativeContainer):
 
     # TestingService - Singleton for test session management
     testing_service = providers.Singleton(TestingService)
+
+    # KeycloakAdminService - Singleton for admin API access
+    keycloak_admin_service = providers.Singleton(
+        KeycloakAdminService,
+        config=config,
+        metrics_service=metrics_service,
+    )
+
+    # FirmwareService - Singleton for firmware file management
+    firmware_service = providers.Singleton(
+        FirmwareService,
+        assets_dir=config.provided.ASSETS_DIR,
+    )
+
+    # DeviceModelService - Factory creates new instance per request with database session
+    device_model_service = providers.Factory(
+        DeviceModelService,
+        db=db_session,
+        firmware_service=firmware_service,
+    )
+
+    # DeviceService - Factory creates new instance per request with database session
+    device_service = providers.Factory(
+        DeviceService,
+        db=db_session,
+        config=config,
+        device_model_service=device_model_service,
+        keycloak_admin_service=keycloak_admin_service,
+    )
+
+    # RotationService - Factory creates new instance per request with database session
+    rotation_service = providers.Factory(
+        RotationService,
+        db=db_session,
+        config=config,
+        device_service=device_service,
+        keycloak_admin_service=keycloak_admin_service,
+        mqtt_service=mqtt_service,
+        metrics_service=metrics_service,
+    )

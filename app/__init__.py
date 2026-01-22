@@ -57,10 +57,13 @@ def create_app(settings: "Settings | None" = None, skip_background_services: boo
         "app.api",
         "app.api.assets",
         "app.api.auth",
-        "app.api.configs",
+        "app.api.device_models",
+        "app.api.devices",
         "app.api.health",
         "app.api.images",
+        "app.api.iot",
         "app.api.metrics",
+        "app.api.rotation",
         "app.api.testing",
     ]
 
@@ -87,6 +90,11 @@ def create_app(settings: "Settings | None" = None, skip_background_services: boo
     from app.api.metrics import metrics_bp
 
     app.register_blueprint(metrics_bp)
+
+    # Register IoT blueprint (at root, not under /api)
+    from app.api.iot import iot_bp
+
+    app.register_blueprint(iot_bp)
 
     # Request teardown handler for database session management
     @app.teardown_request

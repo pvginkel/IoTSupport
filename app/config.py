@@ -118,6 +118,55 @@ class Settings(BaseSettings):
         description="SameSite attribute for cookie"
     )
 
+    # Keycloak Admin API Settings (for device provisioning)
+    OIDC_TOKEN_URL: str | None = Field(
+        default=None,
+        description="OIDC token endpoint URL (e.g., https://auth.example.com/realms/iot/protocol/openid-connect/token)"
+    )
+    KEYCLOAK_ADMIN_URL: str | None = Field(
+        default=None,
+        description="Keycloak admin API URL (e.g., https://auth.example.com/admin/realms/iot)"
+    )
+    KEYCLOAK_REALM: str | None = Field(
+        default=None,
+        description="Keycloak realm name for device clients"
+    )
+    KEYCLOAK_ADMIN_CLIENT_ID: str | None = Field(
+        default=None,
+        description="Keycloak admin service account client ID"
+    )
+    KEYCLOAK_ADMIN_CLIENT_SECRET: str | None = Field(
+        default=None,
+        description="Keycloak admin service account client secret"
+    )
+
+    # WiFi Credentials for Provisioning
+    WIFI_SSID: str | None = Field(
+        default=None,
+        description="WiFi SSID for device provisioning"
+    )
+    WIFI_PASSWORD: str | None = Field(
+        default=None,
+        description="WiFi password for device provisioning"
+    )
+
+    # Rotation Settings
+    ROTATION_CRON: str = Field(
+        default="0 8 1-7 * 6",
+        description="CRON schedule for credential rotation (default: first Saturday of month at 8am)"
+    )
+    ROTATION_TIMEOUT_SECONDS: int = Field(
+        default=300,
+        description="Timeout for device to complete rotation before rollback"
+    )
+
+    # Secret Encryption Key (for cached_secret encryption)
+    # Derived from SECRET_KEY if not explicitly set
+    FERNET_KEY: str | None = Field(
+        default=None,
+        description="Fernet encryption key for cached secrets (32-byte base64 encoded)"
+    )
+
     @property
     def is_testing(self) -> bool:
         """Check if the application is running in testing mode."""

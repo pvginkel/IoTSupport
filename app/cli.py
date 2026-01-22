@@ -131,7 +131,7 @@ def load_test_data(yes_i_am_sure: bool) -> None:
             # Load test data
             click.echo("Loading fixed test dataset...")
             test_data_service = app.container.test_data_service()
-            count = test_data_service.load_configs()
+            counts = test_data_service.load_all()
 
             # Commit the loaded data
             session = app.container.db_session()
@@ -139,7 +139,8 @@ def load_test_data(yes_i_am_sure: bool) -> None:
 
             click.echo("Test data loaded successfully")
             click.echo("Dataset summary:")
-            click.echo(f"   - {count} device configurations")
+            for entity, count in counts.items():
+                click.echo(f"   - {count} {entity}")
 
         except Exception as e:
             click.echo(f"Error loading test data: {e}", err=True)
@@ -176,6 +177,81 @@ def db_status() -> None:
                 click.echo(f"  - {rev}")
         else:
             click.echo("No pending migrations")
+
+
+@cli.command()
+@click.option(
+    "--run-once",
+    is_flag=True,
+    default=True,
+    help="Run a single rotation job cycle (default behavior for K8s CronJob)",
+)
+def rotation_job(run_once: bool) -> None:
+    """Execute rotation job for device credential rotation.
+
+    This command is designed to be called by a Kubernetes CronJob.
+    It performs a single rotation cycle:
+    1. Checks if scheduled rotation should be triggered (based on ROTATION_CRON)
+    2. Processes any timed-out devices
+    3. Rotates one device if any are queued
+
+    The K8s CronJob should be configured to run frequently (e.g., every minute)
+    and the ROTATION_CRON setting determines when fleet-wide rotation is triggered.
+
+    Examples:
+        iotsupport-cli rotation-job              Execute one rotation cycle
+    """
+    import json
+    from datetime import datetime
+    from pathlib import Path
+
+    app = create_app(skip_background_services=True)
+
+    with app.app_context():
+        # Check database connection first
+        if not check_db_connection():
+            click.echo("Error: Cannot connect to database", err=True)
+            sys.exit(1)
+
+        # Get last scheduled rotation time from state file (persistent volume)
+        state_file = Path("/tmp/rotation_state.json")
+        last_scheduled_at = None
+
+        try:
+            if state_file.exists():
+                state = json.loads(state_file.read_text())
+                if state.get("last_scheduled_at"):
+                    last_scheduled_at = datetime.fromisoformat(state["last_scheduled_at"])
+        except Exception as e:
+            click.echo(f"Warning: Could not read state file: {e}")
+
+        try:
+            # Run rotation job
+            rotation_service = app.container.rotation_service()
+            result = rotation_service.process_rotation_job(last_scheduled_at)
+
+            # Commit database changes
+            session = app.container.db_session()
+            session.commit()
+
+            # Update state file if scheduled rotation was triggered
+            if result.scheduled_rotation_triggered:
+                try:
+                    state_file.write_text(json.dumps({
+                        "last_scheduled_at": datetime.utcnow().isoformat()
+                    }))
+                except Exception as e:
+                    click.echo(f"Warning: Could not write state file: {e}")
+
+            # Output results
+            click.echo("Rotation job completed")
+            click.echo(f"  Timeouts processed: {result.processed_timeouts}")
+            click.echo(f"  Device rotated: {result.device_rotated or 'none'}")
+            click.echo(f"  Scheduled triggered: {result.scheduled_rotation_triggered}")
+
+        except Exception as e:
+            click.echo(f"Error during rotation job: {e}", err=True)
+            sys.exit(1)
 
 
 def main() -> None:
