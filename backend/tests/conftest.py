@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 if TYPE_CHECKING:
-    from app.services.config_service import ConfigService
+    from app.services.device_model_service import DeviceModelService
+    from app.services.device_service import DeviceService
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from flask import Flask
@@ -183,14 +184,14 @@ def container(app: Flask) -> ServiceContainer:
 
 
 @pytest.fixture
-def sample_config() -> str:
-    """Sample configuration data as JSON string (stored verbatim)."""
+def sample_device_config() -> str:
+    """Sample device configuration as JSON string."""
     return '{"deviceName": "Living Room Sensor", "deviceEntityId": "sensor.living_room", "enableOTA": true, "mqttBroker": "mqtt.local", "updateInterval": 60}'
 
 
 @pytest.fixture
-def sample_config_dict() -> dict[str, Any]:
-    """Sample configuration data as dict (for assertions)."""
+def sample_device_config_dict() -> dict[str, Any]:
+    """Sample device configuration as dict (for assertions)."""
     return {
         "deviceName": "Living Room Sensor",
         "deviceEntityId": "sensor.living_room",
@@ -201,60 +202,61 @@ def sample_config_dict() -> dict[str, Any]:
 
 
 @pytest.fixture
-def sample_config_minimal() -> str:
-    """Sample configuration with minimal fields as JSON string."""
-    return '{"mqttBroker": "mqtt.local"}'
-
-
-@pytest.fixture
-def sample_config_minimal_dict() -> dict[str, Any]:
-    """Sample configuration with minimal fields as dict (for assertions)."""
-    return {
-        "mqttBroker": "mqtt.local",
-    }
-
-
-@pytest.fixture
-def valid_mac() -> str:
-    """Valid MAC address for testing (colon-separated)."""
-    return "aa:bb:cc:dd:ee:ff"
-
-
-@pytest.fixture
-def config_service(session: Session) -> "ConfigService":
-    """Create ConfigService instance backed by the test session.
+def device_model_service(container: ServiceContainer) -> "DeviceModelService":
+    """Create DeviceModelService instance via the container.
 
     Use this fixture in service tests to avoid app.app_context() boilerplate.
     """
-    from app.services.config_service import ConfigService
-
-    return ConfigService(session)
+    return container.device_model_service()
 
 
 @pytest.fixture
-def make_config(session: Session) -> Any:
-    """Factory fixture for creating config records in tests.
+def device_service(container: ServiceContainer) -> "DeviceService":
+    """Create DeviceService instance via the container.
 
-    Use this fixture in API tests to set up test data without app.app_context() boilerplate.
+    Use this fixture in service tests to avoid app.app_context() boilerplate.
+    """
+    return container.device_service()
+
+
+@pytest.fixture
+def make_device_model(container: ServiceContainer) -> Any:
+    """Factory fixture for creating device model records in tests.
 
     Usage:
-        config = make_config("aa:bb:cc:dd:ee:ff", sample_config)
+        model = make_device_model("tempsensor", "Temperature Sensor")
     """
-    from app.models.config import Config
-    from app.services.config_service import ConfigService
+    from app.models.device import DeviceModel
 
-    service = ConfigService(session)
-
-    def _make(mac_address: str, content: str) -> Config:
-        return service.create_config(mac_address, content)
+    def _make(code: str, name: str) -> DeviceModel:
+        service = container.device_model_service()
+        return service.create_device_model(code=code, name=name)
 
     return _make
 
 
 @pytest.fixture
-def another_valid_mac() -> str:
-    """Another valid MAC address for testing (colon-separated)."""
-    return "11:22:33:44:55:66"
+def make_device(container: ServiceContainer) -> Any:
+    """Factory fixture for creating device records in tests.
+
+    Usage:
+        device = make_device(model.id, '{"setting": "value"}')
+    """
+    from unittest.mock import MagicMock, patch
+
+    from app.models.device import Device
+
+    def _make(device_model_id: int, config: str = "{}") -> Device:
+        # Mock Keycloak for device creation in tests
+        with patch.object(
+            container.keycloak_admin_service(),
+            "create_client",
+            return_value=MagicMock(client_id="test", secret="test-secret"),
+        ):
+            service = container.device_service()
+            return service.create_device(device_model_id=device_model_id, config=config)
+
+    return _make
 
 
 @pytest.fixture

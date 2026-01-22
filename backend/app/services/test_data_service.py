@@ -7,7 +7,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models.config import Config
+from app.models.device import Device, RotationState
+from app.models.device_model import DeviceModel
 
 logger = logging.getLogger(__name__)
 
@@ -26,60 +27,121 @@ class TestDataService:
         """
         self.db = db
 
-    def load_configs(self) -> int:
-        """Load configuration test data from configs.json.
+    def load_device_models(self) -> int:
+        """Load device model test data from device_models.json.
 
         Returns:
-            Number of configs loaded
+            Number of device models loaded
         """
-        configs_file = TEST_DATA_DIR / "configs.json"
+        models_file = TEST_DATA_DIR / "device_models.json"
 
-        if not configs_file.exists():
-            logger.warning(f"Test data file not found: {configs_file}")
+        if not models_file.exists():
+            logger.warning(f"Test data file not found: {models_file}")
             return 0
 
-        with open(configs_file, encoding="utf-8") as f:
+        with open(models_file, encoding="utf-8") as f:
             data = json.load(f)
 
-        configs_data: list[dict[str, Any]] = data.get("configs", [])
+        models_data: list[dict[str, Any]] = data.get("device_models", [])
         loaded_count = 0
 
-        for config_data in configs_data:
-            mac_address = config_data.get("mac_address")
-            content = config_data.get("content", {})
+        for model_data in models_data:
+            code = model_data.get("code")
+            name = model_data.get("name")
+            firmware_version = model_data.get("firmware_version")
 
-            if not mac_address:
-                logger.warning("Skipping config without mac_address")
+            if not code or not name:
+                logger.warning("Skipping device model without code or name")
                 continue
 
-            # Extract fields from content
-            device_name = content.get("deviceName")
-            device_entity_id = content.get("deviceEntityId")
-            enable_ota = content.get("enableOTA")
-
-            # Create config
-            config = Config(
-                mac_address=mac_address,
-                device_name=device_name,
-                device_entity_id=device_entity_id,
-                enable_ota=enable_ota,
-                content=json.dumps(content),
+            model = DeviceModel(
+                code=code,
+                name=name,
+                firmware_version=firmware_version,
             )
 
-            self.db.add(config)
+            self.db.add(model)
             loaded_count += 1
 
         self.db.flush()
-        logger.info(f"Loaded {loaded_count} configs from test data")
+        logger.info(f"Loaded {loaded_count} device models from test data")
 
         return loaded_count
+
+    def load_devices(self) -> int:
+        """Load device test data from devices.json.
+
+        Requires device models to be loaded first.
+
+        Returns:
+            Number of devices loaded
+        """
+        devices_file = TEST_DATA_DIR / "devices.json"
+
+        if not devices_file.exists():
+            logger.warning(f"Test data file not found: {devices_file}")
+            return 0
+
+        with open(devices_file, encoding="utf-8") as f:
+            data = json.load(f)
+
+        devices_data: list[dict[str, Any]] = data.get("devices", [])
+        loaded_count = 0
+
+        # Build model code to ID mapping
+        from sqlalchemy import select
+        stmt = select(DeviceModel)
+        models = {m.code: m.id for m in self.db.scalars(stmt).all()}
+
+        for device_data in devices_data:
+            key = device_data.get("key")
+            model_code = device_data.get("model_code")
+            config = device_data.get("config", {})
+            rotation_state = device_data.get("rotation_state", RotationState.OK.value)
+
+            if not key or not model_code:
+                logger.warning("Skipping device without key or model_code")
+                continue
+
+            model_id = models.get(model_code)
+            if model_id is None:
+                logger.warning(f"Skipping device {key}: unknown model_code {model_code}")
+                continue
+
+            device = Device(
+                key=key,
+                device_model_id=model_id,
+                config=json.dumps(config),
+                rotation_state=rotation_state,
+            )
+
+            self.db.add(device)
+            loaded_count += 1
+
+        self.db.flush()
+        logger.info(f"Loaded {loaded_count} devices from test data")
+
+        return loaded_count
+
+    def load_all(self) -> dict[str, int]:
+        """Load all test data in proper order.
+
+        Returns:
+            Dict with counts for each entity type
+        """
+        counts = {
+            "device_models": self.load_device_models(),
+            "devices": self.load_devices(),
+        }
+        return counts
 
     def clear_all_data(self) -> None:
         """Clear all data from the database.
 
         Used for test setup to ensure a clean state.
         """
-        # Delete all configs
-        self.db.query(Config).delete()
+        # Delete in reverse dependency order
+        self.db.query(Device).delete()
+        self.db.query(DeviceModel).delete()
         self.db.flush()
         logger.info("Cleared all data from database")

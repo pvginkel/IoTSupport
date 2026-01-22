@@ -1,0 +1,43 @@
+{
+  "devices": [
+    {
+      "key": "abc12345",
+      "model_code": "thermostat",
+      "config": {
+        "deviceName": "Living Room Thermostat",
+        "targetTemp": 72,
+        "mode": "auto"
+      },
+      "rotation_state": "OK"
+    },
+    {
+      "key": "def67890",
+      "model_code": "thermostat",
+      "config": {
+        "deviceName": "Bedroom Thermostat",
+        "targetTemp": 68,
+        "mode": "heat"
+      },
+      "rotation_state": "OK"
+    },
+    {
+      "key": "ghi11223",
+      "model_code": "motion_sensor",
+      "config": {
+        "deviceName": "Front Door Motion",
+        "sensitivity": "high",
+        "timeout": 30
+      },
+      "rotation_state": "OK"
+    },
+    {
+      "key": "jkl44556",
+      "model_code": "door_sensor",
+      "config": {
+        "deviceName": "Garage Door",
+        "alertOnOpen": true
+      },
+      "rotation_state": "OK"
+    }
+  ]
+}

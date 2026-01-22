@@ -1,0 +1,19 @@
+{
+  "device_models": [
+    {
+      "code": "thermostat",
+      "name": "Smart Thermostat",
+      "firmware_version": "1.2.3"
+    },
+    {
+      "code": "motion_sensor",
+      "name": "Motion Sensor",
+      "firmware_version": "2.0.1"
+    },
+    {
+      "code": "door_sensor",
+      "name": "Door/Window Sensor",
+      "firmware_version": null
+    }
+  ]
+}

@@ -350,8 +350,8 @@ class TestTestSessionAuthenticationMiddleware:
             },
         )
 
-        # Should be able to access a protected endpoint (e.g., configs list)
-        response = testing_client.get("/api/configs")
+        # Should be able to access a protected endpoint (e.g., devices list)
+        response = testing_client.get("/api/devices")
 
         assert response.status_code == 200
 
@@ -364,7 +364,7 @@ class TestTestSessionAuthenticationMiddleware:
         However, /api/auth/self requires a valid auth context to return user info.
         """
         # Regular endpoints work without auth when OIDC is disabled
-        response = testing_client.get("/api/configs")
+        response = testing_client.get("/api/devices")
         assert response.status_code == 200
 
         # But /api/auth/self returns 401 since there's no auth context

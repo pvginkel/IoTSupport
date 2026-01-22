@@ -1,0 +1,241 @@
+"""Device model service for managing hardware types."""
+
+import logging
+import re
+from typing import TYPE_CHECKING
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.exceptions import (
+    InvalidOperationException,
+    RecordExistsException,
+    RecordNotFoundException,
+    ValidationException,
+)
+from app.models.device_model import DeviceModel
+
+if TYPE_CHECKING:
+    from app.services.firmware_service import FirmwareService
+
+logger = logging.getLogger(__name__)
+
+# Pattern for device model code: lowercase alphanumeric with underscores
+MODEL_CODE_PATTERN = re.compile(r"^[a-z0-9_]+$")
+
+
+class DeviceModelService:
+    """Service for managing device models.
+
+    Handles CRUD operations for device hardware types, including
+    firmware upload and version extraction.
+    """
+
+    def __init__(self, db: Session, firmware_service: "FirmwareService") -> None:
+        """Initialize service with database session and firmware service.
+
+        Args:
+            db: SQLAlchemy database session
+            firmware_service: Service for firmware file management
+        """
+        self.db = db
+        self.firmware_service = firmware_service
+
+    def list_device_models(self) -> list[DeviceModel]:
+        """List all device models ordered by code.
+
+        Returns:
+            List of DeviceModel instances
+        """
+        stmt = select(DeviceModel).order_by(DeviceModel.code)
+        return list(self.db.scalars(stmt).all())
+
+    def get_device_model(self, model_id: int) -> DeviceModel:
+        """Get a device model by ID.
+
+        Args:
+            model_id: Device model ID
+
+        Returns:
+            DeviceModel instance
+
+        Raises:
+            RecordNotFoundException: If model doesn't exist
+        """
+        stmt = select(DeviceModel).where(DeviceModel.id == model_id)
+        model = self.db.scalars(stmt).one_or_none()
+
+        if model is None:
+            raise RecordNotFoundException("DeviceModel", str(model_id))
+
+        return model
+
+    def get_device_model_by_code(self, code: str) -> DeviceModel:
+        """Get a device model by code.
+
+        Args:
+            code: Device model code
+
+        Returns:
+            DeviceModel instance
+
+        Raises:
+            RecordNotFoundException: If model doesn't exist
+        """
+        stmt = select(DeviceModel).where(DeviceModel.code == code)
+        model = self.db.scalars(stmt).one_or_none()
+
+        if model is None:
+            raise RecordNotFoundException("DeviceModel", code)
+
+        return model
+
+    def create_device_model(self, code: str, name: str) -> DeviceModel:
+        """Create a new device model.
+
+        Args:
+            code: Unique model code (lowercase alphanumeric with underscores)
+            name: Human-readable model name
+
+        Returns:
+            Created DeviceModel instance
+
+        Raises:
+            ValidationException: If code format is invalid
+            RecordExistsException: If code already exists
+        """
+        # Validate code format
+        if not MODEL_CODE_PATTERN.match(code):
+            raise ValidationException(
+                "Model code must contain only lowercase letters, numbers, and underscores"
+            )
+
+        # Check for existing model with same code
+        stmt = select(DeviceModel).where(DeviceModel.code == code)
+        existing = self.db.scalars(stmt).one_or_none()
+
+        if existing is not None:
+            raise RecordExistsException("DeviceModel", code)
+
+        # Create new model
+        model = DeviceModel(code=code, name=name)
+        self.db.add(model)
+        self.db.flush()
+
+        logger.info("Created device model: %s (%s)", model.code, model.name)
+        return model
+
+    def update_device_model(self, model_id: int, name: str) -> DeviceModel:
+        """Update a device model's name.
+
+        Note: code is immutable and cannot be changed.
+
+        Args:
+            model_id: Device model ID
+            name: New human-readable name
+
+        Returns:
+            Updated DeviceModel instance
+
+        Raises:
+            RecordNotFoundException: If model doesn't exist
+        """
+        model = self.get_device_model(model_id)
+        model.name = name
+        self.db.flush()
+
+        logger.info("Updated device model: %s (%s)", model.code, model.name)
+        return model
+
+    def delete_device_model(self, model_id: int) -> None:
+        """Delete a device model.
+
+        Also deletes associated firmware file.
+
+        Args:
+            model_id: Device model ID
+
+        Raises:
+            RecordNotFoundException: If model doesn't exist
+            InvalidOperationException: If model has associated devices
+        """
+        model = self.get_device_model(model_id)
+
+        # Check for associated devices
+        if model.device_count > 0:
+            raise InvalidOperationException(
+                "delete device model",
+                f"model has {model.device_count} associated device(s)"
+            )
+
+        # Delete firmware file (best-effort)
+        self.firmware_service.delete_firmware(model.code)
+
+        # Delete the model
+        self.db.delete(model)
+        self.db.flush()
+
+        logger.info("Deleted device model: %s", model.code)
+
+    def upload_firmware(self, model_id: int, content: bytes) -> DeviceModel:
+        """Upload firmware for a device model.
+
+        Extracts version from ESP32 binary and saves to filesystem.
+
+        Args:
+            model_id: Device model ID
+            content: Firmware binary content
+
+        Returns:
+            Updated DeviceModel with firmware_version set
+
+        Raises:
+            RecordNotFoundException: If model doesn't exist
+            ValidationException: If firmware format is invalid
+        """
+        model = self.get_device_model(model_id)
+
+        # Save firmware and extract version
+        version = self.firmware_service.save_firmware(model.code, content)
+
+        # Update model with version
+        model.firmware_version = version
+        self.db.flush()
+
+        logger.info("Uploaded firmware for model %s: version %s", model.code, version)
+        return model
+
+    def get_firmware(self, model_id: int) -> tuple[bytes, str]:
+        """Get firmware binary for a device model.
+
+        Args:
+            model_id: Device model ID
+
+        Returns:
+            Tuple of (firmware_content, model_code)
+
+        Raises:
+            RecordNotFoundException: If model or firmware doesn't exist
+        """
+        model = self.get_device_model(model_id)
+
+        if not self.firmware_service.firmware_exists(model.code):
+            raise RecordNotFoundException("Firmware", model.code)
+
+        content = self.firmware_service.get_firmware(model.code)
+        return content, model.code
+
+    def has_firmware(self, model_id: int) -> bool:
+        """Check if a device model has firmware uploaded.
+
+        Args:
+            model_id: Device model ID
+
+        Returns:
+            True if firmware exists
+
+        Raises:
+            RecordNotFoundException: If model doesn't exist
+        """
+        model = self.get_device_model(model_id)
+        return self.firmware_service.firmware_exists(model.code)

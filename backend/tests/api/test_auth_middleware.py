@@ -73,7 +73,7 @@ class TestAuthenticationMiddleware:
 
         # Request with Bearer token should succeed
         response = client.get(
-            "/api/configs", headers={"Authorization": f"Bearer {token}"}
+            "/api/devices", headers={"Authorization": f"Bearer {token}"}
         )
 
         assert response.status_code == 200
@@ -91,7 +91,7 @@ class TestAuthenticationMiddleware:
         client.set_cookie("access_token", token)
 
         # Request should succeed
-        response = client.get("/api/configs")
+        response = client.get("/api/devices")
 
         assert response.status_code == 200
 
@@ -109,7 +109,7 @@ class TestAuthenticationMiddleware:
         client.set_cookie("access_token", cookie_token)
 
         response = client.get(
-            "/api/configs",
+            "/api/devices",
             headers={"Authorization": f"Bearer {bearer_token}"}
         )
 
@@ -127,7 +127,7 @@ class TestAuthenticationMiddleware:
         client.set_cookie("access_token", token)
 
         # Admin can access all endpoints
-        assert client.get("/api/configs").status_code == 200
+        assert client.get("/api/devices").status_code == 200
         # Note: POST /api/assets requires actual file upload, so we check for 400 (validation) not 403 (authz)
         # A 400 means we passed auth but failed validation, which is expected without proper data
         response = client.post("/api/assets")
@@ -148,23 +148,23 @@ class TestAuthenticationMiddleware:
         assert response.status_code in [400, 422]  # Validation error, not authorization error
 
         # Asset-uploader cannot access other endpoints
-        response = client.get("/api/configs")
+        response = client.get("/api/devices")
         assert response.status_code == 403
         data = response.get_json()
         assert "permission" in data["error"].lower()
 
-    def test_asset_uploader_cannot_get_configs(
+    def test_asset_uploader_cannot_get_devices(
         self, auth_enabled_app, generate_test_jwt
     ):
-        """Test asset-uploader explicitly denied access to GET /api/configs."""
+        """Test asset-uploader explicitly denied access to GET /api/devices."""
         client = auth_enabled_app.test_client()
 
         # Generate token with asset-uploader role
         token = generate_test_jwt(roles=["asset-uploader"])
         client.set_cookie("access_token", token)
 
-        # GET /api/configs should be forbidden
-        response = client.get("/api/configs")
+        # GET /api/devices should be forbidden
+        response = client.get("/api/devices")
         assert response.status_code == 403
         data = response.get_json()
         assert "asset-uploader" in data["error"]
@@ -174,7 +174,7 @@ class TestAuthenticationMiddleware:
         client = auth_enabled_app.test_client()
 
         # Request without token should fail
-        response = client.get("/api/configs")
+        response = client.get("/api/devices")
 
         assert response.status_code == 401
         data = response.get_json()
@@ -191,7 +191,7 @@ class TestAuthenticationMiddleware:
         client.set_cookie("access_token", token)
 
         # Request should fail with 401
-        response = client.get("/api/configs")
+        response = client.get("/api/devices")
 
         assert response.status_code == 401
         data = response.get_json()
@@ -232,7 +232,7 @@ class TestAuthenticationMiddleware:
         client = app.test_client()
 
         # Should access protected endpoints without token
-        response = client.get("/api/configs")
+        response = client.get("/api/devices")
         assert response.status_code == 200
 
     def test_invalid_signature_returns_401(
@@ -246,7 +246,7 @@ class TestAuthenticationMiddleware:
         client.set_cookie("access_token", token)
 
         # Request should fail with 401
-        response = client.get("/api/configs")
+        response = client.get("/api/devices")
 
         assert response.status_code == 401
         data = response.get_json()
@@ -263,7 +263,7 @@ class TestAuthenticationMiddleware:
         client.set_cookie("access_token", token)
 
         # Request should fail with 403
-        response = client.get("/api/configs")
+        response = client.get("/api/devices")
 
         assert response.status_code == 403
         data = response.get_json()
