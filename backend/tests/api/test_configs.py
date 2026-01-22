@@ -1,13 +1,14 @@
 """Tests for configuration API endpoints."""
 
 import json
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import patch
 
-from flask import Flask
 from flask.testing import FlaskClient
 from sqlalchemy.orm import Session
 
+from app.models.config import Config
 from app.services.container import ServiceContainer
 
 
@@ -25,17 +26,14 @@ class TestListConfigs:
 
     def test_list_configs_returns_summary(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
-        container: ServiceContainer,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
     ):
         """Configs are returned with correct summary format including ID."""
-        with app.app_context():
-            service = container.config_service()
-            created = service.create_config("aa:bb:cc:dd:ee:ff", sample_config)
-            config_id = created.id
+        created = make_config("aa:bb:cc:dd:ee:ff", sample_config)
+        config_id = created.id
 
         response = client.get("/api/configs")
 
@@ -53,19 +51,16 @@ class TestListConfigs:
 
     def test_list_configs_sorted_by_mac(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
-        container: ServiceContainer,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
     ):
         """Configs are returned sorted by MAC address."""
-        with app.app_context():
-            service = container.config_service()
-            # Create in non-sorted order
-            service.create_config("cc:cc:cc:cc:cc:cc", sample_config)
-            service.create_config("aa:aa:aa:aa:aa:aa", sample_config)
-            service.create_config("bb:bb:bb:bb:bb:bb", sample_config)
+        # Create in non-sorted order
+        make_config("cc:cc:cc:cc:cc:cc", sample_config)
+        make_config("aa:aa:aa:aa:aa:aa", sample_config)
+        make_config("bb:bb:bb:bb:bb:bb", sample_config)
 
         response = client.get("/api/configs")
 
@@ -81,7 +76,12 @@ class TestCreateConfig:
     """Tests for POST /api/configs."""
 
     def test_create_config_success(
-        self, client: FlaskClient, session: Session, sample_config: str, sample_config_dict: dict[str, Any], valid_mac: str
+        self,
+        client: FlaskClient,
+        session: Session,
+        sample_config: str,
+        sample_config_dict: dict[str, Any],
+        valid_mac: str,
     ):
         """Creating new config returns 201 with created config."""
         response = client.post(
@@ -134,18 +134,15 @@ class TestCreateConfig:
 
     def test_create_config_duplicate_mac_returns_409(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
-        container: ServiceContainer,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
         valid_mac: str,
     ):
         """Creating config with duplicate MAC returns 409."""
         # Create first config
-        with app.app_context():
-            service = container.config_service()
-            service.create_config(valid_mac, sample_config)
+        make_config(valid_mac, sample_config)
 
         # Try to create duplicate
         response = client.post(
@@ -224,9 +221,7 @@ class TestCreateConfig:
 
         assert response.status_code == 400
 
-    def test_create_config_invalid_json_returns_400(
-        self, client: FlaskClient, session: Session
-    ):
+    def test_create_config_invalid_json_returns_400(self, client: FlaskClient, session: Session):
         """Invalid JSON body returns 400."""
         response = client.post(
             "/api/configs",
@@ -242,19 +237,16 @@ class TestGetConfigById:
 
     def test_get_config_success(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
-        container: ServiceContainer,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
         sample_config_dict: dict[str, Any],
         valid_mac: str,
     ):
         """Existing config returns 200 with full content."""
-        with app.app_context():
-            service = container.config_service()
-            created = service.create_config(valid_mac, sample_config)
-            config_id = created.id
+        created = make_config(valid_mac, sample_config)
+        config_id = created.id
 
         response = client.get(f"/api/configs/{config_id}")
 
@@ -281,18 +273,15 @@ class TestUpdateConfig:
 
     def test_update_config_success(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
-        container: ServiceContainer,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
         valid_mac: str,
     ):
         """Updating config returns 200 with updated content."""
-        with app.app_context():
-            service = container.config_service()
-            created = service.create_config(valid_mac, sample_config)
-            config_id = created.id
+        created = make_config(valid_mac, sample_config)
+        config_id = created.id
 
         updated_content_dict = {
             "deviceName": "Updated Name",
@@ -319,18 +308,15 @@ class TestUpdateConfig:
 
     def test_update_config_removes_optional_fields(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
-        container: ServiceContainer,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
         valid_mac: str,
     ):
         """Update with content lacking optional fields sets them to None."""
-        with app.app_context():
-            service = container.config_service()
-            created = service.create_config(valid_mac, sample_config)
-            config_id = created.id
+        created = make_config(valid_mac, sample_config)
+        config_id = created.id
 
         minimal_content = json.dumps({"mqttBroker": "mqtt.local"})
 
@@ -362,18 +348,15 @@ class TestUpdateConfig:
 
     def test_update_config_missing_content_returns_400(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
-        container: ServiceContainer,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
         valid_mac: str,
     ):
         """Missing content field returns 400."""
-        with app.app_context():
-            service = container.config_service()
-            created = service.create_config(valid_mac, sample_config)
-            config_id = created.id
+        created = make_config(valid_mac, sample_config)
+        config_id = created.id
 
         response = client.put(
             f"/api/configs/{config_id}",
@@ -389,18 +372,15 @@ class TestDeleteConfig:
 
     def test_delete_config_success(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
-        container: ServiceContainer,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
         valid_mac: str,
     ):
         """Deleting existing config returns 204."""
-        with app.app_context():
-            service = container.config_service()
-            created = service.create_config(valid_mac, sample_config)
-            config_id = created.id
+        created = make_config(valid_mac, sample_config)
+        config_id = created.id
 
         response = client.delete(f"/api/configs/{config_id}")
 
@@ -424,18 +404,15 @@ class TestGetConfigRaw:
 
     def test_get_config_raw_success_colon_format(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
-        container: ServiceContainer,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
         sample_config_dict: dict[str, Any],
         valid_mac: str,
     ):
         """Existing config returns 200 with raw JSON content and Cache-Control header."""
-        with app.app_context():
-            service = container.config_service()
-            service.create_config(valid_mac, sample_config)
+        make_config(valid_mac, sample_config)
 
         response = client.get(f"/api/configs/{valid_mac}.json")
 
@@ -448,18 +425,15 @@ class TestGetConfigRaw:
 
     def test_get_config_raw_dash_format_backward_compat(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
-        container: ServiceContainer,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
         sample_config_dict: dict[str, Any],
     ):
         """Dash-separated MAC is normalized to colon format (backward compatibility)."""
         # Create config with colon-separated MAC
-        with app.app_context():
-            service = container.config_service()
-            service.create_config("aa:bb:cc:dd:ee:ff", sample_config)
+        make_config("aa:bb:cc:dd:ee:ff", sample_config)
 
         # Request with dash-separated MAC
         response = client.get("/api/configs/aa-bb-cc-dd-ee-ff.json")
@@ -470,17 +444,14 @@ class TestGetConfigRaw:
 
     def test_get_config_raw_uppercase_normalized(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
-        container: ServiceContainer,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
         sample_config_dict: dict[str, Any],
     ):
         """Uppercase MAC is normalized to lowercase."""
-        with app.app_context():
-            service = container.config_service()
-            service.create_config("aa:bb:cc:dd:ee:ff", sample_config)
+        make_config("aa:bb:cc:dd:ee:ff", sample_config)
 
         # Request with uppercase MAC
         response = client.get("/api/configs/AA:BB:CC:DD:EE:FF.json")
@@ -489,7 +460,9 @@ class TestGetConfigRaw:
         data = response.get_json()
         assert data == sample_config_dict
 
-    def test_get_config_raw_not_found(self, client: FlaskClient, session: Session, valid_mac: str):
+    def test_get_config_raw_not_found(
+        self, client: FlaskClient, session: Session, valid_mac: str
+    ):
         """Non-existent config returns 404."""
         response = client.get(f"/api/configs/{valid_mac}.json")
 
@@ -507,18 +480,15 @@ class TestGetConfigRaw:
 
     def test_get_config_raw_minimal_fields(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
-        container: ServiceContainer,
+        make_config: Callable[[str, str], Config],
         sample_config_minimal: str,
         sample_config_minimal_dict: dict[str, Any],
         valid_mac: str,
     ):
         """Config with minimal fields returns correctly."""
-        with app.app_context():
-            service = container.config_service()
-            service.create_config(valid_mac, sample_config_minimal)
+        make_config(valid_mac, sample_config_minimal)
 
         response = client.get(f"/api/configs/{valid_mac}.json")
 
@@ -532,7 +502,6 @@ class TestConfigsWithMqtt:
 
     def test_create_config_publishes_mqtt_notification(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
         sample_config: str,
@@ -555,9 +524,9 @@ class TestConfigsWithMqtt:
 
     def test_update_config_publishes_mqtt_notification(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
         sample_config_dict: dict[str, Any],
         valid_mac: str,
@@ -565,10 +534,8 @@ class TestConfigsWithMqtt:
     ):
         """Updating config publishes MQTT notification."""
         # Create config first
-        with app.app_context():
-            service = container.config_service()
-            created = service.create_config(valid_mac, sample_config)
-            config_id = created.id
+        created = make_config(valid_mac, sample_config)
+        config_id = created.id
 
         mqtt_service = container.mqtt_service()
         with patch.object(mqtt_service, "publish_config_update") as mock_publish:
@@ -584,7 +551,6 @@ class TestConfigsWithMqtt:
 
     def test_create_config_failure_does_not_publish_mqtt(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
         valid_mac: str,
@@ -607,18 +573,16 @@ class TestConfigsWithMqtt:
 
     def test_delete_config_does_not_publish_mqtt(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
         valid_mac: str,
         container: ServiceContainer,
     ):
         """Config deletion does NOT publish MQTT notification."""
-        with app.app_context():
-            service = container.config_service()
-            created = service.create_config(valid_mac, sample_config)
-            config_id = created.id
+        created = make_config(valid_mac, sample_config)
+        config_id = created.id
 
         mqtt_service = container.mqtt_service()
         with patch.object(mqtt_service, "publish_config_update") as mock_publish:
@@ -631,7 +595,6 @@ class TestConfigsWithMqtt:
 
     def test_create_config_mqtt_disabled_succeeds(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
         sample_config: str,
@@ -700,17 +663,15 @@ class TestConfigsMetrics:
 
     def test_get_config_raw_records_metrics_success(
         self,
-        app: Flask,
         client: FlaskClient,
         session: Session,
+        make_config: Callable[[str, str], Config],
         sample_config: str,
         valid_mac: str,
         container: ServiceContainer,
     ):
         """Successful raw config get records metrics with success status."""
-        with app.app_context():
-            service = container.config_service()
-            service.create_config(valid_mac, sample_config)
+        make_config(valid_mac, sample_config)
 
         metrics_service = container.metrics_service()
         with patch.object(metrics_service, "record_operation") as mock_record:
