@@ -32,6 +32,7 @@ psycopg = {extras = ["binary"], version = "^3.1.0"}
 alembic = "^1.13.0"
 croniter = "^6.0.0"
 jsonschema = "^4.26.0"
+dateparser = "^1.2.2"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.0"
@@ -42,6 +43,7 @@ types-flask = "^1.1.0"
 types-flask-cors = "^4.0.0"
 types-waitress = "^3.0.1.20250801"
 types-croniter = "^6.0.0.20250809"
+types-dateparser = "^1.2.2.20250809"
 
 [build-system]
 requires = ["poetry-core"]

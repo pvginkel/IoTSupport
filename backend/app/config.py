@@ -165,16 +165,16 @@ class Settings(BaseSettings):
     )
 
     # Rotation Settings
-    ROTATION_CRON: str = Field(
-        default="0 8 1-7 * 6",
-        description="CRON schedule for credential rotation (default: first Saturday of month at 8am)"
+    ROTATION_CRON: str | None = Field(
+        default=None,
+        description="CRON schedule for credential rotation (e.g., '0 8 1-7 * 6' for first Saturday of month at 8am)"
     )
     ROTATION_TIMEOUT_SECONDS: int = Field(
         default=300,
         description="Timeout for device to complete rotation before rollback"
     )
-    ROTATION_CRITICAL_THRESHOLD_DAYS: int = Field(
-        default=7,
+    ROTATION_CRITICAL_THRESHOLD_DAYS: int | None = Field(
+        default=None,
         description="Days after which a timed-out device is considered critical"
     )
 
@@ -242,6 +242,16 @@ class Settings(BaseSettings):
         if self.is_production and not self.OIDC_TOKEN_URL:
             errors.append(
                 "OIDC_TOKEN_URL must be set for device provisioning"
+            )
+
+        # Rotation settings required for production
+        if self.is_production and not self.ROTATION_CRON:
+            errors.append(
+                "ROTATION_CRON must be set for credential rotation scheduling"
+            )
+        if self.is_production and self.ROTATION_CRITICAL_THRESHOLD_DAYS is None:
+            errors.append(
+                "ROTATION_CRITICAL_THRESHOLD_DAYS must be set for dashboard status"
             )
 
         if errors:

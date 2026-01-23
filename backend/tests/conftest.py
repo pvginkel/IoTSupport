@@ -75,6 +75,8 @@ def _build_test_settings(tmp_path: Path) -> Settings:
         SIGNING_KEY_PATH=signing_key_path,
         TIMESTAMP_TOLERANCE_SECONDS=300,
         CORS_ORIGINS=["http://localhost:3000"],
+        ROTATION_CRON="0 8 1-7 * 6",
+        ROTATION_CRITICAL_THRESHOLD_DAYS=7,
     )
 
 
