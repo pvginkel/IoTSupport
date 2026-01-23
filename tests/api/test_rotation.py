@@ -37,6 +37,9 @@ class TestRotationStatus:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 d1 = device_service.create_device(device_model_id=model.id, config="{}")
@@ -69,6 +72,9 @@ class TestRotationTriggerFleet:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device_service.create_device(device_model_id=model.id, config="{}")
@@ -93,6 +99,9 @@ class TestRotationTriggerFleet:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device = device_service.create_device(device_model_id=model.id, config="{}")

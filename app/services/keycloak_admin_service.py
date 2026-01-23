@@ -411,6 +411,69 @@ class KeycloakAdminService:
                 str(e)
             ) from e
 
+    def update_client_metadata(
+        self, client_id: str, name: str | None = None, description: str | None = None
+    ) -> None:
+        """Update metadata (name, description) for a Keycloak client.
+
+        Args:
+            client_id: Client ID for the device
+            name: Display name for the client (optional)
+            description: Description for the client (optional)
+
+        Raises:
+            ExternalServiceException: If update fails or client not found
+        """
+        if not self.enabled:
+            raise ExternalServiceException(
+                "update Keycloak client metadata",
+                "Keycloak admin API not configured"
+            )
+
+        if name is None and description is None:
+            return  # Nothing to update
+
+        start_time = time.perf_counter()
+        token = self._get_access_token()
+
+        try:
+            client_data = self._get_client_by_client_id(client_id, token)
+            if not client_data:
+                raise ExternalServiceException(
+                    "update Keycloak client metadata",
+                    f"Client {client_id} not found"
+                )
+
+            internal_id = client_data["id"]
+            admin_url = self.config.keycloak_admin_url
+
+            # Build update payload with only changed fields
+            update_payload: dict[str, str] = {"clientId": client_id}
+            if name is not None:
+                update_payload["name"] = name
+            if description is not None:
+                update_payload["description"] = description
+
+            response = self._http_client.put(
+                f"{admin_url}/clients/{internal_id}",
+                headers={"Authorization": f"Bearer {token}"},
+                json=update_payload,
+            )
+            response.raise_for_status()
+
+            duration = time.perf_counter() - start_time
+            logger.info("Updated metadata for client %s in %.3fs", client_id, duration)
+            self._record_operation("update_client_metadata", "success")
+
+        except httpx.HTTPError as e:
+            duration = time.perf_counter() - start_time
+            logger.error("Failed to update metadata for %s: %s (%.3fs)", client_id, str(e), duration)
+            self._record_operation("update_client_metadata", "error")
+            raise ExternalServiceException(
+                "update Keycloak client metadata",
+                str(e)
+            ) from e
+
     def get_client_status(self, client_id: str) -> tuple[bool, str | None]:
         """Check if a client exists in Keycloak.
 

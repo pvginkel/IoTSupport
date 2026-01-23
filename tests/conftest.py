@@ -254,6 +254,9 @@ def make_device(container: ServiceContainer) -> Any:
             container.keycloak_admin_service(),
             "create_client",
             return_value=MagicMock(client_id="test", secret="test-secret"),
+        ), patch.object(
+            container.keycloak_admin_service(),
+            "update_client_metadata",
         ):
             service = container.device_service()
             return service.create_device(device_model_id=device_model_id, config=config)

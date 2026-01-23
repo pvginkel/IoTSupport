@@ -27,6 +27,9 @@ def create_test_device(
             keycloak_service,
             "create_client",
             return_value=MagicMock(client_id=f"iotdevice-{model_code}-abc12345", secret="test-secret"),
+        ), patch.object(
+            keycloak_service,
+            "update_client_metadata",
         ):
             device_service = container.device_service()
             device = device_service.create_device(device_model_id=model.id, config=config)
