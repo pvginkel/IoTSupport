@@ -964,6 +964,53 @@
         "title": "LvglImageQuerySchema",
         "type": "object"
       },
+      "NvsProvisioningQuerySchema.d48fbce": {
+        "description": "Query parameters for NVS provisioning request.",
+        "properties": {
+          "partition_size": {
+            "description": "NVS partition size in bytes. Must match the partition table on the device. Must be at least 12KB (0x3000) and a multiple of 4KB (0x1000). Common values: 0x4000 (16KB), 0x5000 (20KB), 0x6000 (24KB).",
+            "examples": [
+              16384,
+              20480,
+              24576
+            ],
+            "minimum": 12288,
+            "title": "Partition Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "partition_size"
+        ],
+        "title": "NvsProvisioningQuerySchema",
+        "type": "object"
+      },
+      "NvsProvisioningResponseSchema.d48fbce": {
+        "description": "Response schema for NVS provisioning package.\n\nReturns the device provisioning data as an NVS binary blob\nthat can be flashed directly to ESP32 devices.",
+        "properties": {
+          "data": {
+            "description": "Base64-encoded NVS binary blob of the specified size",
+            "title": "Data",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size of the NVS partition in bytes",
+            "examples": [
+              16384,
+              20480,
+              24576
+            ],
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "size",
+          "data"
+        ],
+        "title": "NvsProvisioningResponseSchema",
+        "type": "object"
+      },
       "RotationStatusSchema.57872a8": {
         "description": "Response schema for rotation status.",
         "properties": {
@@ -2061,7 +2108,7 @@
     },
     "/api/devices/{device_id}/provisioning": {
       "get": {
-        "description": "Returns the provisioning package as a downloadable .bin file containing JSON configuration for the device.",
+        "description": "Returns JSON containing an NVS binary blob that can be flashed directly to ESP32 devices using esptool-js or similar tools.\n\nThe partition_size query parameter must match the NVS partition size in the device's partition table.",
         "operationId": "get__api_devices_{device_id}_provisioning",
         "parameters": [
           {
@@ -2073,10 +2120,68 @@
               "format": "int32",
               "type": "integer"
             }
+          },
+          {
+            "description": "NVS partition size in bytes. Must match the partition table on the device. Must be at least 12KB (0x3000) and a multiple of 4KB (0x1000). Common values: 0x4000 (16KB), 0x5000 (20KB), 0x6000 (24KB).",
+            "in": "query",
+            "name": "partition_size",
+            "required": true,
+            "schema": {
+              "description": "NVS partition size in bytes. Must match the partition table on the device. Must be at least 12KB (0x3000) and a multiple of 4KB (0x1000). Common values: 0x4000 (16KB), 0x5000 (20KB), 0x6000 (24KB).",
+              "examples": [
+                16384,
+                20480,
+                24576
+              ],
+              "minimum": 12288,
+              "title": "Partition Size",
+              "type": "integer"
+            }
           }
         ],
-        "responses": {},
-        "summary": "Download provisioning package for a device.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NvsProvisioningResponseSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Get NVS provisioning package for a device.",
         "tags": []
       }
     },

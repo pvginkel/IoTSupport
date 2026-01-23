@@ -96,6 +96,43 @@ export class DevicesPage {
     return this.page.locator('[data-testid="devices.editor.duplicate"]');
   }
 
+  get provisionDeviceButton(): Locator {
+    return this.page.locator('[data-testid="devices.editor.provision-device"]');
+  }
+
+  // Locators - Provision Modal
+  get provisionModal(): Locator {
+    return this.page.locator('[data-testid="devices.provision-modal"]');
+  }
+
+  get provisionModalProgressBar(): Locator {
+    return this.page.locator('[data-testid="devices.provision-modal.progress-bar"]');
+  }
+
+  get provisionModalStatusMessage(): Locator {
+    return this.page.locator('[data-testid="devices.provision-modal.status-message"]');
+  }
+
+  get provisionModalErrorMessage(): Locator {
+    return this.page.locator('[data-testid="devices.provision-modal.error-message"]');
+  }
+
+  get provisionModalConnectButton(): Locator {
+    return this.page.locator('[data-testid="devices.provision-modal.connect-button"]');
+  }
+
+  get provisionModalCloseButton(): Locator {
+    return this.page.locator('[data-testid="devices.provision-modal.close-button"]');
+  }
+
+  get provisionModalRetryButton(): Locator {
+    return this.page.locator('[data-testid="devices.provision-modal.retry-button"]');
+  }
+
+  get provisionModalCloseConfirmDialog(): Locator {
+    return this.page.locator('[data-testid="devices.provision-modal.close-confirm-dialog"]');
+  }
+
   // Locators - Dialogs
   get deleteConfirmDialog(): Locator {
     return this.page.locator('[data-testid="devices.delete.confirm-dialog"]');
@@ -198,6 +235,33 @@ export class DevicesPage {
     await this.unsavedChangesDialog.locator('button:has-text("Cancel")').click();
   }
 
+  // Actions - Provisioning
+  async openProvisionModal() {
+    await this.provisionDeviceButton.click();
+    await this.provisionModal.waitFor({ state: 'visible' });
+  }
+
+  async closeProvisionModal() {
+    await this.provisionModalCloseButton.click();
+    await this.provisionModal.waitFor({ state: 'hidden' });
+  }
+
+  async startProvisioning() {
+    await this.provisionModalConnectButton.click();
+  }
+
+  async retryProvisioning() {
+    await this.provisionModalRetryButton.click();
+  }
+
+  async confirmCloseProvisioning() {
+    await this.provisionModalCloseConfirmDialog.locator('button:has-text("Yes, Cancel")').click();
+  }
+
+  async cancelCloseProvisioning() {
+    await this.provisionModalCloseConfirmDialog.locator('button:has-text("Continue")').click();
+  }
+
   // Assertions helpers
   async waitForListLoaded() {
     // Wait for either the table or empty state to be visible
@@ -232,5 +296,30 @@ export class DevicesPage {
       if (key) keys.push(key);
     }
     return keys;
+  }
+
+  /**
+   * Wait for provisioning to complete (success or error state)
+   */
+  async waitForProvisioningComplete(): Promise<void> {
+    // Wait for either success message or error message to appear
+    await Promise.race([
+      this.page.locator('text=Provisioning Complete').waitFor({ state: 'visible', timeout: 30000 }),
+      this.page.locator('text=Provisioning Failed').waitFor({ state: 'visible', timeout: 30000 }),
+    ]);
+  }
+
+  /**
+   * Wait for provisioning success state
+   */
+  async waitForProvisioningSuccess(): Promise<void> {
+    await this.page.locator('text=Provisioning Complete').waitFor({ state: 'visible', timeout: 30000 });
+  }
+
+  /**
+   * Wait for provisioning error state
+   */
+  async waitForProvisioningError(): Promise<void> {
+    await this.page.locator('text=Provisioning Failed').waitFor({ state: 'visible', timeout: 30000 });
   }
 }

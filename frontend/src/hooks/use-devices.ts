@@ -260,36 +260,6 @@ export function useDeleteDevice() {
   }
 }
 
-/**
- * Download provisioning package for a device.
- * Fetches the binary provisioning file and triggers a browser download.
- */
-export async function downloadDeviceProvisioning(
-  deviceId: number,
-  deviceKey: string
-): Promise<void> {
-  const response = await fetch(`/api/devices/${deviceId}/provisioning`, {
-    credentials: 'include'
-  })
-
-  if (!response.ok) {
-    throw new Error(`Failed to download provisioning: ${response.statusText}`)
-  }
-
-  // Get the binary data as a blob
-  const blob = await response.blob()
-
-  // Create a download link and trigger it
-  const url = window.URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `${deviceKey}.bin`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  window.URL.revokeObjectURL(url)
-}
-
 // UI domain model for Keycloak client status
 export interface KeycloakClientStatus {
   clientId: string

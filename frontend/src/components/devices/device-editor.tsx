@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate, useBlocker, Link } from '@tanstack/react-router'
 import Editor from '@monaco-editor/react'
-import { Download, ExternalLink, RefreshCw } from 'lucide-react'
+import { Cpu, ExternalLink, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { useCreateDevice, useUpdateDevice, downloadDeviceProvisioning, useDeviceKeycloakStatus, useSyncDeviceKeycloak } from '@/hooks/use-devices'
+import { useCreateDevice, useUpdateDevice, useDeviceKeycloakStatus, useSyncDeviceKeycloak } from '@/hooks/use-devices'
 import { useDeviceModels, useDeviceModel } from '@/hooks/use-device-models'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { useConfirm } from '@/hooks/use-confirm'
-import { useToast } from '@/contexts/toast-context'
 import { useFormInstrumentation } from '@/lib/test/form-instrumentation'
 import { configureMonacoSchemaValidation } from '@/lib/utils/monaco-schema'
+import { ProvisionDeviceModal } from './provision-device-modal'
 
 interface DeviceEditorProps {
   mode: 'new' | 'edit' | 'duplicate'
@@ -127,9 +127,10 @@ export function DeviceEditor({
   const updateDevice = useUpdateDevice()
   const { deviceModels, isLoading: modelsLoading } = useDeviceModels()
   const { confirm, confirmProps } = useConfirm()
-  const { showSuccess, showError } = useToast()
-  const [isDownloading, setIsDownloading] = useState(false)
   const monacoEditorRef = useRef<unknown>(null)
+
+  // Provisioning modal state
+  const [provisionModalOpen, setProvisionModalOpen] = useState(false)
 
   // Form instrumentation for Playwright tests
   const formId = mode === 'edit' ? 'DeviceEditor_edit' : mode === 'duplicate' ? 'DeviceEditor_duplicate' : 'DeviceEditor_new'
@@ -211,22 +212,6 @@ export function DeviceEditor({
       validateJson(value)
     }
   }, [validateJson])
-
-  // Handle provisioning download
-  const handleDownloadProvisioning = useCallback(async () => {
-    if (!deviceId || !initialKey) return
-
-    setIsDownloading(true)
-    try {
-      await downloadDeviceProvisioning(deviceId, initialKey)
-      showSuccess('Provisioning downloaded successfully')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to download provisioning'
-      showError(message)
-    } finally {
-      setIsDownloading(false)
-    }
-  }, [deviceId, initialKey, showSuccess, showError])
 
   const handleSave = useCallback(async () => {
     // Model selection validation only for new devices
@@ -338,10 +323,29 @@ export function DeviceEditor({
     <div className="flex h-full flex-col" data-testid="devices.editor">
       <div className="border-b border-zinc-800 bg-zinc-950 p-4">
         <div className="flex items-center justify-between">
+          {/* Left side: Title */}
           <h1 className="text-2xl font-bold text-zinc-50">
             {getTitle()}
           </h1>
+          {/* Right side: Device actions + separator + form actions */}
           <div className="flex items-center gap-2">
+            {/* Provision Device button - only in edit mode */}
+            {mode === 'edit' && deviceId && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setProvisionModalOpen(true)}
+                  disabled={isPending}
+                  data-testid="devices.editor.provision-device"
+                  title="Provision device via USB"
+                >
+                  <Cpu className="h-4 w-4 mr-2" />
+                  Provision Device
+                </Button>
+                {/* Vertical separator */}
+                <div className="h-6 w-px bg-zinc-700 mx-1" />
+              </>
+            )}
             <Button
               variant="outline"
               onClick={handleCancel}
@@ -351,27 +355,14 @@ export function DeviceEditor({
               Cancel
             </Button>
             {mode === 'edit' && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={handleDownloadProvisioning}
-                  disabled={isPending || isDownloading}
-                  loading={isDownloading}
-                  data-testid="devices.editor.download-provisioning"
-                  title="Download provisioning package"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Download Provisioning
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleDuplicate}
-                  disabled={isPending}
-                  data-testid="devices.editor.duplicate"
-                >
-                  Duplicate
-                </Button>
-              </>
+              <Button
+                variant="outline"
+                onClick={handleDuplicate}
+                disabled={isPending}
+                data-testid="devices.editor.duplicate"
+              >
+                Duplicate
+              </Button>
             )}
             <Button
               variant="primary"
@@ -516,6 +507,16 @@ export function DeviceEditor({
         destructive
         contentProps={{ 'data-testid': 'devices.editor.navigation-blocker-dialog' }}
       />
+
+      {/* Provision Device Modal */}
+      {mode === 'edit' && deviceId && (
+        <ProvisionDeviceModal
+          open={provisionModalOpen}
+          onOpenChange={setProvisionModalOpen}
+          deviceId={deviceId}
+          deviceKey={initialKey}
+        />
+      )}
     </div>
   )
 }

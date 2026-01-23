@@ -16,6 +16,7 @@ export const TestEventKind = {
   UI_STATE: 'ui_state',
   SSE: 'sse',
   LIST_LOADING: 'list_loading',
+  PROVISIONING: 'provisioning',
 } as const;
 
 export type TestEventKind = typeof TestEventKind[keyof typeof TestEventKind];
@@ -143,6 +144,34 @@ export interface ListLoadingTestEvent extends BaseTestEvent {
 }
 
 /**
+ * Provisioning phase for device flashing workflow
+ */
+export type ProvisioningPhase =
+  | 'idle'
+  | 'connecting'
+  | 'reading_partition'
+  | 'fetching_nvs'
+  | 'flashing'
+  | 'verifying'
+  | 'success'
+  | 'error';
+
+/**
+ * Provisioning lifecycle event for ESP32 device flashing
+ */
+export interface ProvisioningTestEvent extends BaseTestEvent {
+  kind: 'provisioning';
+  phase: 'started' | 'progress' | 'complete' | 'error';
+  deviceId: number;
+  metadata?: {
+    provisioningPhase?: ProvisioningPhase;
+    progress?: number;
+    error?: string;
+    [key: string]: unknown;
+  };
+}
+
+/**
  * Union type for all test events
  */
 export type TestEvent =
@@ -154,7 +183,8 @@ export type TestEvent =
   | QueryErrorTestEvent
   | UiStateTestEvent
   | ListLoadingTestEvent
-  | SseTestEvent;
+  | SseTestEvent
+  | ProvisioningTestEvent;
 
 /**
  * Test event payload - the actual data passed to emitTestEvent
