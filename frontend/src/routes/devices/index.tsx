@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useDevices, useDeleteDevice, type DeviceConfig } from '@/hooks/use-devices'
+import { useDevices, useDeleteDevice, type DeviceSummary } from '@/hooks/use-devices'
+import { useDeviceModels } from '@/hooks/use-device-models'
 import { DeviceListTable } from '@/components/devices/device-list-table'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -15,6 +16,7 @@ export const Route = createFileRoute('/devices/')({
 
 function DeviceList() {
   const { devices, isLoading, isFetching, error } = useDevices()
+  const { deviceModels } = useDeviceModels()
   const deleteDevice = useDeleteDevice()
   const { confirm, confirmProps } = useConfirm()
 
@@ -40,10 +42,10 @@ function DeviceList() {
     })
   }, [])
 
-  const handleDelete = useCallback(async (device: DeviceConfig) => {
+  const handleDelete = useCallback(async (device: DeviceSummary) => {
     const confirmed = await confirm({
       title: 'Delete Device',
-      description: `Delete device ${device.macAddress}? This action cannot be undone.`,
+      description: `Delete device ${device.key}? This action cannot be undone.`,
       confirmText: 'Delete',
       destructive: true
     })
@@ -56,7 +58,7 @@ function DeviceList() {
   if (error) {
     return (
       <div className="p-8" data-testid="devices.list.error">
-        <h1 className="text-2xl font-bold text-zinc-50">Device Configs</h1>
+        <h1 className="text-2xl font-bold text-zinc-50">Devices</h1>
         <p className="mt-4 text-red-400">Failed to load devices: {error.message}</p>
       </div>
     )
@@ -66,7 +68,7 @@ function DeviceList() {
     return (
       <div className="p-8">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-zinc-50">Device Configs</h1>
+          <h1 className="text-2xl font-bold text-zinc-50">Devices</h1>
           <Link to="/devices/new">
             <Button variant="primary" data-testid="devices.list.header.new-device">
               New Device
@@ -90,7 +92,7 @@ function DeviceList() {
   return (
     <div className="p-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-zinc-50">Device Configs</h1>
+        <h1 className="text-2xl font-bold text-zinc-50">Devices</h1>
         <Link to="/devices/new">
           <Button variant="primary" data-testid="devices.list.header.new-device">
             New Device
@@ -100,6 +102,7 @@ function DeviceList() {
 
       <DeviceListTable
         devices={devices}
+        deviceModels={deviceModels}
         isLoading={isLoading}
         sortPreference={sortPreference}
         onSortChange={handleSortChange}

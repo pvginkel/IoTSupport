@@ -47,8 +47,11 @@ function DuplicateDeviceRoute() {
     <div className="flex h-full flex-col">
       <DeviceEditor
         mode="duplicate"
-        initialMacAddress={device.macAddress}
+        initialKey={device.key}
+        initialDeviceModelId={device.deviceModelId}
+        initialDeviceModel={device.deviceModel}
         initialConfig={config}
+        duplicateFrom={device.key}
       />
     </div>
   )

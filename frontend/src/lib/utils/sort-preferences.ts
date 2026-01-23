@@ -1,12 +1,12 @@
 const SORT_STORAGE_KEY = 'iot-support-device-sort'
 
 export interface SortPreference {
-  column: 'macAddress' | 'deviceName' | 'deviceEntityId' | 'enableOta'
+  column: 'key' | 'deviceName' | 'deviceEntityId' | 'enableOta' | 'modelName' | 'rotationState'
   direction: 'asc' | 'desc'
 }
 
 const DEFAULT_SORT: SortPreference = {
-  column: 'macAddress',
+  column: 'key',
   direction: 'asc'
 }
 
@@ -18,7 +18,7 @@ export function getSortPreference(): SortPreference {
     const parsed = JSON.parse(stored) as SortPreference
 
     // Validate the parsed data
-    const validColumns = ['macAddress', 'deviceName', 'deviceEntityId', 'enableOta']
+    const validColumns = ['key', 'deviceName', 'deviceEntityId', 'enableOta', 'modelName', 'rotationState']
     const validDirections = ['asc', 'desc']
 
     if (
@@ -26,6 +26,12 @@ export function getSortPreference(): SortPreference {
       validDirections.includes(parsed.direction)
     ) {
       return parsed
+    }
+
+    // Migration: if user has old 'macAddress' preference, convert to 'key'
+    const parsedUnknown = parsed as unknown as { column?: string; direction: SortPreference['direction'] }
+    if (parsedUnknown.column === 'macAddress') {
+      return { column: 'key', direction: parsed.direction }
     }
 
     return DEFAULT_SORT

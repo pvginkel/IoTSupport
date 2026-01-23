@@ -1,20 +1,29 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useNavigate, useBlocker } from '@tanstack/react-router'
+import { useNavigate, useBlocker, Link } from '@tanstack/react-router'
 import Editor from '@monaco-editor/react'
+import { Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { useCreateDevice, useUpdateDevice } from '@/hooks/use-devices'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { useCreateDevice, useUpdateDevice, downloadDeviceProvisioning } from '@/hooks/use-devices'
+import { useDeviceModels, useDeviceModel } from '@/hooks/use-device-models'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { useConfirm } from '@/hooks/use-confirm'
+import { useToast } from '@/contexts/toast-context'
+import { useFormInstrumentation } from '@/lib/test/form-instrumentation'
+import { configureMonacoSchemaValidation } from '@/lib/utils/monaco-schema'
 
 interface DeviceEditorProps {
   mode: 'new' | 'edit' | 'duplicate'
   // For edit mode: the device ID (required for updates)
   deviceId?: number
-  // MAC address (read-only in edit mode, editable in new/duplicate mode)
-  initialMacAddress?: string
+  // For edit mode: the device key (read-only display)
+  initialKey?: string
+  // Device model ID (read-only in edit mode, selectable in new/duplicate mode)
+  initialDeviceModelId?: number
+  // Device model info for display in edit mode
+  initialDeviceModel?: { code: string; name: string }
   initialConfig?: Record<string, unknown>
-  duplicateFrom?: string
+  duplicateFrom?: string  // Source device key for duplicate mode
   onSave?: () => void
   onCancel?: () => void
 }
@@ -28,7 +37,9 @@ const DEFAULT_TEMPLATE = {
 export function DeviceEditor({
   mode,
   deviceId,
-  initialMacAddress = '',
+  initialKey = '',
+  initialDeviceModelId,
+  initialDeviceModel,
   initialConfig = DEFAULT_TEMPLATE,
   duplicateFrom,
   onSave: onSaveCallback,
@@ -37,26 +48,39 @@ export function DeviceEditor({
   const navigate = useNavigate()
   const createDevice = useCreateDevice()
   const updateDevice = useUpdateDevice()
+  const { deviceModels, isLoading: modelsLoading } = useDeviceModels()
   const { confirm, confirmProps } = useConfirm()
+  const { showSuccess, showError } = useToast()
+  const [isDownloading, setIsDownloading] = useState(false)
+  const monacoEditorRef = useRef<unknown>(null)
 
-  // MAC address is only editable for new devices (including duplicate)
-  const [macAddress, setMacAddress] = useState(mode === 'duplicate' ? '' : initialMacAddress)
+  // Form instrumentation for Playwright tests
+  const formId = mode === 'edit' ? 'DeviceEditor_edit' : mode === 'duplicate' ? 'DeviceEditor_duplicate' : 'DeviceEditor_new'
+  const { trackSubmit, trackSuccess, trackError } = useFormInstrumentation({ formId })
+
+  // Fetch full device model (with schema) for Monaco validation when in edit mode
+  const { deviceModel: fullDeviceModel } = useDeviceModel(initialDeviceModelId)
+
+  // Device model is selectable for new devices, fixed for edits
+  const [selectedModelId, setSelectedModelId] = useState<number | undefined>(
+    mode === 'duplicate' ? initialDeviceModelId : initialDeviceModelId
+  )
   const [jsonConfig, setJsonConfig] = useState(JSON.stringify(initialConfig, null, 2))
   const [jsonError, setJsonError] = useState<string | null>(null)
 
-  const originalMac = mode === 'duplicate' ? '' : initialMacAddress
+  const originalModelId = mode === 'duplicate' ? initialDeviceModelId : initialDeviceModelId
   const originalJson = JSON.stringify(initialConfig, null, 2)
 
   // Track dirty state - computed from state
   const isDirty = useMemo(() => {
-    // In edit mode, MAC address is not editable, so only check JSON
+    // In edit mode, model is not editable, so only check JSON
     if (mode === 'edit') {
       return jsonConfig !== originalJson
     }
-    const macChanged = macAddress !== originalMac
+    const modelChanged = selectedModelId !== originalModelId
     const jsonChanged = jsonConfig !== originalJson
-    return macChanged || jsonChanged
-  }, [macAddress, jsonConfig, originalMac, originalJson, mode])
+    return modelChanged || jsonChanged
+  }, [selectedModelId, jsonConfig, originalModelId, originalJson, mode])
 
   // Use ref to track if we're intentionally navigating (bypassing blocker)
   const isNavigatingRef = useRef(false)
@@ -82,6 +106,17 @@ export function DeviceEditor({
     }
   }, [isDirty])
 
+  // Configure Monaco schema validation when device model has a config schema
+  useEffect(() => {
+    if (monacoEditorRef.current && fullDeviceModel?.configSchema) {
+      configureMonacoSchemaValidation(
+        monacoEditorRef.current,
+        fullDeviceModel.configSchema,
+        'device-config-schema'
+      )
+    }
+  }, [fullDeviceModel?.configSchema])
+
   // Validate JSON
   const validateJson = useCallback((value: string): boolean => {
     try {
@@ -101,10 +136,26 @@ export function DeviceEditor({
     }
   }, [validateJson])
 
+  // Handle provisioning download
+  const handleDownloadProvisioning = useCallback(async () => {
+    if (!deviceId || !initialKey) return
+
+    setIsDownloading(true)
+    try {
+      await downloadDeviceProvisioning(deviceId, initialKey)
+      showSuccess('Provisioning downloaded successfully')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to download provisioning'
+      showError(message)
+    } finally {
+      setIsDownloading(false)
+    }
+  }, [deviceId, initialKey, showSuccess, showError])
+
   const handleSave = useCallback(async () => {
-    // MAC address validation only for new devices
-    if (mode !== 'edit' && !macAddress.trim()) {
-      setJsonError('MAC address is required')
+    // Model selection validation only for new devices
+    if (mode !== 'edit' && !selectedModelId) {
+      setJsonError('Device model is required')
       return
     }
 
@@ -114,43 +165,49 @@ export function DeviceEditor({
 
     const configContent = JSON.parse(jsonConfig)
     isNavigatingRef.current = true
+    trackSubmit({ deviceId, mode })
 
     if (mode === 'edit') {
       // Update existing device by ID
       if (deviceId === undefined) {
         setJsonError('Device ID is required for update')
         isNavigatingRef.current = false
+        trackError('Device ID is required for update')
         return
       }
 
       updateDevice.mutate(
-        { id: deviceId, content: configContent },
+        { id: deviceId, config: configContent },
         {
           onSuccess: () => {
+            trackSuccess({ deviceId })
             onSaveCallback?.()
             navigate({ to: '/devices' })
           },
-          onError: () => {
+          onError: (err) => {
             isNavigatingRef.current = false
+            trackError(err instanceof Error ? err.message : 'Unknown error')
           }
         }
       )
     } else {
       // Create new device (new or duplicate mode)
       createDevice.mutate(
-        { macAddress, content: configContent },
+        { deviceModelId: selectedModelId!, config: configContent },
         {
           onSuccess: () => {
+            trackSuccess({ mode })
             onSaveCallback?.()
             navigate({ to: '/devices' })
           },
-          onError: () => {
+          onError: (err) => {
             isNavigatingRef.current = false
+            trackError(err instanceof Error ? err.message : 'Unknown error')
           }
         }
       )
     }
-  }, [macAddress, jsonConfig, mode, deviceId, createDevice, updateDevice, validateJson, onSaveCallback, navigate])
+  }, [selectedModelId, jsonConfig, mode, deviceId, createDevice, updateDevice, validateJson, onSaveCallback, navigate, trackSubmit, trackSuccess, trackError])
 
   const handleCancel = useCallback(async () => {
     if (isDirty) {
@@ -178,13 +235,14 @@ export function DeviceEditor({
       to: '/devices/new',
       search: {
         config: jsonConfig,
-        from: initialMacAddress,
+        modelId: initialDeviceModelId?.toString(),
+        from: initialKey,
       }
     })
-  }, [jsonConfig, initialMacAddress, navigate])
+  }, [jsonConfig, initialDeviceModelId, initialKey, navigate])
 
   const isPending = createDevice.isPending || updateDevice.isPending
-  const isValid = (mode === 'edit' || !!macAddress.trim()) && !jsonError && !isPending
+  const isValid = (mode === 'edit' || !!selectedModelId) && !jsonError && !isPending
 
   // Title based on mode
   const getTitle = () => {
@@ -192,10 +250,13 @@ export function DeviceEditor({
       return duplicateFrom ? `Duplicate Device: ${duplicateFrom}` : 'New Device'
     }
     if (mode === 'edit') {
-      return `Edit Device: ${initialMacAddress}`
+      return `Edit Device: ${initialKey}`
     }
-    return `Duplicate Device: ${initialMacAddress}`
+    return `Duplicate Device: ${initialKey}`
   }
+
+  // Get selected model name for display
+  const selectedModel = deviceModels.find(m => m.id === selectedModelId)
 
   return (
     <div className="flex h-full flex-col" data-testid="devices.editor">
@@ -214,14 +275,27 @@ export function DeviceEditor({
               Cancel
             </Button>
             {mode === 'edit' && (
-              <Button
-                variant="outline"
-                onClick={handleDuplicate}
-                disabled={isPending}
-                data-testid="devices.editor.duplicate"
-              >
-                Duplicate
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleDownloadProvisioning}
+                  disabled={isPending || isDownloading}
+                  loading={isDownloading}
+                  data-testid="devices.editor.download-provisioning"
+                  title="Download provisioning package"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download Provisioning
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleDuplicate}
+                  disabled={isPending}
+                  data-testid="devices.editor.duplicate"
+                >
+                  Duplicate
+                </Button>
+              </>
             )}
             <Button
               variant="primary"
@@ -238,33 +312,72 @@ export function DeviceEditor({
 
       <div className="flex-1 overflow-auto p-6">
         <div className="mx-auto max-w-4xl space-y-6">
+          {/* Device Key (read-only in edit mode) */}
+          {mode === 'edit' && initialKey && (
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Device Key
+              </label>
+              <div className="flex items-center">
+                <span className="font-mono text-zinc-50" data-testid="devices.editor.key-display">
+                  {initialKey}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Device Model Selection */}
           <div>
-            <label htmlFor="mac-address" className="block text-sm font-medium text-zinc-300 mb-2">
-              MAC Address
+            <label htmlFor="device-model" className="block text-sm font-medium text-zinc-300 mb-2">
+              Device Model
             </label>
             {mode === 'edit' ? (
-              // In edit mode, MAC address is read-only (tied to the device ID)
+              // In edit mode, model is read-only but clickable to navigate to model editor
               <div className="flex items-center">
-                <span className="font-mono text-zinc-50" data-testid="devices.editor.mac-display">
-                  {initialMacAddress}
-                </span>
-                <span className="ml-2 text-xs text-zinc-500">(cannot be changed)</span>
+                {initialDeviceModelId ? (
+                  <Link
+                    to="/device-models/$modelId"
+                    params={{ modelId: String(initialDeviceModelId) }}
+                    className="text-blue-400 hover:text-blue-300 hover:underline"
+                    data-testid="devices.editor.model-display"
+                  >
+                    {initialDeviceModel ? `${initialDeviceModel.name} (${initialDeviceModel.code})` : 'Unknown'}
+                  </Link>
+                ) : (
+                  <span className="text-zinc-50" data-testid="devices.editor.model-display">
+                    Unknown
+                  </span>
+                )}
               </div>
             ) : (
               <>
-                <Input
-                  id="mac-address"
-                  value={macAddress}
-                  onChange={(e) => setMacAddress(e.target.value)}
-                  placeholder="aa:bb:cc:dd:ee:ff"
-                  disabled={isPending}
-                  data-testid="devices.editor.mac-input"
-                />
-                <p className="mt-1 text-xs text-zinc-500">Format: aa:bb:cc:dd:ee:ff (colon-separated, lowercase)</p>
+                <Select
+                  value={selectedModelId?.toString() ?? ''}
+                  onValueChange={(value: string) => setSelectedModelId(value ? parseInt(value, 10) : undefined)}
+                  disabled={isPending || modelsLoading}
+                >
+                  <SelectTrigger data-testid="devices.editor.model-select">
+                    <SelectValue placeholder={modelsLoading ? 'Loading models...' : 'Select a device model'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deviceModels.map((model) => (
+                      <SelectItem key={model.id} value={model.id.toString()}>
+                        {model.name} ({model.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedModel && (
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {selectedModel.deviceCount} device{selectedModel.deviceCount !== 1 ? 's' : ''} using this model
+                    {selectedModel.firmwareVersion && ` | Firmware: ${selectedModel.firmwareVersion}`}
+                  </p>
+                )}
               </>
             )}
           </div>
 
+          {/* JSON Configuration */}
           <div>
             <div className="mb-2 flex items-center justify-between">
               <label htmlFor="json-config" className="block text-sm font-medium text-zinc-300">
@@ -284,6 +397,9 @@ export function DeviceEditor({
                 theme="vs-dark"
                 value={jsonConfig}
                 onChange={handleEditorChange}
+                onMount={(editor) => {
+                  monacoEditorRef.current = editor
+                }}
                 options={{
                   minimap: { enabled: false },
                   folding: true,

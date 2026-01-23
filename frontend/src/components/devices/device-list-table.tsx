@@ -3,27 +3,67 @@ import { Link } from '@tanstack/react-router'
 import { Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { DeviceConfig } from '@/hooks/use-devices'
+import type { DeviceSummary } from '@/hooks/use-devices'
+import type { DeviceModelSummary } from '@/hooks/use-device-models'
 import type { SortPreference } from '@/lib/utils/sort-preferences'
 
+// Helper to get rotation state badge styling
+function getRotationStateBadge(state: string): { bgColor: string; textColor: string } {
+  switch (state.toUpperCase()) {
+    case 'OK':
+      return { bgColor: 'bg-green-900/30', textColor: 'text-green-400' }
+    case 'QUEUED':
+      return { bgColor: 'bg-yellow-900/30', textColor: 'text-yellow-400' }
+    case 'PENDING':
+      return { bgColor: 'bg-blue-900/30', textColor: 'text-blue-400' }
+    case 'TIMEOUT':
+      return { bgColor: 'bg-red-900/30', textColor: 'text-red-400' }
+    default:
+      return { bgColor: 'bg-zinc-800', textColor: 'text-zinc-400' }
+  }
+}
+
+// Extended device with model name for sorting
+interface DeviceWithModelName extends DeviceSummary {
+  modelName: string
+}
+
 interface DeviceListTableProps {
-  devices: DeviceConfig[]
+  devices: DeviceSummary[]
+  deviceModels: DeviceModelSummary[]
   isLoading: boolean
   sortPreference: SortPreference
   onSortChange: (column: SortPreference['column']) => void
-  onDelete: (device: DeviceConfig) => void
+  onDelete: (device: DeviceSummary) => void
 }
 
 export function DeviceListTable({
   devices,
+  deviceModels,
   isLoading,
   sortPreference,
   onSortChange,
   onDelete
 }: DeviceListTableProps) {
+  // Create a map of model ID to model name for efficient lookup
+  const modelNameMap = useMemo(() => {
+    const map = new Map<number, string>()
+    deviceModels.forEach(model => {
+      map.set(model.id, model.name)
+    })
+    return map
+  }, [deviceModels])
+
+  // Enhance devices with model name and sort
   const sortedDevices = useMemo(() => {
-    const sorted = [...devices]
-    sorted.sort((a, b) => {
+    // First, add model names to devices
+    const devicesWithNames: DeviceWithModelName[] = devices.map(device => ({
+      ...device,
+      modelName: modelNameMap.get(device.deviceModelId) ?? 'Unknown'
+    }))
+
+    // Then sort
+    devicesWithNames.sort((a, b) => {
       const aVal = a[sortPreference.column]
       const bVal = b[sortPreference.column]
 
@@ -36,8 +76,8 @@ export function DeviceListTable({
       const comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
       return sortPreference.direction === 'asc' ? comparison : -comparison
     })
-    return sorted
-  }, [devices, sortPreference])
+    return devicesWithNames
+  }, [devices, sortPreference, modelNameMap])
 
   if (isLoading) {
     return (
@@ -74,54 +114,69 @@ export function DeviceListTable({
       <table className="w-full border-collapse">
         <thead className="border-b border-zinc-800">
           <tr>
-            {renderSortHeader('macAddress', 'MAC Address')}
+            {renderSortHeader('key', 'Device Key')}
+            {renderSortHeader('modelName', 'Model')}
             {renderSortHeader('deviceName', 'Device Name')}
             {renderSortHeader('deviceEntityId', 'Entity ID')}
+            {renderSortHeader('rotationState', 'Rotation State')}
             {renderSortHeader('enableOta', 'OTA Status')}
             <th className="px-4 py-3 text-right text-sm font-semibold text-zinc-50">Actions</th>
           </tr>
         </thead>
         <tbody>
-          {sortedDevices.map((device) => (
-            <tr
-              key={device.id}
-              className="border-b border-zinc-800 hover:bg-zinc-900"
-              data-testid="devices.list.row"
-              data-device-id={device.id}
-            >
-              <td className="px-4 py-3 text-sm text-zinc-50 font-mono">{device.macAddress}</td>
-              <td className="px-4 py-3 text-sm text-zinc-300">{device.deviceName || '—'}</td>
-              <td className="px-4 py-3 text-sm text-zinc-300 font-mono">{device.deviceEntityId || '—'}</td>
-              <td className="px-4 py-3 text-sm text-zinc-300">
-                {device.enableOta === true && <span className="text-green-400">✓</span>}
-                {device.enableOta === false && <span className="text-red-400">✕</span>}
-                {device.enableOta === null && <span className="text-zinc-600">—</span>}
-              </td>
-              <td className="px-4 py-3 text-right">
-                <div className="flex items-center justify-end gap-2">
-                  <Link to="/devices/$deviceId" params={{ deviceId: String(device.id) }}>
+          {sortedDevices.map((device) => {
+            const rotationBadge = getRotationStateBadge(device.rotationState)
+            return (
+              <tr
+                key={device.id}
+                className="border-b border-zinc-800 hover:bg-zinc-900"
+                data-testid="devices.list.row"
+                data-device-id={device.id}
+                data-device-key={device.key}
+                data-rotation-state={device.rotationState}
+              >
+                <td className="px-4 py-3 text-sm text-zinc-50 font-mono">{device.key}</td>
+                <td className="px-4 py-3 text-sm text-zinc-300" data-testid="devices.list.row.model">
+                  {device.modelName}
+                </td>
+                <td className="px-4 py-3 text-sm text-zinc-300">{device.deviceName || '—'}</td>
+                <td className="px-4 py-3 text-sm text-zinc-300 font-mono">{device.deviceEntityId || '—'}</td>
+                <td className="px-4 py-3 text-sm" data-testid="devices.list.row.rotation-state">
+                  <span className={`px-2 py-1 rounded-md text-xs ${rotationBadge.bgColor} ${rotationBadge.textColor}`}>
+                    {device.rotationState}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-sm text-zinc-300">
+                  {device.enableOta === true && <span className="text-green-400">✓</span>}
+                  {device.enableOta === false && <span className="text-red-400">✕</span>}
+                  {device.enableOta === null && <span className="text-zinc-600">—</span>}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <Link to="/devices/$deviceId" params={{ deviceId: String(device.id) }}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        data-testid="devices.list.row.edit-button"
+                        title="Edit device"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </Link>
                     <Button
-                      variant="outline"
+                      variant="destructive"
                       size="sm"
-                      data-testid="devices.list.row.edit-button"
-                      title="Edit device"
+                      onClick={() => onDelete(device)}
+                      data-testid="devices.list.row.delete-button"
+                      title="Delete device"
                     >
-                      <Pencil className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
-                  </Link>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => onDelete(device)}
-                    data-testid="devices.list.row.delete-button"
-                    title="Delete device"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </td>
-            </tr>
-          ))}
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

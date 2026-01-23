@@ -4,6 +4,7 @@ import type { WorkerInfo } from '@playwright/test';
 import getPort from 'get-port';
 import { startBackend, startFrontend } from './process/servers';
 import { DevicesFactory } from '../api/factories/devices';
+import { DeviceModelsFactory } from '../api/factories/device-models';
 import { AuthFactory } from '../api/factories/auth';
 
 type ServiceManager = {
@@ -15,6 +16,7 @@ type ServiceManager = {
 type TestFixtures = {
   frontendUrl: string;
   devices: DevicesFactory;
+  deviceModels: DeviceModelsFactory;
   auth: AuthFactory;
 };
 
@@ -37,6 +39,15 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
 
     // Use frontend URL and page.request to share cookies with browser
     const factory = new DevicesFactory(_serviceManager.frontendUrl, page);
+    await use(factory);
+  },
+
+  deviceModels: async ({ _serviceManager, page, auth }, use) => {
+    // Authenticate first - backend requires auth for all API calls
+    await auth.createSession({ name: 'Test User' });
+
+    // Use frontend URL and page.request to share cookies with browser
+    const factory = new DeviceModelsFactory(_serviceManager.frontendUrl, page);
     await use(factory);
   },
 

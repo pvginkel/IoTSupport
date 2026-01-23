@@ -37,51 +37,177 @@
         "title": "AssetUploadResponseSchema",
         "type": "object"
       },
-      "ConfigCreateRequestSchema.6be28b6": {
-        "description": "Request for POST /api/configs (create new config).",
+      "DashboardResponseSchema.57872a8": {
+        "description": "Response schema for devices dashboard.",
         "properties": {
-          "content": {
-            "description": "JSON configuration content as string (stored verbatim)",
-            "title": "Content",
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Count of devices in each category",
+            "examples": [
+              {
+                "critical": 1,
+                "healthy": 10,
+                "warning": 2
+              }
+            ],
+            "title": "Counts",
+            "type": "object"
+          },
+          "critical": {
+            "description": "Devices in critical state (TIMEOUT, over critical threshold)",
+            "items": {
+              "$ref": "#/components/schemas/DashboardResponseSchema.57872a8.DashboardDeviceSchema"
+            },
+            "title": "Critical",
+            "type": "array"
+          },
+          "healthy": {
+            "description": "Devices in healthy state (OK, QUEUED, PENDING)",
+            "items": {
+              "$ref": "#/components/schemas/DashboardResponseSchema.57872a8.DashboardDeviceSchema"
+            },
+            "title": "Healthy",
+            "type": "array"
+          },
+          "warning": {
+            "description": "Devices in warning state (TIMEOUT, under critical threshold)",
+            "items": {
+              "$ref": "#/components/schemas/DashboardResponseSchema.57872a8.DashboardDeviceSchema"
+            },
+            "title": "Warning",
+            "type": "array"
+          }
+        },
+        "required": [
+          "healthy",
+          "warning",
+          "critical",
+          "counts"
+        ],
+        "title": "DashboardResponseSchema",
+        "type": "object"
+      },
+      "DashboardResponseSchema.57872a8.DashboardDeviceSchema": {
+        "description": "Device summary for dashboard display.",
+        "properties": {
+          "days_since_rotation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Days since last completed rotation",
+            "title": "Days Since Rotation"
+          },
+          "device_model_code": {
+            "description": "Device model code",
+            "title": "Device Model Code",
             "type": "string"
           },
-          "mac_address": {
-            "description": "Device MAC address (colon-separated)",
-            "title": "Mac Address",
+          "device_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Device name from config",
+            "title": "Device Name"
+          },
+          "id": {
+            "description": "Device ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "key": {
+            "description": "Unique 8-character device key",
+            "title": "Key",
+            "type": "string"
+          },
+          "last_rotation_completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When last rotation completed",
+            "title": "Last Rotation Completed At"
+          },
+          "rotation_state": {
+            "description": "Current rotation state",
+            "title": "Rotation State",
             "type": "string"
           }
         },
         "required": [
-          "mac_address",
-          "content"
+          "id",
+          "key",
+          "device_model_code",
+          "rotation_state"
         ],
-        "title": "ConfigCreateRequestSchema",
+        "title": "DashboardDeviceSchema",
         "type": "object"
       },
-      "ConfigListResponseSchema.6be28b6": {
-        "description": "Response for list endpoint.",
+      "DeviceCreateSchema.d48fbce": {
+        "description": "Request schema for creating a device.",
         "properties": {
-          "configs": {
-            "items": {
-              "$ref": "#/components/schemas/ConfigListResponseSchema.6be28b6.ConfigSummarySchema"
-            },
-            "title": "Configs",
-            "type": "array"
+          "config": {
+            "description": "Device configuration as JSON string",
+            "title": "Config",
+            "type": "string"
           },
-          "count": {
-            "title": "Count",
+          "device_model_id": {
+            "description": "ID of the device model this device belongs to",
+            "title": "Device Model Id",
             "type": "integer"
           }
         },
         "required": [
-          "configs",
-          "count"
+          "device_model_id",
+          "config"
         ],
-        "title": "ConfigListResponseSchema",
+        "title": "DeviceCreateSchema",
         "type": "object"
       },
-      "ConfigListResponseSchema.6be28b6.ConfigSummarySchema": {
-        "description": "Summary for list endpoint.",
+      "DeviceListResponseSchema.d48fbce": {
+        "description": "Response schema for device list.",
+        "properties": {
+          "count": {
+            "description": "Total count of devices",
+            "title": "Count",
+            "type": "integer"
+          },
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceListResponseSchema.d48fbce.DeviceSummarySchema"
+            },
+            "title": "Devices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "devices",
+          "count"
+        ],
+        "title": "DeviceListResponseSchema",
+        "type": "object"
+      },
+      "DeviceListResponseSchema.d48fbce.DeviceSummarySchema": {
+        "description": "Summary schema for device list responses.",
         "properties": {
           "device_entity_id": {
             "anyOf": [
@@ -93,8 +219,13 @@
               }
             ],
             "default": null,
-            "description": "Device entity ID",
+            "description": "Device entity ID from config",
             "title": "Device Entity Id"
+          },
+          "device_model_id": {
+            "description": "Device model ID",
+            "title": "Device Model Id",
+            "type": "integer"
           },
           "device_name": {
             "anyOf": [
@@ -119,34 +250,323 @@
               }
             ],
             "default": null,
-            "description": "OTA update enabled",
+            "description": "OTA enabled flag from config",
             "title": "Enable Ota"
           },
           "id": {
-            "description": "Config surrogate ID",
+            "description": "Device ID",
             "title": "Id",
             "type": "integer"
           },
-          "mac_address": {
-            "description": "Device MAC address (colon-separated)",
-            "title": "Mac Address",
+          "key": {
+            "description": "Unique 8-character device key",
+            "title": "Key",
+            "type": "string"
+          },
+          "rotation_state": {
+            "description": "Current rotation state",
+            "title": "Rotation State",
+            "type": "string"
+          },
+          "secret_created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When current secret was created",
+            "title": "Secret Created At"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "device_model_id",
+          "rotation_state"
+        ],
+        "title": "DeviceSummarySchema",
+        "type": "object"
+      },
+      "DeviceModelCreateSchema.349be3d": {
+        "description": "Request schema for creating a device model.",
+        "properties": {
+          "code": {
+            "description": "Unique model code (lowercase alphanumeric with underscores)",
+            "examples": [
+              "thermostat",
+              "motion_sensor"
+            ],
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "config_schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "JSON schema for validating device configurations (optional)",
+            "title": "Config Schema"
+          },
+          "name": {
+            "description": "Human-readable model name",
+            "examples": [
+              "Smart Thermostat",
+              "Motion Sensor"
+            ],
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "DeviceModelCreateSchema",
+        "type": "object"
+      },
+      "DeviceModelFirmwareResponseSchema.349be3d": {
+        "description": "Response schema for firmware upload.",
+        "properties": {
+          "code": {
+            "description": "Model code",
+            "title": "Code",
+            "type": "string"
+          },
+          "firmware_version": {
+            "description": "Extracted firmware version",
+            "title": "Firmware Version",
+            "type": "string"
+          },
+          "id": {
+            "description": "Device model ID",
+            "title": "Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "firmware_version"
+        ],
+        "title": "DeviceModelFirmwareResponseSchema",
+        "type": "object"
+      },
+      "DeviceModelListResponseSchema.349be3d": {
+        "description": "Response schema for device model list.",
+        "properties": {
+          "count": {
+            "description": "Total count of device models",
+            "title": "Count",
+            "type": "integer"
+          },
+          "device_models": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceModelListResponseSchema.349be3d.DeviceModelSummarySchema"
+            },
+            "title": "Device Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "device_models",
+          "count"
+        ],
+        "title": "DeviceModelListResponseSchema",
+        "type": "object"
+      },
+      "DeviceModelListResponseSchema.349be3d.DeviceModelSummarySchema": {
+        "description": "Summary schema for device model list responses.",
+        "properties": {
+          "code": {
+            "description": "Unique model code",
+            "title": "Code",
+            "type": "string"
+          },
+          "device_count": {
+            "description": "Number of devices using this model",
+            "title": "Device Count",
+            "type": "integer"
+          },
+          "firmware_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Firmware version if uploaded",
+            "title": "Firmware Version"
+          },
+          "has_config_schema": {
+            "description": "Whether model has a config schema",
+            "title": "Has Config Schema",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Device model ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Human-readable model name",
+            "title": "Name",
             "type": "string"
           }
         },
         "required": [
           "id",
-          "mac_address"
+          "code",
+          "name",
+          "has_config_schema",
+          "device_count"
         ],
-        "title": "ConfigSummarySchema",
+        "title": "DeviceModelSummarySchema",
         "type": "object"
       },
-      "ConfigResponseSchema.6be28b6": {
-        "description": "Response for get/create/update endpoints.",
+      "DeviceModelResponseSchema.349be3d": {
+        "description": "Response schema for device model details.",
         "properties": {
-          "content": {
+          "code": {
+            "description": "Unique model code",
+            "title": "Code",
+            "type": "string"
+          },
+          "config_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "JSON schema for config validation",
+            "title": "Config Schema"
+          },
+          "created_at": {
+            "description": "Creation timestamp",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_count": {
+            "description": "Number of devices using this model",
+            "title": "Device Count",
+            "type": "integer"
+          },
+          "firmware_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Firmware version if uploaded",
+            "title": "Firmware Version"
+          },
+          "has_config_schema": {
+            "description": "Whether model has a config schema",
+            "title": "Has Config Schema",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Device model ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Human-readable model name",
+            "title": "Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "Last update timestamp",
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "has_config_schema",
+          "device_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DeviceModelResponseSchema",
+        "type": "object"
+      },
+      "DeviceModelUpdateSchema.349be3d": {
+        "description": "Request schema for updating a device model.",
+        "properties": {
+          "config_schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "JSON schema for validating device configurations",
+            "title": "Config Schema"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Human-readable model name",
+            "title": "Name"
+          }
+        },
+        "title": "DeviceModelUpdateSchema",
+        "type": "object"
+      },
+      "DeviceResponseSchema.d48fbce": {
+        "description": "Response schema for device details.",
+        "properties": {
+          "client_id": {
+            "description": "Keycloak client ID",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "config": {
             "additionalProperties": true,
-            "description": "JSON configuration content",
-            "title": "Content",
+            "description": "Device configuration",
+            "title": "Config",
             "type": "object"
           },
           "created_at": {
@@ -165,8 +585,17 @@
               }
             ],
             "default": null,
-            "description": "Device entity ID",
+            "description": "Device entity ID from config",
             "title": "Device Entity Id"
+          },
+          "device_model": {
+            "$ref": "#/components/schemas/DeviceResponseSchema.d48fbce.DeviceModelInfoSchema",
+            "description": "Device model details"
+          },
+          "device_model_id": {
+            "description": "Device model ID",
+            "title": "Device Model Id",
+            "type": "integer"
           },
           "device_name": {
             "anyOf": [
@@ -191,18 +620,65 @@
               }
             ],
             "default": null,
-            "description": "OTA update enabled",
+            "description": "OTA enabled flag from config",
             "title": "Enable Ota"
           },
           "id": {
-            "description": "Config surrogate ID",
+            "description": "Device ID",
             "title": "Id",
             "type": "integer"
           },
-          "mac_address": {
-            "description": "Device MAC address (colon-separated)",
-            "title": "Mac Address",
+          "key": {
+            "description": "Unique 8-character device key",
+            "title": "Key",
             "type": "string"
+          },
+          "last_rotation_attempt_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When last rotation was attempted",
+            "title": "Last Rotation Attempt At"
+          },
+          "last_rotation_completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When last rotation completed",
+            "title": "Last Rotation Completed At"
+          },
+          "rotation_state": {
+            "description": "Current rotation state",
+            "title": "Rotation State",
+            "type": "string"
+          },
+          "secret_created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When current secret was created",
+            "title": "Secret Created At"
           },
           "updated_at": {
             "description": "Last update timestamp",
@@ -213,27 +689,90 @@
         },
         "required": [
           "id",
-          "mac_address",
-          "content",
+          "key",
+          "device_model_id",
+          "device_model",
+          "config",
+          "rotation_state",
+          "client_id",
           "created_at",
           "updated_at"
         ],
-        "title": "ConfigResponseSchema",
+        "title": "DeviceResponseSchema",
         "type": "object"
       },
-      "ConfigUpdateRequestSchema.6be28b6": {
-        "description": "Request for PUT /api/configs/<id> (update existing config).",
+      "DeviceResponseSchema.d48fbce.DeviceModelInfoSchema": {
+        "description": "Embedded device model info in device responses.",
         "properties": {
-          "content": {
-            "description": "JSON configuration content as string (stored verbatim)",
-            "title": "Content",
+          "code": {
+            "description": "Device model code",
+            "title": "Code",
+            "type": "string"
+          },
+          "firmware_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Firmware version if uploaded",
+            "title": "Firmware Version"
+          },
+          "id": {
+            "description": "Device model ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Device model name",
+            "title": "Name",
             "type": "string"
           }
         },
         "required": [
-          "content"
+          "id",
+          "code",
+          "name"
         ],
-        "title": "ConfigUpdateRequestSchema",
+        "title": "DeviceModelInfoSchema",
+        "type": "object"
+      },
+      "DeviceRotateResponseSchema.d48fbce": {
+        "description": "Response schema for device rotation trigger.",
+        "properties": {
+          "status": {
+            "description": "Rotation status: 'queued' or 'already_pending'",
+            "examples": [
+              "queued",
+              "already_pending"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "DeviceRotateResponseSchema",
+        "type": "object"
+      },
+      "DeviceUpdateSchema.d48fbce": {
+        "description": "Request schema for updating a device.",
+        "properties": {
+          "config": {
+            "description": "Device configuration as JSON string",
+            "title": "Config",
+            "type": "string"
+          }
+        },
+        "required": [
+          "config"
+        ],
+        "title": "DeviceUpdateSchema",
         "type": "object"
       },
       "ErrorResponseSchema.8c5cd6b": {
@@ -376,6 +915,87 @@
           "url"
         ],
         "title": "LvglImageQuerySchema",
+        "type": "object"
+      },
+      "RotationStatusSchema.57872a8": {
+        "description": "Response schema for rotation status.",
+        "properties": {
+          "counts_by_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Count of devices in each rotation state",
+            "examples": [
+              {
+                "OK": 10,
+                "PENDING": 1,
+                "QUEUED": 2,
+                "TIMEOUT": 0
+              }
+            ],
+            "title": "Counts By State",
+            "type": "object"
+          },
+          "last_rotation_completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Timestamp of most recent rotation completion across all devices",
+            "title": "Last Rotation Completed At"
+          },
+          "next_scheduled_rotation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Next scheduled rotation time based on CRON expression",
+            "title": "Next Scheduled Rotation"
+          },
+          "pending_device_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "ID of device currently being rotated (PENDING state)",
+            "title": "Pending Device Id"
+          }
+        },
+        "required": [
+          "counts_by_state"
+        ],
+        "title": "RotationStatusSchema",
+        "type": "object"
+      },
+      "RotationTriggerResponseSchema.57872a8": {
+        "description": "Response schema for manual rotation trigger.",
+        "properties": {
+          "queued_count": {
+            "description": "Number of devices queued for rotation",
+            "title": "Queued Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "queued_count"
+        ],
+        "title": "RotationTriggerResponseSchema",
         "type": "object"
       },
       "TestSessionCreateSchema.355d24f": {
@@ -697,17 +1317,17 @@
         "tags": []
       }
     },
-    "/api/configs": {
+    "/api/device-models": {
       "get": {
         "description": "",
-        "operationId": "get__api_configs",
+        "operationId": "get__api_device-models",
         "parameters": [],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigListResponseSchema.6be28b6"
+                  "$ref": "#/components/schemas/DeviceModelListResponseSchema.349be3d"
                 }
               }
             },
@@ -724,18 +1344,18 @@
             "description": "Bad Request"
           }
         },
-        "summary": "List all configurations with summary data.",
+        "summary": "List all device models.",
         "tags": []
       },
       "post": {
         "description": "",
-        "operationId": "post__api_configs",
+        "operationId": "post__api_device-models",
         "parameters": [],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConfigCreateRequestSchema.6be28b6"
+                "$ref": "#/components/schemas/DeviceModelCreateSchema.349be3d"
               }
             }
           },
@@ -746,7 +1366,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigResponseSchema.6be28b6"
+                  "$ref": "#/components/schemas/DeviceModelResponseSchema.349be3d"
                 }
               }
             },
@@ -773,19 +1393,19 @@
             "description": "Conflict"
           }
         },
-        "summary": "Create a new configuration.",
+        "summary": "Create a new device model.",
         "tags": []
       }
     },
-    "/api/configs/{config_id}": {
+    "/api/device-models/{model_id}": {
       "delete": {
         "description": "",
-        "operationId": "delete__api_configs_{config_id}",
+        "operationId": "delete__api_device-models_{model_id}",
         "parameters": [
           {
             "description": "",
             "in": "path",
-            "name": "config_id",
+            "name": "model_id",
             "required": true,
             "schema": {
               "format": "int32",
@@ -816,19 +1436,29 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Conflict"
           }
         },
-        "summary": "Delete configuration by ID.",
+        "summary": "Delete a device model.",
         "tags": []
       },
       "get": {
         "description": "",
-        "operationId": "get__api_configs_{config_id}",
+        "operationId": "get__api_device-models_{model_id}",
         "parameters": [
           {
             "description": "",
             "in": "path",
-            "name": "config_id",
+            "name": "model_id",
             "required": true,
             "schema": {
               "format": "int32",
@@ -841,7 +1471,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigResponseSchema.6be28b6"
+                  "$ref": "#/components/schemas/DeviceModelResponseSchema.349be3d"
                 }
               }
             },
@@ -868,17 +1498,17 @@
             "description": "Not Found"
           }
         },
-        "summary": "Get single configuration by ID.",
+        "summary": "Get a device model by ID.",
         "tags": []
       },
       "put": {
         "description": "",
-        "operationId": "put__api_configs_{config_id}",
+        "operationId": "put__api_device-models_{model_id}",
         "parameters": [
           {
             "description": "",
             "in": "path",
-            "name": "config_id",
+            "name": "model_id",
             "required": true,
             "schema": {
               "format": "int32",
@@ -890,7 +1520,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConfigUpdateRequestSchema.6be28b6"
+                "$ref": "#/components/schemas/DeviceModelUpdateSchema.349be3d"
               }
             }
           },
@@ -901,7 +1531,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigResponseSchema.6be28b6"
+                  "$ref": "#/components/schemas/DeviceModelResponseSchema.349be3d"
                 }
               }
             },
@@ -928,27 +1558,406 @@
             "description": "Not Found"
           }
         },
-        "summary": "Update configuration by ID.",
+        "summary": "Update a device model.",
         "tags": []
       }
     },
-    "/api/configs/{mac_address}.json": {
+    "/api/device-models/{model_id}/firmware": {
       "get": {
-        "description": "This endpoint returns the raw config content without wrapping, suitable for direct consumption by ESP32 devices. Accepts both colon-separated and dash-separated MAC formats.",
-        "operationId": "get__api_configs_{mac_address}.json",
+        "description": "Returns raw binary firmware with appropriate content type.",
+        "operationId": "get__api_device-models_{model_id}_firmware",
         "parameters": [
           {
             "description": "",
             "in": "path",
-            "name": "mac_address",
+            "name": "model_id",
             "required": true,
             "schema": {
-              "type": "string"
+              "format": "int32",
+              "type": "integer"
             }
           }
         ],
         "responses": {},
-        "summary": "Get raw JSON configuration for ESP32 device consumption.",
+        "summary": "Download firmware binary for a device model.",
+        "tags": []
+      },
+      "post": {
+        "description": "Expects raw binary content in request body or multipart file upload. The firmware must be a valid ESP32 binary with AppInfo header.",
+        "operationId": "post__api_device-models_{model_id}_firmware",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceModelFirmwareResponseSchema.349be3d"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Upload firmware binary for a device model.",
+        "tags": []
+      }
+    },
+    "/api/devices": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_devices",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceListResponseSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "List all devices with optional filtering.",
+        "tags": []
+      },
+      "post": {
+        "description": "",
+        "operationId": "post__api_devices",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceCreateSchema.d48fbce"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceResponseSchema.d48fbce"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Create a new device with Keycloak client.",
+        "tags": []
+      }
+    },
+    "/api/devices/{device_id}": {
+      "delete": {
+        "description": "",
+        "operationId": "delete__api_devices_{device_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Delete a device and its Keycloak client.",
+        "tags": []
+      },
+      "get": {
+        "description": "",
+        "operationId": "get__api_devices_{device_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceResponseSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Get a device by ID.",
+        "tags": []
+      },
+      "put": {
+        "description": "",
+        "operationId": "put__api_devices_{device_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceUpdateSchema.d48fbce"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceResponseSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Update a device's configuration.",
+        "tags": []
+      }
+    },
+    "/api/devices/{device_id}/provisioning": {
+      "get": {
+        "description": "Returns the provisioning package as a downloadable .bin file containing JSON configuration for the device.",
+        "operationId": "get__api_devices_{device_id}_provisioning",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Download provisioning package for a device.",
+        "tags": []
+      }
+    },
+    "/api/devices/{device_id}/rotate": {
+      "post": {
+        "description": "Queues the device for credential rotation. If already pending, returns the current status without changing state.",
+        "operationId": "post__api_devices_{device_id}_rotate",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRotateResponseSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Trigger rotation for a single device.",
         "tags": []
       }
     },
@@ -1092,6 +2101,109 @@
         "tags": []
       }
     },
+    "/api/rotation/dashboard": {
+      "get": {
+        "description": "Returns devices categorized as: - healthy: OK, QUEUED, or PENDING states - warning: TIMEOUT state, under critical threshold - critical: TIMEOUT state, at or over critical threshold",
+        "operationId": "get__api_rotation_dashboard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponseSchema.57872a8"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Get device dashboard grouped by health status.",
+        "tags": []
+      }
+    },
+    "/api/rotation/status": {
+      "get": {
+        "description": "Returns counts by state, currently pending device, and last completion time.",
+        "operationId": "get__api_rotation_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RotationStatusSchema.57872a8"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Get current rotation status across all devices.",
+        "tags": []
+      }
+    },
+    "/api/rotation/trigger": {
+      "post": {
+        "description": "Queues all devices with OK state for rotation. The rotation job will process them one at a time.",
+        "operationId": "post__api_rotation_trigger",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RotationTriggerResponseSchema.57872a8"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Manually trigger fleet-wide rotation.",
+        "tags": []
+      }
+    },
     "/api/testing/auth/clear": {
       "post": {
         "description": "Returns:     204: Session cleared successfully with cookie invalidated",
@@ -1162,6 +2274,46 @@
           }
         },
         "summary": "Create an authenticated test session, bypassing the real OIDC flow.",
+        "tags": []
+      }
+    },
+    "/iot/config": {
+      "get": {
+        "description": "This endpoint is called by ESP32 devices to fetch their configuration. If the device is in PENDING rotation state and the token was issued after the rotation attempt, the rotation is marked as complete and the next queued device is triggered.\n\nReturns raw JSON content without wrapping.",
+        "operationId": "get__iot_config",
+        "parameters": [],
+        "responses": {},
+        "summary": "Get raw JSON configuration for the device.",
+        "tags": []
+      }
+    },
+    "/iot/firmware": {
+      "get": {
+        "description": "Returns raw binary firmware with appropriate content type.",
+        "operationId": "get__iot_firmware",
+        "parameters": [],
+        "responses": {},
+        "summary": "Download firmware binary for the device's model.",
+        "tags": []
+      }
+    },
+    "/iot/firmware-version": {
+      "get": {
+        "description": "This lightweight endpoint allows devices to check if new firmware is available without downloading the binary. Devices can poll this periodically and only download firmware when the version changes.\n\nReturns JSON with the firmware version string.",
+        "operationId": "get__iot_firmware-version",
+        "parameters": [],
+        "responses": {},
+        "summary": "Get the current firmware version for the device's model.",
+        "tags": []
+      }
+    },
+    "/iot/provisioning": {
+      "get": {
+        "description": "This endpoint is called by devices during the rotation process. It regenerates the client secret in Keycloak and returns the new provisioning package.\n\nThis is different from admin provisioning download - it generates a NEW secret rather than returning the current one.",
+        "operationId": "get__iot_provisioning",
+        "parameters": [],
+        "responses": {},
+        "summary": "Get new provisioning data during rotation.",
         "tags": []
       }
     },

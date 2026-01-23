@@ -48,7 +48,9 @@ function EditDeviceRoute() {
       <DeviceEditor
         mode="edit"
         deviceId={device.id}
-        initialMacAddress={device.macAddress}
+        initialKey={device.key}
+        initialDeviceModelId={device.deviceModelId}
+        initialDeviceModel={device.deviceModel}
         initialConfig={config}
       />
     </div>

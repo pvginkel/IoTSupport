@@ -1,22 +1,31 @@
 import { ulid } from 'ulid';
 import type { Page } from '@playwright/test';
 import { createApiClient, createPlaywrightFetch, apiRequest, type ApiClient } from '../client';
+import { DeviceModelsFactory } from './device-models';
 
 export interface DeviceFactoryOptions {
-  macAddress?: string;
+  deviceModelId?: number;
   deviceName?: string;
   deviceEntityId?: string;
-  enableOTA?: boolean;
+  enableOta?: boolean;
+  config?: Record<string, unknown>;
 }
 
 export interface CreatedDevice {
   id: number;
-  macAddress: string;
+  key: string;
+  deviceModelId: number;
   config: Record<string, unknown>;
+  deviceName: string | null;
+  deviceEntityId: string | null;
+  enableOta: boolean | null;
+  rotationState: string;
+  clientId: string;
 }
 
 export class DevicesFactory {
   private client: ApiClient;
+  private deviceModelsFactory: DeviceModelsFactory;
 
   constructor(baseUrl: string, page: Page) {
     // Use Playwright's request context for cookie sharing with the browser
@@ -24,72 +33,100 @@ export class DevicesFactory {
       baseUrl,
       fetch: createPlaywrightFetch(page.request),
     });
+    this.deviceModelsFactory = new DeviceModelsFactory(baseUrl, page);
   }
 
   /**
-   * Generate a random MAC address for testing
-   * Format: XX:XX:XX:XX:XX:XX (6 pairs of hex digits with colon separators)
+   * Generate a random device name for testing
    */
-  randomMacAddress(): string {
-    // Generate 6 random hex bytes
-    const bytes = Array.from({ length: 6 }, () =>
-      Math.floor(Math.random() * 256).toString(16).padStart(2, '0')
-    );
-    return bytes.join(':').toLowerCase();
+  randomDeviceName(prefix = 'Test Device'): string {
+    const suffix = ulid().slice(0, 6);
+    return `${prefix} ${suffix}`;
   }
 
   /**
-   * Create a device configuration
-   * Note: Backend normalizes MAC addresses to lowercase
+   * Generate a random device entity ID for testing
+   */
+  randomDeviceEntityId(prefix = 'test_device'): string {
+    const suffix = ulid().toLowerCase().slice(0, 8);
+    return `${prefix}_${suffix}`;
+  }
+
+  /**
+   * Create a device
+   * If no deviceModelId is provided, creates a new device model first
    */
   async create(options: DeviceFactoryOptions = {}): Promise<CreatedDevice> {
-    const inputMac = options.macAddress || this.randomMacAddress();
-    // Backend normalizes to lowercase
-    const macAddress = inputMac.toLowerCase();
-    const config = {
-      deviceName: options.deviceName || `Test Device ${ulid()}`,
-      deviceEntityId: options.deviceEntityId || `test_device_${ulid()}`,
-      enableOTA: options.enableOTA ?? false,
+    // If no model ID provided, create a model first
+    let deviceModelId = options.deviceModelId;
+    if (!deviceModelId) {
+      const model = await this.deviceModelsFactory.create();
+      deviceModelId = model.id;
+    }
+
+    // Build config object
+    const config: Record<string, unknown> = options.config ?? {
+      deviceName: options.deviceName ?? this.randomDeviceName(),
+      deviceEntityId: options.deviceEntityId ?? this.randomDeviceEntityId(),
+      enableOTA: options.enableOta ?? false,
     };
 
     const result = await apiRequest(() =>
-      this.client.POST('/api/configs', {
+      this.client.POST('/api/devices', {
         body: {
-          mac_address: macAddress,
-          content: JSON.stringify(config),
+          device_model_id: deviceModelId,
+          config: JSON.stringify(config),
         },
       })
     );
 
+    const data = result.data!;
     return {
-      id: result.data!.id,
-      macAddress: result.data!.mac_address,
-      config,
+      id: data.id,
+      key: data.key,
+      deviceModelId: data.device_model_id,
+      config: data.config,
+      deviceName: data.device_name ?? null,
+      deviceEntityId: data.device_entity_id ?? null,
+      enableOta: data.enable_ota ?? null,
+      rotationState: data.rotation_state,
+      clientId: data.client_id,
     };
   }
 
   /**
-   * Delete a device configuration by ID
+   * Delete a device by ID
    */
   async delete(id: number): Promise<void> {
     await apiRequest(() =>
-      this.client.DELETE('/api/configs/{config_id}', {
-        params: { path: { config_id: id } },
+      this.client.DELETE('/api/devices/{device_id}', {
+        params: { path: { device_id: id } },
       })
     );
   }
 
   /**
-   * Get a device configuration by ID
+   * Get a device by ID
    */
-  async get(id: number): Promise<Record<string, unknown> | null> {
+  async get(id: number): Promise<CreatedDevice | null> {
     try {
       const { data } = await apiRequest(() =>
-        this.client.GET('/api/configs/{config_id}', {
-        params: { path: { config_id: id } },
+        this.client.GET('/api/devices/{device_id}', {
+          params: { path: { device_id: id } },
         })
       );
-      return data?.content || null;
+      if (!data) return null;
+      return {
+        id: data.id,
+        key: data.key,
+        deviceModelId: data.device_model_id,
+        config: data.config,
+        deviceName: data.device_name ?? null,
+        deviceEntityId: data.device_entity_id ?? null,
+        enableOta: data.enable_ota ?? null,
+        rotationState: data.rotation_state,
+        clientId: data.client_id,
+      };
     } catch (error) {
       // Return null for 404
       if (error instanceof Error && error.message.includes('404')) {
@@ -100,42 +137,47 @@ export class DevicesFactory {
   }
 
   /**
-   * List all device configurations
+   * List all devices
    */
   async list(): Promise<Array<{
     id: number;
-    mac_address: string;
+    key: string;
+    device_model_id: number;
     device_name: string | null;
     device_entity_id: string | null;
     enable_ota: boolean | null;
+    rotation_state: string;
   }>> {
     const result = await apiRequest(() =>
-      this.client.GET('/api/configs')
+      this.client.GET('/api/devices')
     );
 
-    return result.data?.configs || [];
+    return result.data?.devices || [];
   }
 
   /**
-   * Find a device by MAC address and return its ID
-   * Useful for cleanup after creating devices via UI
+   * Find a device by key and return its ID
    */
-  async findIdByMac(macAddress: string): Promise<number | null> {
-    const configs = await this.list();
-    // Normalize MAC address for comparison (lowercase)
-    const normalizedMac = macAddress.toLowerCase();
-    const config = configs.find(c => c.mac_address.toLowerCase() === normalizedMac);
-    return config?.id ?? null;
+  async findIdByKey(key: string): Promise<number | null> {
+    const devices = await this.list();
+    const device = devices.find(d => d.key === key);
+    return device?.id ?? null;
   }
 
   /**
-   * Delete a device by MAC address (looks up the ID first)
-   * Useful for cleanup in tests that create devices via UI
+   * Delete a device by key (looks up the ID first)
    */
-  async deleteByMac(macAddress: string): Promise<void> {
-    const id = await this.findIdByMac(macAddress);
+  async deleteByKey(key: string): Promise<void> {
+    const id = await this.findIdByKey(key);
     if (id !== null) {
       await this.delete(id);
     }
+  }
+
+  /**
+   * Get access to the device models factory for creating models directly
+   */
+  get deviceModels(): DeviceModelsFactory {
+    return this.deviceModelsFactory;
   }
 }

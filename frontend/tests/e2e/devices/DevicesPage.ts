@@ -41,8 +41,18 @@ export class DevicesPage {
     return this.page.locator('[data-testid="devices.list.row"]');
   }
 
-  row(macAddress: string): Locator {
-    return this.page.locator(`[data-testid="devices.list.row"]:has-text("${macAddress}")`);
+  /**
+   * Get a row by device key
+   */
+  rowByKey(key: string): Locator {
+    return this.page.locator(`[data-testid="devices.list.row"][data-device-key="${key}"]`);
+  }
+
+  /**
+   * Get a row by device ID
+   */
+  rowById(id: number): Locator {
+    return this.page.locator(`[data-testid="devices.list.row"][data-device-id="${id}"]`);
   }
 
   rowByIndex(index: number): Locator {
@@ -54,12 +64,16 @@ export class DevicesPage {
     return this.page.locator('[data-testid="devices.editor"]');
   }
 
-  get macInput(): Locator {
-    return this.page.locator('[data-testid="devices.editor.mac-input"]');
+  get keyDisplay(): Locator {
+    return this.page.locator('[data-testid="devices.editor.key-display"]');
   }
 
-  get macDisplay(): Locator {
-    return this.page.locator('[data-testid="devices.editor.mac-display"]');
+  get modelDisplay(): Locator {
+    return this.page.locator('[data-testid="devices.editor.model-display"]');
+  }
+
+  get modelSelect(): Locator {
+    return this.page.locator('[data-testid="devices.editor.model-select"]');
   }
 
   get jsonEditorContainer(): Locator {
@@ -109,12 +123,20 @@ export class DevicesPage {
     await this.newDeviceButton.click();
   }
 
-  async editDevice(macAddress: string) {
-    await this.row(macAddress).locator('[data-testid="devices.list.row.edit-button"]').click();
+  async editDeviceByKey(key: string) {
+    await this.rowByKey(key).locator('[data-testid="devices.list.row.edit-button"]').click();
   }
 
-  async deleteDevice(macAddress: string) {
-    await this.row(macAddress).locator('[data-testid="devices.list.row.delete-button"]').click();
+  async editDeviceById(id: number) {
+    await this.rowById(id).locator('[data-testid="devices.list.row.edit-button"]').click();
+  }
+
+  async deleteDeviceByKey(key: string) {
+    await this.rowByKey(key).locator('[data-testid="devices.list.row.delete-button"]').click();
+  }
+
+  async deleteDeviceById(id: number) {
+    await this.rowById(id).locator('[data-testid="devices.list.row.delete-button"]').click();
   }
 
   async confirmDelete() {
@@ -126,9 +148,10 @@ export class DevicesPage {
   }
 
   // Actions - Editor
-  async fillMacAddress(macAddress: string) {
-    await this.macInput.clear();
-    await this.macInput.fill(macAddress);
+  async selectModel(modelName: string) {
+    await this.modelSelect.click();
+    // Click the option that contains the model name
+    await this.page.locator(`[role="option"]:has-text("${modelName}")`).click();
   }
 
   async setJsonContent(content: string) {
@@ -201,13 +224,13 @@ export class DevicesPage {
     return await this.rows.count();
   }
 
-  async getMacAddressesInList(): Promise<string[]> {
+  async getDeviceKeysInList(): Promise<string[]> {
     const rows = await this.rows.all();
-    const macs: string[] = [];
+    const keys: string[] = [];
     for (const row of rows) {
-      const mac = await row.locator('td').first().textContent();
-      if (mac) macs.push(mac);
+      const key = await row.getAttribute('data-device-key');
+      if (key) keys.push(key);
     }
-    return macs;
+    return keys;
   }
 }

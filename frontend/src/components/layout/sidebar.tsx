@@ -5,7 +5,7 @@
  */
 
 import { Link } from '@tanstack/react-router'
-import { Settings, type LucideIcon } from 'lucide-react'
+import { Settings, Box, RefreshCw, type LucideIcon } from 'lucide-react'
 
 interface SidebarItem {
   to: string
@@ -21,7 +21,9 @@ interface SidebarProps {
 }
 
 const navigationItems: SidebarItem[] = [
-  { to: '/devices', label: 'Device Configs', icon: Settings, testId: 'devices' },
+  { to: '/device-models', label: 'Device Models', icon: Box, testId: 'device-models' },
+  { to: '/devices', label: 'Devices', icon: Settings, testId: 'devices' },
+  { to: '/rotation', label: 'Rotation Dashboard', icon: RefreshCw, testId: 'rotation' },
 ]
 
 /**
