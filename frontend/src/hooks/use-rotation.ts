@@ -85,26 +85,26 @@ export function useRotationDashboard() {
     }
   })
 
-  // Combine all devices with their category
-  const devices = useMemo(() => {
-    if (!query.data) return []
-    const all: RotationDashboardDevice[] = []
-
-    // Add healthy devices
-    if (query.data.healthy) {
-      query.data.healthy.forEach(d => all.push(transformDashboardDevice(d, 'healthy')))
-    }
-    // Add warning devices
-    if (query.data.warning) {
-      query.data.warning.forEach(d => all.push(transformDashboardDevice(d, 'warning')))
-    }
-    // Add critical devices
-    if (query.data.critical) {
-      query.data.critical.forEach(d => all.push(transformDashboardDevice(d, 'critical')))
-    }
-
-    return all
+  // Transform devices by category
+  const healthy = useMemo(() => {
+    if (!query.data?.healthy) return []
+    return query.data.healthy.map(d => transformDashboardDevice(d, 'healthy'))
   }, [query.data])
+
+  const warning = useMemo(() => {
+    if (!query.data?.warning) return []
+    return query.data.warning.map(d => transformDashboardDevice(d, 'warning'))
+  }, [query.data])
+
+  const critical = useMemo(() => {
+    if (!query.data?.critical) return []
+    return query.data.critical.map(d => transformDashboardDevice(d, 'critical'))
+  }, [query.data])
+
+  // Combined list for backward compatibility
+  const devices = useMemo(() => {
+    return [...healthy, ...warning, ...critical]
+  }, [healthy, warning, critical])
 
   // Get counts from the dashboard response
   const counts = useMemo(() => {
@@ -121,6 +121,9 @@ export function useRotationDashboard() {
   return {
     ...query,
     devices,
+    healthy,
+    warning,
+    critical,
     counts,
     isRotationActive
   }

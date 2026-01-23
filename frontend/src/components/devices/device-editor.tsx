@@ -108,11 +108,10 @@ export function DeviceEditor({
 
   // Configure Monaco schema validation when device model has a config schema
   useEffect(() => {
-    if (monacoEditorRef.current && fullDeviceModel?.configSchema) {
+    if (fullDeviceModel?.configSchema) {
       configureMonacoSchemaValidation(
-        monacoEditorRef.current,
         fullDeviceModel.configSchema,
-        'device-config-schema'
+        'device-config.json'  // Must match the `path` prop on the Editor component
       )
     }
   }, [fullDeviceModel?.configSchema])
@@ -394,6 +393,7 @@ export function DeviceEditor({
               <Editor
                 height="100%"
                 defaultLanguage="json"
+                path="device-config.json"
                 theme="vs-dark"
                 value={jsonConfig}
                 onChange={handleEditorChange}

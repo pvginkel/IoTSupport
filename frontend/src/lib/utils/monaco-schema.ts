@@ -1,6 +1,10 @@
 /**
  * Monaco Editor JSON schema validation utilities.
  * Configures Monaco's JSON language service to validate against provided JSON schemas.
+ *
+ * IMPORTANT: For schema validation and autocomplete to work, the Editor component
+ * must have a `path` prop that matches the `modelPath` passed to this function.
+ * Example: <Editor path="device-config.json" ... />
  */
 
 // Monaco global type for runtime access
@@ -11,6 +15,7 @@ interface MonacoGlobal {
         setDiagnosticsOptions: (options: {
           validate?: boolean;
           schemaValidation?: 'error' | 'warning' | 'ignore';
+          enableSchemaRequest?: boolean;
           schemas?: Array<{
             uri: string;
             fileMatch?: string[];
@@ -22,51 +27,44 @@ interface MonacoGlobal {
   };
 }
 
-// Monaco editor type for function parameters
-interface MonacoEditorInstance {
-  getModel: () => {
-    uri: {
-      toString: () => string;
-    };
-  } | null;
-}
-
-// Track configured schemas by URI to avoid duplicates
-const configuredSchemas = new Map<string, boolean>()
+// Track current schema configuration to detect changes
+let currentSchemaHash: string | null = null
 
 /**
- * Configure Monaco editor for JSON schema validation.
+ * Simple hash function for schema comparison
+ */
+function hashSchema(schema: Record<string, unknown>): string {
+  return JSON.stringify(schema)
+}
+
+/**
+ * Configure Monaco editor for JSON schema validation and autocomplete.
  * Sets up the JSON language service with a schema for validation and IntelliSense.
  *
- * @param editorInstance - Monaco editor instance
  * @param schema - JSON Schema object to validate against
- * @param schemaId - Unique identifier for the schema (used in the schema URI)
+ * @param modelPath - The path used in the Editor's `path` prop (e.g., 'device-config.json')
  *
  * @example
  * ```tsx
- * const handleEditorMount = (editor) => {
+ * // In component:
+ * <Editor
+ *   path="device-config.json"  // Must match modelPath below
+ *   defaultLanguage="json"
+ *   ...
+ * />
+ *
+ * // Configure schema:
+ * useEffect(() => {
  *   if (configSchema) {
- *     configureMonacoSchemaValidation(editor, configSchema, 'device-config')
+ *     configureMonacoSchemaValidation(configSchema, 'device-config.json')
  *   }
- * }
+ * }, [configSchema])
  * ```
  */
 export function configureMonacoSchemaValidation(
-  editorInstance: unknown,
   schema: Record<string, unknown>,
-  schemaId: string
+  modelPath: string
 ): void {
-  // Type guard for Monaco editor instance
-  const isMonacoEditor = (obj: unknown): obj is MonacoEditorInstance =>
-    obj !== null &&
-    typeof obj === 'object' &&
-    'getModel' in obj &&
-    typeof (obj as MonacoEditorInstance).getModel === 'function'
-
-  if (!isMonacoEditor(editorInstance)) {
-    return
-  }
-
   // Monaco and its JSON language service are loaded async, need to access via the global
   const monaco = (window as unknown as { monaco?: MonacoGlobal }).monaco
   if (!monaco) {
@@ -74,22 +72,25 @@ export function configureMonacoSchemaValidation(
     return
   }
 
-  const schemaUri = `inmemory://schema/${schemaId}.json`
-  const modelUri = editorInstance.getModel()?.uri.toString() ?? ''
-
-  // Skip if schema already configured for this URI
-  if (configuredSchemas.has(schemaUri)) {
+  // Check if schema has changed
+  const schemaHash = hashSchema(schema)
+  if (currentSchemaHash === schemaHash) {
     return
   }
 
+  // The schema URI is just an identifier for Monaco's internal use
+  const schemaUri = `inmemory://schema/config-schema.json`
+
   // Configure the JSON language service with the schema
+  // fileMatch must match the `path` prop on the Editor component
   monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
     validate: true,
     schemaValidation: 'error',
+    enableSchemaRequest: false,
     schemas: [
       {
         uri: schemaUri,
-        fileMatch: [modelUri, '*.json'],
+        fileMatch: [modelPath],
         schema: {
           ...schema,
           // Ensure schema has required $schema if not present
@@ -99,7 +100,7 @@ export function configureMonacoSchemaValidation(
     ],
   })
 
-  configuredSchemas.set(schemaUri, true)
+  currentSchemaHash = schemaHash
 }
 
 /**
@@ -116,8 +117,9 @@ export function clearMonacoSchemas(): void {
   monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
     validate: true,
     schemaValidation: 'error',
+    enableSchemaRequest: false,
     schemas: [],
   })
 
-  configuredSchemas.clear()
+  currentSchemaHash = null
 }
