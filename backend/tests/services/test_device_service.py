@@ -591,6 +591,156 @@ class TestDeviceServiceFieldExtraction:
                 assert device.enable_ota is None
 
 
+class TestDeviceServiceKeycloakStatus:
+    """Tests for Keycloak status methods."""
+
+    def test_get_keycloak_status_client_exists(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test get_keycloak_status when client exists in Keycloak."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="kc1", name="Keycloak Test")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+
+                # Mock get_client_status to return exists=True
+                with patch.object(
+                    keycloak_service,
+                    "get_client_status",
+                    return_value=(True, "uuid-123"),
+                ):
+                    status = device_service.get_keycloak_status(device.id)
+
+                    assert status["exists"] is True
+                    assert status["client_id"] == device.client_id
+                    assert status["keycloak_uuid"] == "uuid-123"
+                    # console_url depends on config, may be None in test env
+                    assert "console_url" in status
+
+    def test_get_keycloak_status_client_missing(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test get_keycloak_status when client is missing from Keycloak."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="kc2", name="Keycloak Test 2")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+
+                # Mock get_client_status to return exists=False
+                with patch.object(
+                    keycloak_service,
+                    "get_client_status",
+                    return_value=(False, None),
+                ):
+                    status = device_service.get_keycloak_status(device.id)
+
+                    assert status["exists"] is False
+                    assert status["client_id"] == device.client_id
+                    assert status["keycloak_uuid"] is None
+                    assert status["console_url"] is None
+
+    def test_get_keycloak_status_device_not_found(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test get_keycloak_status raises for nonexistent device."""
+        with app.app_context():
+            device_service = container.device_service()
+
+            with pytest.raises(RecordNotFoundException):
+                device_service.get_keycloak_status(99999)
+
+    def test_sync_keycloak_client_creates_missing(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test sync_keycloak_client creates client when missing."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="kc3", name="Keycloak Test 3")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+
+                # Mock create_client (sync) and get_client_status
+                with patch.object(
+                    keycloak_service,
+                    "create_client",
+                    return_value=MagicMock(client_id="test", secret="test-secret"),
+                ) as mock_create, patch.object(
+                    keycloak_service,
+                    "get_client_status",
+                    return_value=(True, "uuid-456"),
+                ):
+                    status = device_service.sync_keycloak_client(device.id)
+
+                    mock_create.assert_called_once_with(device.client_id)
+                    assert status["exists"] is True
+                    assert status["keycloak_uuid"] == "uuid-456"
+
+    def test_sync_keycloak_client_idempotent(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test sync_keycloak_client is idempotent when client already exists."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="kc4", name="Keycloak Test 4")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+
+                # create_client is idempotent and returns existing client
+                with patch.object(
+                    keycloak_service,
+                    "create_client",
+                    return_value=MagicMock(client_id="test", secret="existing-secret"),
+                ), patch.object(
+                    keycloak_service,
+                    "get_client_status",
+                    return_value=(True, "existing-uuid"),
+                ):
+                    status = device_service.sync_keycloak_client(device.id)
+
+                    assert status["exists"] is True
+                    assert status["keycloak_uuid"] == "existing-uuid"
+
+    def test_sync_keycloak_client_device_not_found(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test sync_keycloak_client raises for nonexistent device."""
+        with app.app_context():
+            device_service = container.device_service()
+
+            with pytest.raises(RecordNotFoundException):
+                device_service.sync_keycloak_client(99999)
+
+
 class TestDeviceServiceSchemaValidation:
     """Tests for JSON schema validation."""
 

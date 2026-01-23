@@ -134,3 +134,14 @@ class ProvisioningPackageSchema(BaseModel):
     mqtt_url: str | None = Field(None, description="MQTT broker URL")
     wifi_ssid: str | None = Field(None, description="WiFi network SSID")
     wifi_password: str | None = Field(None, description="WiFi network password")
+
+
+class DeviceKeycloakStatusSchema(BaseModel):
+    """Schema for Keycloak client status response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    exists: bool = Field(..., description="Whether client exists in Keycloak")
+    client_id: str = Field(..., description="Expected Keycloak client ID")
+    keycloak_uuid: str | None = Field(None, description="Keycloak internal UUID if exists")
+    console_url: str | None = Field(None, description="Deep link to Keycloak admin console")
