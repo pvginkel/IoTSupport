@@ -119,7 +119,29 @@ class TestAuthEndpoints:
         response = client.get("/api/auth/logout")
 
         assert response.status_code == 302
-        # Check that cookie is cleared (max_age=0)
-        set_cookie_header = response.headers.get("Set-Cookie", "")
-        assert "access_token=" in set_cookie_header
-        assert "Max-Age=0" in set_cookie_header
+        # Check that cookies are cleared (max_age=0)
+        set_cookie_headers = response.headers.getlist("Set-Cookie")
+        cookie_str = " ".join(set_cookie_headers)
+
+        assert "access_token=" in cookie_str
+        assert "refresh_token=" in cookie_str
+        assert "Max-Age=0" in cookie_str
+
+    def test_logout_clears_refresh_token_cookie(self, client):
+        """Test /api/auth/logout clears refresh token cookie."""
+        # Set a refresh token cookie first
+        client.set_cookie("refresh_token", "some-refresh-token")
+
+        response = client.get("/api/auth/logout")
+
+        assert response.status_code == 302
+
+        # Check that refresh_token cookie is cleared
+        set_cookie_headers = response.headers.getlist("Set-Cookie")
+        refresh_cookie_found = False
+        for header in set_cookie_headers:
+            if "refresh_token=" in header and "Max-Age=0" in header:
+                refresh_cookie_found = True
+                break
+
+        assert refresh_cookie_found, "refresh_token cookie should be cleared on logout"

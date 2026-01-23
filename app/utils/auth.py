@@ -2,10 +2,13 @@
 
 import functools
 import logging
+import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
+import jwt
 from flask import g, request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -16,9 +19,45 @@ from app.exceptions import (
     ValidationException,
 )
 from app.services.auth_service import AuthContext, AuthService
-from app.services.oidc_client_service import AuthState
+from app.services.oidc_client_service import AuthState, OidcClientService
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PendingTokenRefresh:
+    """Tokens to be set on response after successful refresh."""
+
+    access_token: str
+    refresh_token: str | None
+    access_token_expires_in: int
+
+
+def get_token_expiry_seconds(token: str) -> int | None:
+    """Extract remaining lifetime from a JWT token's exp claim.
+
+    Decodes the token without signature verification (we just need the exp claim).
+
+    Args:
+        token: JWT token string
+
+    Returns:
+        Seconds until expiration, or None if token is not a JWT or has no exp claim
+    """
+    try:
+        # Decode without verification - we only need the payload
+        payload = jwt.decode(token, options={"verify_signature": False})
+        exp = payload.get("exp")
+        if exp is None:
+            return None
+
+        # Calculate remaining time
+        remaining = int(exp - time.time())
+        return max(remaining, 0)  # Don't return negative
+
+    except jwt.DecodeError:
+        # Not a valid JWT (opaque token) - return None
+        return None
 
 
 def public(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -139,35 +178,90 @@ def check_authorization(auth_context: AuthContext, config: Settings) -> None:
     )
 
 
-def authenticate_request(auth_service: AuthService, config: Settings) -> None:
+def authenticate_request(
+    auth_service: AuthService,
+    config: Settings,
+    oidc_client_service: OidcClientService | None = None,
+) -> None:
     """Authenticate the current request and store auth context in flask.g.
 
     This function is called by the before_request hook for all /api requests.
+    If the access token is expired but a refresh token is available, it will
+    attempt to refresh the tokens and store them in g.pending_token_refresh
+    for the after_request hook to set as cookies.
 
     Args:
         auth_service: AuthService instance for token validation
         config: Application settings
+        oidc_client_service: OidcClientService for token refresh (optional)
 
     Raises:
         AuthenticationException: If token is missing, invalid, or expired
         AuthorizationException: If user lacks required permissions
     """
-    # Extract token from request
-    token = extract_token_from_request(config)
-    if not token:
+    # Try access token first (from cookie or Authorization header)
+    access_token = extract_token_from_request(config)
+    token_expired = False
+
+    if access_token:
+        try:
+            auth_context = auth_service.validate_token(access_token)
+            g.auth_context = auth_context
+            check_authorization(auth_context, config)
+            logger.info(
+                "Request authenticated: subject=%s email=%s roles=%s",
+                auth_context.subject,
+                auth_context.email,
+                auth_context.roles,
+            )
+            return
+        except AuthenticationException as e:
+            # Token invalid/expired - check if it's an expiry issue
+            error_msg = str(e).lower()
+            if "expired" not in error_msg:
+                # Not an expiry issue - re-raise immediately
+                raise
+            # Token expired - we can try refresh
+            token_expired = True
+            logger.debug("Access token expired, attempting refresh")
+
+    # No valid access token - try refresh if we have the service and a refresh token
+    refresh_token = request.cookies.get(config.OIDC_REFRESH_COOKIE_NAME)
+
+    if not refresh_token:
+        # No refresh token available
+        if token_expired:
+            raise AuthenticationException("Token has expired")
         raise AuthenticationException("No valid token provided")
 
-    # Validate token and get auth context
-    auth_context = auth_service.validate_token(token)
+    if not oidc_client_service:
+        # No OIDC client service available - can't refresh
+        raise AuthenticationException("Session expired, please login again")
 
-    # Store auth context in flask.g
+    # Attempt refresh
+    try:
+        new_tokens = oidc_client_service.refresh_access_token(refresh_token)
+        logger.info("Successfully refreshed access token")
+    except AuthenticationException as e:
+        # Refresh failed - signal to clear cookies
+        g.clear_auth_cookies = True
+        raise AuthenticationException("Session expired, please login again") from e
+
+    # Validate the new access token
+    auth_context = auth_service.validate_token(new_tokens.access_token)
     g.auth_context = auth_context
 
-    # Check authorization for this request
+    # Store tokens for after_request to set cookies
+    g.pending_token_refresh = PendingTokenRefresh(
+        access_token=new_tokens.access_token,
+        refresh_token=new_tokens.refresh_token,
+        access_token_expires_in=new_tokens.expires_in,
+    )
+
     check_authorization(auth_context, config)
 
     logger.info(
-        "Request authenticated: subject=%s email=%s roles=%s",
+        "Request authenticated (after refresh): subject=%s email=%s roles=%s",
         auth_context.subject,
         auth_context.email,
         auth_context.roles,

@@ -3,13 +3,18 @@
 import logging
 
 from dependency_injector.wiring import Provide, inject
-from flask import Blueprint, request
+from flask import Blueprint, Response, request
 
 from app.config import Settings
 from app.services.auth_service import AuthService
 from app.services.container import ServiceContainer
+from app.services.oidc_client_service import OidcClientService
 from app.services.testing_service import TestingService
-from app.utils.auth import authenticate_request
+from app.utils.auth import (
+    authenticate_request,
+    get_cookie_secure,
+    get_token_expiry_seconds,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +26,7 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 @inject
 def before_request_authentication(
     auth_service: AuthService = Provide[ServiceContainer.auth_service],
+    oidc_client_service: OidcClientService = Provide[ServiceContainer.oidc_client_service],
     testing_service: TestingService = Provide[ServiceContainer.testing_service],
     config: Settings = Provide[ServiceContainer.config],
 ) -> None | tuple[dict[str, str], int]:
@@ -28,6 +34,8 @@ def before_request_authentication(
 
     This hook runs before every request to endpoints under the /api blueprint.
     It checks if authentication is required and validates the JWT token.
+    If the access token is expired but a refresh token is available, it will
+    attempt to refresh the tokens automatically.
 
     Authentication is skipped if:
     - OIDC_ENABLED is False
@@ -74,10 +82,10 @@ def before_request_authentication(
         logger.debug("OIDC disabled - skipping authentication")
         return None
 
-    # Authenticate the request
+    # Authenticate the request (may trigger token refresh)
     logger.debug("Authenticating request to %s %s", request.method, request.path)
     try:
-        authenticate_request(auth_service, config)
+        authenticate_request(auth_service, config, oidc_client_service)
         return None
     except AuthenticationException as e:
         logger.warning("Authentication failed: %s", str(e))
@@ -85,6 +93,82 @@ def before_request_authentication(
     except AuthorizationException as e:
         logger.warning("Authorization failed: %s", str(e))
         return {"error": str(e)}, 403
+
+
+@api_bp.after_request
+@inject
+def after_request_set_cookies(
+    response: Response,
+    config: Settings = Provide[ServiceContainer.config],
+) -> Response:
+    """Set refreshed auth cookies on response if tokens were refreshed.
+
+    This hook runs after every request to endpoints under the /api blueprint.
+    If tokens were refreshed during authentication, it sets the new cookies
+    on the response.
+
+    Args:
+        response: The Flask response object
+
+    Returns:
+        The response with updated cookies if needed
+    """
+    from flask import g
+
+    # Check if we need to clear cookies (refresh failed)
+    if getattr(g, "clear_auth_cookies", False):
+        cookie_secure = get_cookie_secure(config)
+        response.set_cookie(
+            config.OIDC_COOKIE_NAME,
+            "",
+            httponly=True,
+            secure=cookie_secure,
+            samesite=config.OIDC_COOKIE_SAMESITE,
+            max_age=0,
+        )
+        response.set_cookie(
+            config.OIDC_REFRESH_COOKIE_NAME,
+            "",
+            httponly=True,
+            secure=cookie_secure,
+            samesite=config.OIDC_COOKIE_SAMESITE,
+            max_age=0,
+        )
+        return response
+
+    # Check if we have pending tokens from a refresh
+    pending = getattr(g, "pending_token_refresh", None)
+    if pending:
+        cookie_secure = get_cookie_secure(config)
+
+        # Set new access token cookie
+        response.set_cookie(
+            config.OIDC_COOKIE_NAME,
+            pending.access_token,
+            httponly=True,
+            secure=cookie_secure,
+            samesite=config.OIDC_COOKIE_SAMESITE,
+            max_age=pending.access_token_expires_in,
+        )
+
+        # Set new refresh token cookie (if provided)
+        if pending.refresh_token:
+            refresh_max_age = get_token_expiry_seconds(pending.refresh_token)
+            if refresh_max_age is None:
+                refresh_max_age = pending.access_token_expires_in
+
+            response.set_cookie(
+                config.OIDC_REFRESH_COOKIE_NAME,
+                pending.refresh_token,
+                httponly=True,
+                secure=cookie_secure,
+                samesite=config.OIDC_COOKIE_SAMESITE,
+                max_age=refresh_max_age,
+            )
+
+        logger.debug("Set refreshed auth cookies on response")
+
+    return response
 
 
 # Import and register all resource blueprints
