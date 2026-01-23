@@ -131,6 +131,10 @@ class Settings(BaseSettings):
         default="Lax",
         description="SameSite attribute for cookie"
     )
+    OIDC_REFRESH_COOKIE_NAME: str = Field(
+        default="refresh_token",
+        description="Cookie name for storing refresh token"
+    )
 
     # Keycloak Admin API Settings (for device provisioning)
     OIDC_TOKEN_URL: str | None = Field(

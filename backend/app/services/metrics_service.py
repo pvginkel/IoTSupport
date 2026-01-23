@@ -112,6 +112,12 @@ class MetricsService:
             ["status"],
         )
 
+        self.auth_token_refresh_total = Counter(
+            "iot_auth_token_refresh_total",
+            "Total access token refresh attempts",
+            ["status"],
+        )
+
     def record_operation(
         self, operation: str, status: str, duration: float | None = None
     ) -> None:

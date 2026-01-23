@@ -18,6 +18,7 @@ from app.utils.auth import (
     deserialize_auth_state,
     get_auth_context,
     get_cookie_secure,
+    get_token_expiry_seconds,
     public,
     serialize_auth_state,
     validate_redirect_url,
@@ -261,7 +262,7 @@ def callback(
     # Create response with redirect to original URL
     response = make_response(redirect(auth_state.redirect_url))
 
-    # Set access token cookie (long-lived)
+    # Set access token cookie
     response.set_cookie(
         config.OIDC_COOKIE_NAME,
         token_response.access_token,
@@ -270,6 +271,23 @@ def callback(
         samesite=config.OIDC_COOKIE_SAMESITE,
         max_age=token_response.expires_in,
     )
+
+    # Set refresh token cookie (if available)
+    if token_response.refresh_token:
+        # Derive max_age from the refresh token's exp claim
+        refresh_max_age = get_token_expiry_seconds(token_response.refresh_token)
+        # Fall back to access token expiry if refresh token is opaque
+        if refresh_max_age is None:
+            refresh_max_age = token_response.expires_in
+
+        response.set_cookie(
+            config.OIDC_REFRESH_COOKIE_NAME,
+            token_response.refresh_token,
+            httponly=True,
+            secure=cookie_secure,
+            samesite=config.OIDC_COOKIE_SAMESITE,
+            max_age=refresh_max_age,
+        )
 
     # Set ID token cookie for logout (if available)
     if token_response.id_token:
@@ -374,6 +392,16 @@ def logout(
     # Clear access token cookie
     response.set_cookie(
         config.OIDC_COOKIE_NAME,
+        "",
+        httponly=True,
+        secure=cookie_secure,
+        samesite=config.OIDC_COOKIE_SAMESITE,
+        max_age=0,
+    )
+
+    # Clear refresh token cookie
+    response.set_cookie(
+        config.OIDC_REFRESH_COOKIE_NAME,
         "",
         httponly=True,
         secure=cookie_secure,

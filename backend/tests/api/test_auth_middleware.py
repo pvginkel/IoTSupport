@@ -1,14 +1,17 @@
 """Tests for authentication middleware and authorization logic."""
 
+import time
 from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
+import jwt
 import pytest
 from flask import Flask
 from sqlalchemy.pool import StaticPool
 
 from app import create_app
 from app.config import Settings
+from app.services.oidc_client_service import TokenResponse
 
 
 class TestAuthenticationMiddleware:
@@ -287,3 +290,260 @@ class TestAuthenticationMiddleware:
         data = response.get_json()
         assert data["subject"] == "uploader"
         assert "asset-uploader" in data["roles"]
+
+
+class TestTokenRefreshMiddleware:
+    """Test suite for token refresh functionality in authentication middleware."""
+
+    @pytest.fixture
+    def auth_enabled_settings(self, test_settings: Settings) -> Settings:
+        """Create settings with OIDC enabled and SQLite support."""
+        test_settings.DATABASE_URL = "sqlite://"
+        test_settings.set_engine_options_override({
+            "poolclass": StaticPool,
+            "connect_args": {"check_same_thread": False},
+        })
+        test_settings.OIDC_ENABLED = True
+        test_settings.OIDC_ISSUER_URL = "https://auth.example.com/realms/iot"
+        test_settings.OIDC_CLIENT_ID = "iot-backend"
+        test_settings.OIDC_CLIENT_SECRET = "test-secret"
+        test_settings.BASEURL = "http://localhost:3200"
+        return test_settings
+
+    @pytest.fixture
+    def auth_enabled_app_with_refresh(
+        self, auth_enabled_settings: Settings, mock_oidc_discovery, generate_test_jwt
+    ) -> Generator[Flask, None, None]:
+        """Create Flask app with OIDC enabled and mocked refresh capability."""
+        with patch("httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_oidc_discovery
+            mock_response.raise_for_status = MagicMock()
+            mock_get.return_value = mock_response
+
+            with patch("app.services.auth_service.PyJWKClient") as mock_jwk_client_class:
+                mock_jwk_client = MagicMock()
+                mock_signing_key = MagicMock()
+                mock_signing_key.key = generate_test_jwt.public_key
+                mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
+                mock_jwk_client_class.return_value = mock_jwk_client
+
+                app = create_app(auth_enabled_settings, skip_background_services=True)
+
+                with app.app_context():
+                    from app.extensions import db
+                    db.create_all()
+
+                yield app
+
+    def test_expired_access_token_with_valid_refresh_token_succeeds(
+        self, auth_enabled_app_with_refresh, generate_test_jwt
+    ):
+        """Test that expired access token with valid refresh token refreshes and succeeds."""
+        client = auth_enabled_app_with_refresh.test_client()
+
+        # Generate an expired access token
+        expired_token = generate_test_jwt(expired=True, roles=["admin"])
+
+        # Generate a valid refresh token (JWT with future exp)
+        refresh_exp = int(time.time()) + 86400  # 24 hours
+        refresh_payload = {"sub": "test-user", "exp": refresh_exp, "typ": "Refresh"}
+        refresh_token = jwt.encode(
+            refresh_payload, generate_test_jwt.private_key, algorithm="RS256"
+        )
+
+        # Generate a new valid access token for the refresh response
+        new_access_token = generate_test_jwt(subject="test-user", roles=["admin"])
+
+        # Mock the refresh token endpoint
+        with patch("httpx.post") as mock_post:
+            mock_refresh_response = MagicMock()
+            mock_refresh_response.json.return_value = {
+                "access_token": new_access_token,
+                "refresh_token": refresh_token,
+                "token_type": "Bearer",
+                "expires_in": 300,
+            }
+            mock_refresh_response.raise_for_status = MagicMock()
+            mock_post.return_value = mock_refresh_response
+
+            # Set expired access token and valid refresh token
+            client.set_cookie("access_token", expired_token)
+            client.set_cookie("refresh_token", refresh_token)
+
+            # Request should succeed after refresh
+            response = client.get("/api/devices")
+
+            assert response.status_code == 200
+
+            # Verify refresh endpoint was called
+            mock_post.assert_called_once()
+            call_args = mock_post.call_args
+            assert "refresh_token" in call_args.kwargs.get("data", {})
+
+    def test_expired_access_token_with_valid_refresh_sets_new_cookies(
+        self, auth_enabled_app_with_refresh, generate_test_jwt
+    ):
+        """Test that successful refresh sets new access and refresh token cookies."""
+        client = auth_enabled_app_with_refresh.test_client()
+
+        # Generate an expired access token
+        expired_token = generate_test_jwt(expired=True, roles=["admin"])
+
+        # Generate refresh tokens
+        refresh_exp = int(time.time()) + 86400
+        refresh_payload = {"sub": "test-user", "exp": refresh_exp, "typ": "Refresh"}
+        refresh_token = jwt.encode(
+            refresh_payload, generate_test_jwt.private_key, algorithm="RS256"
+        )
+
+        new_refresh_exp = int(time.time()) + 86400
+        new_refresh_payload = {"sub": "test-user", "exp": new_refresh_exp, "typ": "Refresh"}
+        new_refresh_token = jwt.encode(
+            new_refresh_payload, generate_test_jwt.private_key, algorithm="RS256"
+        )
+
+        new_access_token = generate_test_jwt(subject="test-user", roles=["admin"])
+
+        with patch("httpx.post") as mock_post:
+            mock_refresh_response = MagicMock()
+            mock_refresh_response.json.return_value = {
+                "access_token": new_access_token,
+                "refresh_token": new_refresh_token,
+                "token_type": "Bearer",
+                "expires_in": 300,
+            }
+            mock_refresh_response.raise_for_status = MagicMock()
+            mock_post.return_value = mock_refresh_response
+
+            client.set_cookie("access_token", expired_token)
+            client.set_cookie("refresh_token", refresh_token)
+
+            response = client.get("/api/devices")
+
+            assert response.status_code == 200
+
+            # Check that new cookies are set
+            set_cookie_headers = response.headers.getlist("Set-Cookie")
+            cookie_str = " ".join(set_cookie_headers)
+
+            assert "access_token=" in cookie_str
+            assert "refresh_token=" in cookie_str
+
+    def test_expired_access_token_without_refresh_token_returns_401(
+        self, auth_enabled_app_with_refresh, generate_test_jwt
+    ):
+        """Test that expired access token without refresh token returns 401."""
+        client = auth_enabled_app_with_refresh.test_client()
+
+        # Generate an expired access token
+        expired_token = generate_test_jwt(expired=True, roles=["admin"])
+
+        # Set only the expired access token (no refresh token)
+        client.set_cookie("access_token", expired_token)
+
+        response = client.get("/api/devices")
+
+        assert response.status_code == 401
+
+    def test_expired_access_token_with_expired_refresh_token_returns_401(
+        self, auth_enabled_app_with_refresh, generate_test_jwt
+    ):
+        """Test that expired access token with failed refresh returns 401 and clears cookies."""
+        client = auth_enabled_app_with_refresh.test_client()
+
+        # Generate expired tokens
+        expired_access = generate_test_jwt(expired=True, roles=["admin"])
+
+        refresh_exp = int(time.time()) + 86400
+        refresh_payload = {"sub": "test-user", "exp": refresh_exp, "typ": "Refresh"}
+        refresh_token = jwt.encode(
+            refresh_payload, generate_test_jwt.private_key, algorithm="RS256"
+        )
+
+        # Mock refresh endpoint to fail (e.g., refresh token revoked)
+        with patch("httpx.post") as mock_post:
+            import httpx
+            mock_post.side_effect = httpx.HTTPStatusError(
+                "401 Unauthorized",
+                request=MagicMock(),
+                response=MagicMock(status_code=401),
+            )
+
+            client.set_cookie("access_token", expired_access)
+            client.set_cookie("refresh_token", refresh_token)
+
+            response = client.get("/api/devices")
+
+            assert response.status_code == 401
+
+            # Cookies should be cleared
+            set_cookie_headers = response.headers.getlist("Set-Cookie")
+            cookie_str = " ".join(set_cookie_headers)
+
+            # Both cookies should be cleared (Max-Age=0)
+            assert "access_token=" in cookie_str
+            assert "Max-Age=0" in cookie_str
+
+    def test_valid_access_token_does_not_trigger_refresh(
+        self, auth_enabled_app_with_refresh, generate_test_jwt
+    ):
+        """Test that valid access token does not trigger refresh."""
+        client = auth_enabled_app_with_refresh.test_client()
+
+        # Generate a valid (non-expired) access token
+        valid_token = generate_test_jwt(roles=["admin"])
+
+        # Generate a refresh token
+        refresh_exp = int(time.time()) + 86400
+        refresh_payload = {"sub": "test-user", "exp": refresh_exp, "typ": "Refresh"}
+        refresh_token = jwt.encode(
+            refresh_payload, generate_test_jwt.private_key, algorithm="RS256"
+        )
+
+        with patch("httpx.post") as mock_post:
+            client.set_cookie("access_token", valid_token)
+            client.set_cookie("refresh_token", refresh_token)
+
+            response = client.get("/api/devices")
+
+            assert response.status_code == 200
+
+            # Refresh endpoint should NOT have been called
+            mock_post.assert_not_called()
+
+    def test_no_access_token_with_valid_refresh_token_succeeds(
+        self, auth_enabled_app_with_refresh, generate_test_jwt
+    ):
+        """Test that missing access token with valid refresh token refreshes and succeeds."""
+        client = auth_enabled_app_with_refresh.test_client()
+
+        # Generate a valid refresh token
+        refresh_exp = int(time.time()) + 86400
+        refresh_payload = {"sub": "test-user", "exp": refresh_exp, "typ": "Refresh"}
+        refresh_token = jwt.encode(
+            refresh_payload, generate_test_jwt.private_key, algorithm="RS256"
+        )
+
+        new_access_token = generate_test_jwt(subject="test-user", roles=["admin"])
+
+        with patch("httpx.post") as mock_post:
+            mock_refresh_response = MagicMock()
+            mock_refresh_response.json.return_value = {
+                "access_token": new_access_token,
+                "refresh_token": refresh_token,
+                "token_type": "Bearer",
+                "expires_in": 300,
+            }
+            mock_refresh_response.raise_for_status = MagicMock()
+            mock_post.return_value = mock_refresh_response
+
+            # Only set refresh token, no access token
+            client.set_cookie("refresh_token", refresh_token)
+
+            response = client.get("/api/devices")
+
+            assert response.status_code == 200
+
+            # Verify refresh was called
+            mock_post.assert_called_once()

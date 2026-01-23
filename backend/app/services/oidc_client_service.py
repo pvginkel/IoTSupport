@@ -361,6 +361,11 @@ class OidcClientService:
                     "Token response missing access_token"
                 )
 
+            # Record successful refresh
+            self.metrics_service.increment_counter(
+                "iot_auth_token_refresh_total", labels={"status": "success"}
+            )
+
             logger.info("Successfully refreshed access token")
 
             return TokenResponse(
@@ -372,6 +377,11 @@ class OidcClientService:
             )
 
         except httpx.HTTPError as e:
+            # Record failed refresh
+            self.metrics_service.increment_counter(
+                "iot_auth_token_refresh_total", labels={"status": "failed"}
+            )
+
             logger.error("Token refresh failed: %s", str(e))
             raise AuthenticationException(
                 f"Failed to refresh access token: {str(e)}"
