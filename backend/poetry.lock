@@ -463,6 +463,24 @@ pydantic2 = ["pydantic-settings"]
 yaml = ["pyyaml"]
 
 [[package]]
+name = "esp-idf-nvs-partition-gen"
+version = "0.2.0"
+description = "ESP-IDF NVS partition generation tool"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "esp_idf_nvs_partition_gen-0.2.0-py3-none-any.whl", hash = "sha256:7e128c81441fa406fe55b95f29a7d901098bcffc8cc464f993fdbecd074eb9a3"},
+    {file = "esp_idf_nvs_partition_gen-0.2.0.tar.gz", hash = "sha256:d1f23ce9876c0469e507b3499001266d0d17538158151a2612cc70b80706dce0"},
+]
+
+[package.dependencies]
+cryptography = "*"
+
+[package.extras]
+dev = ["pre-commit"]
+
+[[package]]
 name = "flask"
 version = "3.1.2"
 description = "A simple framework for building complex web applications."
@@ -2369,4 +2387,4 @@ watchdog = ["watchdog (>=2.3)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "a328d12bfd826db468b42ed882156484a7dc048474f668e0363a484121a77e32"
+content-hash = "0954825a0f92a68ec305b694104dd8b4ad63ab3f215fcc6f20c427e3adfb2b66"

@@ -1,11 +1,10 @@
 """Device management API endpoints."""
 
-import json
 import time
 from typing import Any
 
 from dependency_injector.wiring import Provide, inject
-from flask import Blueprint, Response, request
+from flask import Blueprint, request
 from spectree import Response as SpectreeResponse
 
 from app.schemas.device import (
@@ -16,6 +15,8 @@ from app.schemas.device import (
     DeviceRotateResponseSchema,
     DeviceSummarySchema,
     DeviceUpdateSchema,
+    NvsProvisioningQuerySchema,
+    NvsProvisioningResponseSchema,
 )
 from app.schemas.error import ErrorResponseSchema
 from app.services.container import ServiceContainer
@@ -206,6 +207,14 @@ def delete_device(
 
 
 @devices_bp.route("/<int:device_id>/provisioning", methods=["GET"])
+@api.validate(
+    query=NvsProvisioningQuerySchema,
+    resp=SpectreeResponse(
+        HTTP_200=NvsProvisioningResponseSchema,
+        HTTP_404=ErrorResponseSchema,
+        HTTP_502=ErrorResponseSchema,
+    )
+)
 @handle_api_errors
 @inject
 def get_provisioning(
@@ -213,26 +222,23 @@ def get_provisioning(
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
 ) -> Any:
-    """Download provisioning package for a device.
+    """Get NVS provisioning package for a device.
 
-    Returns the provisioning package as a downloadable .bin file
-    containing JSON configuration for the device.
+    Returns JSON containing an NVS binary blob that can be flashed
+    directly to ESP32 devices using esptool-js or similar tools.
+
+    The partition_size query parameter must match the NVS partition size
+    in the device's partition table.
     """
     start_time = time.perf_counter()
     status = "success"
 
     try:
-        package = device_service.get_provisioning_package(device_id)
-        content = json.dumps(package, indent=2).encode("utf-8")
-
-        return Response(
-            content,
-            mimetype="application/octet-stream",
-            headers={
-                "Content-Disposition": f"attachment; filename=provisioning-{package['device_key']}.bin",
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-            },
+        query = NvsProvisioningQuerySchema.model_validate(request.args.to_dict())
+        package = device_service.get_provisioning_package(
+            device_id, partition_size=query.partition_size
         )
+        return NvsProvisioningResponseSchema.model_validate(package).model_dump()
 
     except Exception:
         status = "error"

@@ -7,7 +7,8 @@ from app.schemas.device import (
     DeviceRotateResponseSchema,
     DeviceSummarySchema,
     DeviceUpdateSchema,
-    ProvisioningPackageSchema,
+    NvsProvisioningQuerySchema,
+    NvsProvisioningResponseSchema,
 )
 from app.schemas.device_model import (
     DeviceModelCreateSchema,
@@ -32,7 +33,8 @@ __all__ = [
     "DeviceRotateResponseSchema",
     "DeviceSummarySchema",
     "DeviceUpdateSchema",
-    "ProvisioningPackageSchema",
+    "NvsProvisioningQuerySchema",
+    "NvsProvisioningResponseSchema",
     # Device model schemas
     "DeviceModelCreateSchema",
     "DeviceModelFirmwareResponseSchema",

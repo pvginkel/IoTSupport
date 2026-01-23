@@ -65,8 +65,7 @@ class Settings(BaseSettings):
     )
 
     # MQTT settings
-    MQTT_URL: str | None = Field(
-        default=None,
+    MQTT_URL: str = Field(
         description="MQTT broker URL (e.g., mqtt://localhost:1883, mqtts://broker:8883)"
     )
     MQTT_USERNAME: str | None = Field(
@@ -181,12 +180,10 @@ class Settings(BaseSettings):
         return v
 
     # WiFi Credentials for Provisioning
-    WIFI_SSID: str | None = Field(
-        default=None,
+    WIFI_SSID: str = Field(
         description="WiFi SSID for device provisioning"
     )
-    WIFI_PASSWORD: str | None = Field(
-        default=None,
+    WIFI_PASSWORD: str = Field(
         description="WiFi password for device provisioning"
     )
 
@@ -256,6 +253,12 @@ class Settings(BaseSettings):
         if keycloak_missing and self.is_production:
             errors.append(
                 f"Keycloak settings required for device provisioning: {', '.join(keycloak_missing)}"
+            )
+
+        # MQTT_URL required for provisioning
+        if self.is_production and not self.MQTT_URL:
+            errors.append(
+                "MQTT_URL must be set for device provisioning"
             )
 
         # WiFi settings required for provisioning

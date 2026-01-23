@@ -65,6 +65,10 @@ def test_settings_with_assets(
         SECRET_KEY="test-secret-key",
         CORS_ORIGINS=["http://localhost:3000"],
         FLASK_ENV="testing",
+        # Required provisioning fields
+        MQTT_URL="mqtt://mqtt.example.com:1883",
+        WIFI_SSID="TestNetwork",
+        WIFI_PASSWORD="test-wifi-password",
     )
     # Configure for SQLite in-memory testing
     settings.set_engine_options_override({

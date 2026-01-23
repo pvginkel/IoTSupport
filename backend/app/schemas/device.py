@@ -123,17 +123,35 @@ class DeviceRotateResponseSchema(BaseModel):
     )
 
 
-class ProvisioningPackageSchema(BaseModel):
-    """Schema for the provisioning package content."""
+class NvsProvisioningQuerySchema(BaseModel):
+    """Query parameters for NVS provisioning request."""
 
-    device_key: str = Field(..., description="8-character device key")
-    client_id: str = Field(..., description="Keycloak client ID")
-    client_secret: str = Field(..., description="Keycloak client secret")
-    token_url: str = Field(..., description="OIDC token endpoint URL")
-    base_url: str = Field(..., description="IoT Support backend base URL")
-    mqtt_url: str | None = Field(None, description="MQTT broker URL")
-    wifi_ssid: str | None = Field(None, description="WiFi network SSID")
-    wifi_password: str | None = Field(None, description="WiFi network password")
+    partition_size: int = Field(
+        ...,
+        description="NVS partition size in bytes. Must match the partition table "
+        "on the device. Must be at least 12KB (0x3000) and a multiple of 4KB (0x1000). "
+        "Common values: 0x4000 (16KB), 0x5000 (20KB), 0x6000 (24KB).",
+        ge=0x3000,
+        examples=[0x4000, 0x5000, 0x6000],
+    )
+
+
+class NvsProvisioningResponseSchema(BaseModel):
+    """Response schema for NVS provisioning package.
+
+    Returns the device provisioning data as an NVS binary blob
+    that can be flashed directly to ESP32 devices.
+    """
+
+    size: int = Field(
+        ...,
+        description="Size of the NVS partition in bytes",
+        examples=[0x4000, 0x5000, 0x6000],
+    )
+    data: str = Field(
+        ...,
+        description="Base64-encoded NVS binary blob of the specified size",
+    )
 
 
 class DeviceKeycloakStatusSchema(BaseModel):
