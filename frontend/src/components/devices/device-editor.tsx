@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate, useBlocker, Link } from '@tanstack/react-router'
 import Editor from '@monaco-editor/react'
-import { Download } from 'lucide-react'
+import { Download, ExternalLink, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { useCreateDevice, useUpdateDevice, downloadDeviceProvisioning } from '@/hooks/use-devices'
+import { useCreateDevice, useUpdateDevice, downloadDeviceProvisioning, useDeviceKeycloakStatus, useSyncDeviceKeycloak } from '@/hooks/use-devices'
 import { useDeviceModels, useDeviceModel } from '@/hooks/use-device-models'
 import { ConfirmDialog } from '@/components/ui/dialog'
 import { useConfirm } from '@/hooks/use-confirm'
@@ -32,6 +32,83 @@ const DEFAULT_TEMPLATE = {
   deviceName: '',
   deviceEntityId: '',
   enableOTA: false
+}
+
+// Component to display Keycloak client status with ability to recreate
+interface KeycloakClientStatusProps {
+  deviceId: number
+}
+
+function KeycloakClientStatus({ deviceId }: KeycloakClientStatusProps) {
+  const { status, isLoading, isError } = useDeviceKeycloakStatus(deviceId)
+  const syncKeycloak = useSyncDeviceKeycloak()
+
+  const handleRecreate = () => {
+    syncKeycloak.mutate({ deviceId })
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-zinc-400">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        <span>Checking Keycloak status...</span>
+      </div>
+    )
+  }
+
+  // Show error state
+  if (isError || !status) {
+    return (
+      <span className="text-zinc-500" data-testid="devices.editor.keycloak-status-error">
+        Unable to check Keycloak status
+      </span>
+    )
+  }
+
+  // Show status with appropriate action
+  if (status.exists) {
+    return (
+      <div className="flex items-center gap-2">
+        {status.consoleUrl ? (
+          <a
+            href={status.consoleUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-green-400 hover:text-green-300 hover:underline"
+            data-testid="devices.editor.keycloak-console-link"
+          >
+            Client exists
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        ) : (
+          <span className="text-green-400" data-testid="devices.editor.keycloak-status-exists">
+            Client exists
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  // Client doesn't exist - show recreate option
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-amber-400" data-testid="devices.editor.keycloak-status-missing">
+        Client not found in Keycloak
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleRecreate}
+        disabled={syncKeycloak.isPending}
+        loading={syncKeycloak.isPending}
+        data-testid="devices.editor.keycloak-recreate"
+      >
+        <RefreshCw className="h-3 w-3 mr-1" />
+        Recreate Client
+      </Button>
+    </div>
+  )
 }
 
 export function DeviceEditor({
@@ -322,6 +399,16 @@ export function DeviceEditor({
                   {initialKey}
                 </span>
               </div>
+            </div>
+          )}
+
+          {/* Keycloak Client Status (edit mode only) */}
+          {mode === 'edit' && deviceId && (
+            <div data-testid="devices.editor.keycloak-section">
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Keycloak Client
+              </label>
+              <KeycloakClientStatus deviceId={deviceId} />
             </div>
           )}
 

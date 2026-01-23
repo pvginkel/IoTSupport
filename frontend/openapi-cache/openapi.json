@@ -183,6 +183,53 @@
         "title": "DeviceCreateSchema",
         "type": "object"
       },
+      "DeviceKeycloakStatusSchema.d48fbce": {
+        "description": "Schema for Keycloak client status response.",
+        "properties": {
+          "client_id": {
+            "description": "Expected Keycloak client ID",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "console_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Deep link to Keycloak admin console",
+            "title": "Console Url"
+          },
+          "exists": {
+            "description": "Whether client exists in Keycloak",
+            "title": "Exists",
+            "type": "boolean"
+          },
+          "keycloak_uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Keycloak internal UUID if exists",
+            "title": "Keycloak Uuid"
+          }
+        },
+        "required": [
+          "exists",
+          "client_id"
+        ],
+        "title": "DeviceKeycloakStatusSchema",
+        "type": "object"
+      },
       "DeviceListResponseSchema.d48fbce": {
         "description": "Response schema for device list.",
         "properties": {
@@ -1888,6 +1935,130 @@
         "tags": []
       }
     },
+    "/api/devices/{device_id}/keycloak-status": {
+      "get": {
+        "description": "Returns whether the Keycloak client exists and provides a deep link to the Keycloak admin console. Does not return an error if the client is missing - instead returns exists=false.",
+        "operationId": "get__api_devices_{device_id}_keycloak-status",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceKeycloakStatusSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Get Keycloak client status for a device.",
+        "tags": []
+      }
+    },
+    "/api/devices/{device_id}/keycloak-sync": {
+      "post": {
+        "description": "Idempotent operation - if the client already exists, returns current status without making changes.",
+        "operationId": "post__api_devices_{device_id}_keycloak-sync",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceKeycloakStatusSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Create Keycloak client for a device if missing.",
+        "tags": []
+      }
+    },
     "/api/devices/{device_id}/provisioning": {
       "get": {
         "description": "Returns the provisioning package as a downloadable .bin file containing JSON configuration for the device.",
@@ -2165,7 +2336,7 @@
     },
     "/api/rotation/trigger": {
       "post": {
-        "description": "Queues all devices with OK state for rotation. The rotation job will process them one at a time.",
+        "description": "Queues all devices with OK state for rotation and immediately starts rotating the first device. Chain rotation handles the rest.",
         "operationId": "post__api_rotation_trigger",
         "parameters": [],
         "responses": {

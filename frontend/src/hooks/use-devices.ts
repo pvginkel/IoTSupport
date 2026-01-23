@@ -6,6 +6,8 @@ import {
   usePostDevices,
   usePutDevicesByDeviceId,
   useDeleteDevicesByDeviceId,
+  useGetDevicesKeycloakStatusByDeviceId,
+  usePostDevicesKeycloakSyncByDeviceId,
   type DeviceCreateSchema_d48fbce,
   type DeviceUpdateSchema_d48fbce
 } from '@/lib/api/generated/hooks'
@@ -286,4 +288,88 @@ export async function downloadDeviceProvisioning(
   link.click()
   document.body.removeChild(link)
   window.URL.revokeObjectURL(url)
+}
+
+// UI domain model for Keycloak client status
+export interface KeycloakClientStatus {
+  clientId: string
+  exists: boolean
+  consoleUrl: string | null
+  keycloakUuid: string | null
+}
+
+// Transform snake_case API response to camelCase UI model
+function transformKeycloakStatus(apiStatus: {
+  client_id: string
+  exists: boolean
+  console_url: string | null
+  keycloak_uuid: string | null
+}): KeycloakClientStatus {
+  return {
+    clientId: apiStatus.client_id,
+    exists: apiStatus.exists,
+    consoleUrl: apiStatus.console_url,
+    keycloakUuid: apiStatus.keycloak_uuid
+  }
+}
+
+// Hook to fetch Keycloak client status for a device
+export function useDeviceKeycloakStatus(deviceId: number | undefined) {
+  const query = useGetDevicesKeycloakStatusByDeviceId(
+    { path: { device_id: deviceId! } },
+    { enabled: deviceId !== undefined }
+  )
+
+  const status = useMemo(() => {
+    if (!query.data) return null
+    return transformKeycloakStatus(query.data)
+  }, [query.data])
+
+  return {
+    ...query,
+    status
+  }
+}
+
+// Hook to sync (recreate) Keycloak client for a device
+export function useSyncDeviceKeycloak() {
+  const { showSuccess, showError } = useToast()
+  const queryClient = useQueryClient()
+  const mutation = usePostDevicesKeycloakSyncByDeviceId()
+
+  return {
+    ...mutation,
+    mutate: (
+      variables: { deviceId: number },
+      options?: { onSuccess?: () => void; onError?: (error: Error) => void }
+    ) => {
+      mutation.mutate(
+        { path: { device_id: variables.deviceId } },
+        {
+          onSuccess: () => {
+            queryClient.invalidateQueries({
+              queryKey: ['getDevicesKeycloakStatusByDeviceId', { path: { device_id: variables.deviceId } }]
+            })
+            showSuccess('Keycloak client created successfully')
+            options?.onSuccess?.()
+          },
+          onError: (error: unknown) => {
+            const message = error instanceof Error ? error.message : 'Failed to create Keycloak client'
+            showError(message)
+            if (error instanceof Error) {
+              options?.onError?.(error)
+            }
+          }
+        }
+      )
+    },
+    mutateAsync: async (variables: { deviceId: number }) => {
+      const result = await mutation.mutateAsync({ path: { device_id: variables.deviceId } })
+      queryClient.invalidateQueries({
+        queryKey: ['getDevicesKeycloakStatusByDeviceId', { path: { device_id: variables.deviceId } }]
+      })
+      showSuccess('Keycloak client created successfully')
+      return result
+    }
+  }
 }
