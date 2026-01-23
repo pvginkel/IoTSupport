@@ -65,14 +65,19 @@ def trigger_fleet_rotation(
 ) -> Any:
     """Manually trigger fleet-wide rotation.
 
-    Queues all devices with OK state for rotation. The rotation job
-    will process them one at a time.
+    Queues all devices with OK state for rotation and immediately
+    starts rotating the first device. Chain rotation handles the rest.
     """
     start_time = time.perf_counter()
     status = "success"
 
     try:
         queued_count = rotation_service.trigger_fleet_rotation()
+
+        # Start rotating immediately instead of waiting for CRON job
+        if queued_count > 0:
+            rotation_service.rotate_next_queued_device()
+
         return RotationTriggerResponseSchema(queued_count=queued_count).model_dump()
 
     except Exception:
