@@ -528,3 +528,63 @@ class DeviceService:
         """
         device.cached_secret = None
         self.db.flush()
+
+    def get_keycloak_status(self, device_id: int) -> dict[str, Any]:
+        """Get Keycloak client status for a device.
+
+        Returns status information about the device's Keycloak client,
+        including whether it exists and a deep link to the admin console.
+        Does not raise an error if the client is missing.
+
+        Args:
+            device_id: Device ID
+
+        Returns:
+            Dict with keys: exists, client_id, keycloak_uuid, console_url
+
+        Raises:
+            RecordNotFoundException: If device doesn't exist
+            ExternalServiceException: If Keycloak API call fails
+        """
+        device = self.get_device(device_id)
+        client_id = device.client_id
+
+        exists, keycloak_uuid = self.keycloak_admin_service.get_client_status(client_id)
+
+        console_url = None
+        if exists and keycloak_uuid and self.config.keycloak_console_base_url:
+            console_url = f"{self.config.keycloak_console_base_url}/#/clients/{keycloak_uuid}"
+
+        return {
+            "exists": exists,
+            "client_id": client_id,
+            "keycloak_uuid": keycloak_uuid,
+            "console_url": console_url,
+        }
+
+    def sync_keycloak_client(self, device_id: int) -> dict[str, Any]:
+        """Create Keycloak client for a device if missing.
+
+        Idempotent operation - if the client already exists, returns
+        current status without making changes.
+
+        Args:
+            device_id: Device ID
+
+        Returns:
+            Dict with keys: exists, client_id, keycloak_uuid, console_url
+
+        Raises:
+            RecordNotFoundException: If device doesn't exist
+            ExternalServiceException: If Keycloak API call fails
+        """
+        device = self.get_device(device_id)
+        client_id = device.client_id
+
+        # create_client is idempotent - returns existing client if present
+        self.keycloak_admin_service.create_client(client_id)
+
+        logger.info("Synced Keycloak client for device %s", device.key)
+
+        # Return current status after sync
+        return self.get_keycloak_status(device_id)

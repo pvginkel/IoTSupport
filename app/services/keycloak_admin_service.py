@@ -55,14 +55,14 @@ class KeycloakAdminService:
         # Check if Keycloak is configured
         self.enabled = all([
             config.OIDC_TOKEN_URL,
-            config.KEYCLOAK_ADMIN_URL,
+            config.KEYCLOAK_BASE_URL,
             config.KEYCLOAK_REALM,
             config.KEYCLOAK_ADMIN_CLIENT_ID,
             config.KEYCLOAK_ADMIN_CLIENT_SECRET,
         ])
 
         if self.enabled:
-            logger.info("KeycloakAdminService initialized with URL: %s", config.KEYCLOAK_ADMIN_URL)
+            logger.info("KeycloakAdminService initialized with URL: %s", config.keycloak_admin_url)
         else:
             logger.warning("KeycloakAdminService disabled - missing configuration")
 
@@ -160,7 +160,7 @@ class KeycloakAdminService:
 
         # Create new client
         try:
-            admin_url = self.config.KEYCLOAK_ADMIN_URL
+            admin_url = self.config.keycloak_admin_url
             response = self._http_client.post(
                 f"{admin_url}/clients",
                 headers={"Authorization": f"Bearer {token}"},
@@ -239,7 +239,7 @@ class KeycloakAdminService:
                 )
 
             internal_id = client_data["id"]
-            admin_url = self.config.KEYCLOAK_ADMIN_URL
+            admin_url = self.config.keycloak_admin_url
 
             # Regenerate secret
             response = self._http_client.post(
@@ -335,7 +335,7 @@ class KeycloakAdminService:
                 )
 
             internal_id = client_data["id"]
-            admin_url = self.config.KEYCLOAK_ADMIN_URL
+            admin_url = self.config.keycloak_admin_url
 
             # Update client with new secret
             response = self._http_client.put(
@@ -389,7 +389,7 @@ class KeycloakAdminService:
                 return
 
             internal_id = client_data["id"]
-            admin_url = self.config.KEYCLOAK_ADMIN_URL
+            admin_url = self.config.keycloak_admin_url
 
             # Delete client
             response = self._http_client.delete(
@@ -411,6 +411,41 @@ class KeycloakAdminService:
                 str(e)
             ) from e
 
+    def get_client_status(self, client_id: str) -> tuple[bool, str | None]:
+        """Check if a client exists in Keycloak.
+
+        Args:
+            client_id: Client ID to check
+
+        Returns:
+            Tuple of (exists, keycloak_uuid) where keycloak_uuid is the internal
+            Keycloak ID if the client exists, None otherwise.
+
+        Raises:
+            ExternalServiceException: If Keycloak API call fails
+        """
+        if not self.enabled:
+            raise ExternalServiceException(
+                "check Keycloak client status",
+                "Keycloak admin API not configured"
+            )
+
+        token = self._get_access_token()
+
+        try:
+            client_data = self._get_client_by_client_id(client_id, token)
+            if client_data:
+                return (True, client_data["id"])
+            return (False, None)
+
+        except httpx.HTTPError as e:
+            logger.error("Failed to check client status for %s: %s", client_id, str(e))
+            self._record_operation("get_client_status", "error")
+            raise ExternalServiceException(
+                "check Keycloak client status",
+                str(e)
+            ) from e
+
     def _get_client_by_client_id(self, client_id: str, token: str) -> dict[str, Any] | None:
         """Get client data by client_id (not internal ID).
 
@@ -421,7 +456,7 @@ class KeycloakAdminService:
         Returns:
             Client data dict or None if not found
         """
-        admin_url = self.config.KEYCLOAK_ADMIN_URL
+        admin_url = self.config.keycloak_admin_url
         response = self._http_client.get(
             f"{admin_url}/clients",
             headers={"Authorization": f"Bearer {token}"},
@@ -444,7 +479,7 @@ class KeycloakAdminService:
         Returns:
             Client secret string
         """
-        admin_url = self.config.KEYCLOAK_ADMIN_URL
+        admin_url = self.config.keycloak_admin_url
         response = self._http_client.get(
             f"{admin_url}/clients/{internal_id}/client-secret",
             headers={"Authorization": f"Bearer {token}"},

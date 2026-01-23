@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Project root directory (parent of app/)
@@ -137,9 +137,9 @@ class Settings(BaseSettings):
         default=None,
         description="OIDC token endpoint URL (e.g., https://auth.example.com/realms/iot/protocol/openid-connect/token)"
     )
-    KEYCLOAK_ADMIN_URL: str | None = Field(
+    KEYCLOAK_BASE_URL: str | None = Field(
         default=None,
-        description="Keycloak admin API URL (e.g., https://auth.example.com/admin/realms/iot)"
+        description="Keycloak base URL (e.g., https://keycloak.local)"
     )
     KEYCLOAK_REALM: str | None = Field(
         default=None,
@@ -153,6 +153,28 @@ class Settings(BaseSettings):
         default=None,
         description="Keycloak admin service account client secret"
     )
+
+    @property
+    def keycloak_admin_url(self) -> str | None:
+        """Derived admin API URL: {base}/admin/realms/{realm}."""
+        if self.KEYCLOAK_BASE_URL and self.KEYCLOAK_REALM:
+            return f"{self.KEYCLOAK_BASE_URL}/admin/realms/{self.KEYCLOAK_REALM}"
+        return None
+
+    @property
+    def keycloak_console_base_url(self) -> str | None:
+        """Derived console URL for deep links: {base}/admin/{realm}/console."""
+        if self.KEYCLOAK_BASE_URL and self.KEYCLOAK_REALM:
+            return f"{self.KEYCLOAK_BASE_URL}/admin/{self.KEYCLOAK_REALM}/console"
+        return None
+
+    @field_validator("OIDC_TOKEN_URL", "KEYCLOAK_BASE_URL", "BASEURL", mode="after")
+    @classmethod
+    def strip_trailing_slashes(cls, v: str | None) -> str | None:
+        """Remove trailing slashes from URLs to prevent double-slash issues."""
+        if v is not None:
+            return v.rstrip("/")
+        return v
 
     # WiFi Credentials for Provisioning
     WIFI_SSID: str | None = Field(
@@ -221,7 +243,7 @@ class Settings(BaseSettings):
 
         # Keycloak settings required when provisioning is used
         keycloak_settings = [
-            ("KEYCLOAK_ADMIN_URL", self.KEYCLOAK_ADMIN_URL),
+            ("KEYCLOAK_BASE_URL", self.KEYCLOAK_BASE_URL),
             ("KEYCLOAK_REALM", self.KEYCLOAK_REALM),
             ("KEYCLOAK_ADMIN_CLIENT_ID", self.KEYCLOAK_ADMIN_CLIENT_ID),
             ("KEYCLOAK_ADMIN_CLIENT_SECRET", self.KEYCLOAK_ADMIN_CLIENT_SECRET),

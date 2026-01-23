@@ -131,7 +131,7 @@ Management endpoints for administrators:
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host/db` |
 | `OIDC_TOKEN_URL` | Keycloak token endpoint | `https://keycloak.local/realms/iot/protocol/openid-connect/token` |
-| `KEYCLOAK_ADMIN_URL` | Keycloak admin API URL | `https://keycloak.local/admin/realms/iot` |
+| `KEYCLOAK_BASE_URL` | Keycloak base URL (admin API derived from this + realm) | `https://keycloak.local` |
 | `KEYCLOAK_REALM` | Keycloak realm name | `iot` |
 | `KEYCLOAK_ADMIN_CLIENT_ID` | Admin client ID | `iot-admin` |
 | `KEYCLOAK_ADMIN_CLIENT_SECRET` | Admin client secret | (secret) |

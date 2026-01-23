@@ -10,6 +10,7 @@ from spectree import Response as SpectreeResponse
 
 from app.schemas.device import (
     DeviceCreateSchema,
+    DeviceKeycloakStatusSchema,
     DeviceListResponseSchema,
     DeviceResponseSchema,
     DeviceRotateResponseSchema,
@@ -275,3 +276,76 @@ def trigger_device_rotation(
     finally:
         duration = time.perf_counter() - start_time
         metrics_service.record_operation("trigger_device_rotation", status, duration)
+
+
+@devices_bp.route("/<int:device_id>/keycloak-status", methods=["GET"])
+@api.validate(
+    resp=SpectreeResponse(
+        HTTP_200=DeviceKeycloakStatusSchema,
+        HTTP_404=ErrorResponseSchema,
+        HTTP_502=ErrorResponseSchema,
+    )
+)
+@handle_api_errors
+@inject
+def get_keycloak_status(
+    device_id: int,
+    device_service: DeviceService = Provide[ServiceContainer.device_service],
+    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+) -> Any:
+    """Get Keycloak client status for a device.
+
+    Returns whether the Keycloak client exists and provides a deep link
+    to the Keycloak admin console. Does not return an error if the
+    client is missing - instead returns exists=false.
+    """
+    start_time = time.perf_counter()
+    status = "success"
+
+    try:
+        result = device_service.get_keycloak_status(device_id)
+        return DeviceKeycloakStatusSchema.model_validate(result).model_dump()
+
+    except Exception:
+        status = "error"
+        raise
+
+    finally:
+        duration = time.perf_counter() - start_time
+        metrics_service.record_operation("get_keycloak_status", status, duration)
+
+
+@devices_bp.route("/<int:device_id>/keycloak-sync", methods=["POST"])
+@api.validate(
+    resp=SpectreeResponse(
+        HTTP_200=DeviceKeycloakStatusSchema,
+        HTTP_404=ErrorResponseSchema,
+        HTTP_502=ErrorResponseSchema,
+    )
+)
+@handle_api_errors
+@inject
+def sync_keycloak_client(
+    device_id: int,
+    device_service: DeviceService = Provide[ServiceContainer.device_service],
+    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+) -> Any:
+    """Create Keycloak client for a device if missing.
+
+    Idempotent operation - if the client already exists, returns
+    current status without making changes.
+    """
+    start_time = time.perf_counter()
+    status = "success"
+
+    try:
+        result = device_service.sync_keycloak_client(device_id)
+        return DeviceKeycloakStatusSchema.model_validate(result).model_dump()
+
+    except Exception:
+        status = "error"
+        raise
+
+    finally:
+        duration = time.perf_counter() - start_time
+        metrics_service.record_operation("sync_keycloak_client", status, duration)
