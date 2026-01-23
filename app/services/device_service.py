@@ -409,28 +409,39 @@ class DeviceService:
 
         return key
 
-    def get_provisioning_package(self, device_id: int) -> dict[str, Any]:
-        """Generate provisioning package for a device.
+    def get_provisioning_package(self, device_id: int, partition_size: int) -> dict[str, Any]:
+        """Generate provisioning package for a device as NVS binary blob.
 
-        Retrieves the current client secret from Keycloak.
+        Retrieves the current client secret from Keycloak and generates
+        an NVS partition binary that can be flashed directly to ESP32.
 
         Args:
             device_id: Device ID
+            partition_size: NVS partition size in bytes. Must match the partition
+                            table on the device. Must be at least 12KB (0x3000) and
+                            a multiple of 4KB (0x1000).
 
         Returns:
-            Provisioning package dict
+            Dict with keys:
+                - partition: "nvs" (partition name)
+                - size: Size of the partition in bytes
+                - data: Base64-encoded NVS binary blob
 
         Raises:
             RecordNotFoundException: If device doesn't exist
             ExternalServiceException: If Keycloak secret retrieval fails
+            ValidationException: If partition_size is invalid
         """
+        from app.utils.nvs_generator import generate_nvs_blob
+
         device = self.get_device(device_id)
         client_id = device.client_id
 
         # Get current secret from Keycloak
         secret = self.keycloak_admin_service.get_client_secret(client_id)
 
-        return {
+        # Build NVS key-value data matching /iot/provisioning JSON keys
+        nvs_data: dict[str, str | None] = {
             "device_key": device.key,
             "client_id": client_id,
             "client_secret": secret,
@@ -439,6 +450,17 @@ class DeviceService:
             "mqtt_url": self.config.MQTT_URL,
             "wifi_ssid": self.config.WIFI_SSID,
             "wifi_password": self.config.WIFI_PASSWORD,
+        }
+
+        # Generate NVS binary blob with specified partition size
+        nvs_blob = generate_nvs_blob(nvs_data, partition_size=partition_size)
+
+        # Base64 encode for JSON transport
+        nvs_base64 = base64.b64encode(nvs_blob).decode("ascii")
+
+        return {
+            "size": partition_size,
+            "data": nvs_base64,
         }
 
     def trigger_rotation(self, device_id: int) -> str:

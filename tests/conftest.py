@@ -77,6 +77,11 @@ def _build_test_settings(tmp_path: Path) -> Settings:
         CORS_ORIGINS=["http://localhost:3000"],
         ROTATION_CRON="0 8 1-7 * 6",
         ROTATION_CRITICAL_THRESHOLD_DAYS=7,
+        # Required for provisioning
+        OIDC_TOKEN_URL="https://auth.example.com/realms/iot/protocol/openid-connect/token",
+        MQTT_URL="mqtt://mqtt.example.com:1883",
+        WIFI_SSID="TestNetwork",
+        WIFI_PASSWORD="test-wifi-password",
     )
 
 

@@ -377,6 +377,169 @@ class TestDeviceServiceDelete:
                 device_service.delete_device(99999)
 
 
+class TestDeviceServiceProvisioning:
+    """Tests for provisioning package generation."""
+
+    # Standard test partition size (12KB minimum)
+    TEST_PARTITION_SIZE = 0x3000
+
+    def test_get_provisioning_package_returns_nvs_format(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that provisioning package returns NVS format with size and data."""
+        import base64
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="prov1", name="Provisioning Test")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+
+                with patch.object(
+                    keycloak_service,
+                    "get_client_secret",
+                    return_value="keycloak-secret-123",
+                ):
+                    result = device_service.get_provisioning_package(
+                        device.id, partition_size=self.TEST_PARTITION_SIZE
+                    )
+
+            assert "size" in result
+            assert "data" in result
+            assert result["size"] == self.TEST_PARTITION_SIZE
+
+            # Data should be valid base64
+            decoded = base64.b64decode(result["data"])
+            # NVS blob should match requested partition size
+            assert len(decoded) == self.TEST_PARTITION_SIZE
+
+    def test_get_provisioning_package_blob_contains_device_key(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that NVS blob contains the device key."""
+        import base64
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="prov2", name="Provisioning Test 2")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device_key = device.key
+
+                with patch.object(
+                    keycloak_service,
+                    "get_client_secret",
+                    return_value="keycloak-secret",
+                ):
+                    result = device_service.get_provisioning_package(
+                        device.id, partition_size=self.TEST_PARTITION_SIZE
+                    )
+
+            decoded = base64.b64decode(result["data"])
+            # Device key should be present in the binary
+            assert device_key.encode("utf-8") in decoded
+
+    def test_get_provisioning_package_blob_contains_keycloak_secret(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that NVS blob contains the Keycloak client secret."""
+        import base64
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="prov3", name="Provisioning Test 3")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+
+                secret_value = "super-secret-keycloak-credential"
+                with patch.object(
+                    keycloak_service,
+                    "get_client_secret",
+                    return_value=secret_value,
+                ):
+                    result = device_service.get_provisioning_package(
+                        device.id, partition_size=self.TEST_PARTITION_SIZE
+                    )
+
+            decoded = base64.b64decode(result["data"])
+            # Secret should be present in the binary
+            assert secret_value.encode("utf-8") in decoded
+
+    def test_get_provisioning_package_nonexistent_device_raises(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that getting provisioning for nonexistent device raises error."""
+        with app.app_context():
+            device_service = container.device_service()
+
+            with pytest.raises(RecordNotFoundException):
+                device_service.get_provisioning_package(
+                    99999, partition_size=self.TEST_PARTITION_SIZE
+                )
+
+    def test_get_provisioning_package_keycloak_failure_propagates(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that Keycloak failure during secret retrieval propagates."""
+        from app.exceptions import ExternalServiceException
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="prov5", name="Provisioning Test 5")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+
+                with patch.object(
+                    keycloak_service,
+                    "get_client_secret",
+                    side_effect=ExternalServiceException("get secret", "connection refused"),
+                ):
+                    with pytest.raises(ExternalServiceException):
+                        device_service.get_provisioning_package(
+                            device.id, partition_size=self.TEST_PARTITION_SIZE
+                        )
+
+
 class TestDeviceServiceRotation:
     """Tests for rotation-related device operations."""
 

@@ -44,6 +44,10 @@ def _build_testing_settings(tmp_path: Path) -> Settings:
         SECRET_KEY="test-secret-key",
         CORS_ORIGINS=["http://localhost:3000"],
         FLASK_ENV="testing",  # Enable testing mode
+        # Required provisioning fields
+        MQTT_URL="mqtt://mqtt.example.com:1883",
+        WIFI_SSID="TestNetwork",
+        WIFI_PASSWORD="test-wifi-password",
     )
 
 
