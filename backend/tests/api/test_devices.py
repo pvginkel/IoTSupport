@@ -33,6 +33,9 @@ class TestDevicesList:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device_service.create_device(device_model_id=model.id, config="{}")
@@ -58,6 +61,9 @@ class TestDevicesList:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device_service.create_device(device_model_id=model1.id, config="{}")
@@ -87,6 +93,9 @@ class TestDevicesCreate:
             container.keycloak_admin_service(),
             "create_client",
             return_value=MagicMock(client_id="test", secret="test-secret"),
+        ), patch.object(
+            container.keycloak_admin_service(),
+            "update_client_metadata",
         ):
             response = client.post(
                 "/api/devices",
@@ -151,6 +160,9 @@ class TestDevicesGet:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device = device_service.create_device(device_model_id=model.id, config="{}")
@@ -186,6 +198,9 @@ class TestDevicesUpdate:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device = device_service.create_device(
@@ -193,10 +208,11 @@ class TestDevicesUpdate:
                 )
                 device_id = device.id
 
-        response = client.put(
-            f"/api/devices/{device_id}",
-            json={"config": '{"new": "value"}'},
-        )
+        with patch.object(container.keycloak_admin_service(), "update_client_metadata"):
+            response = client.put(
+                f"/api/devices/{device_id}",
+                json={"config": '{"new": "value"}'},
+            )
 
         assert response.status_code == 200
         data = response.get_json()
@@ -229,6 +245,9 @@ class TestDevicesDelete:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device = device_service.create_device(device_model_id=model.id, config="{}")
@@ -268,6 +287,9 @@ class TestDevicesProvisioning:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device = device_service.create_device(device_model_id=model.id, config="{}")
@@ -309,6 +331,9 @@ class TestDevicesRotate:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device = device_service.create_device(device_model_id=model.id, config="{}")
@@ -333,6 +358,9 @@ class TestDevicesRotate:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device = device_service.create_device(device_model_id=model.id, config="{}")
@@ -368,6 +396,9 @@ class TestDevicesKeycloakStatus:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device = device_service.create_device(device_model_id=model.id, config="{}")
@@ -400,6 +431,9 @@ class TestDevicesKeycloakStatus:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device = device_service.create_device(device_model_id=model.id, config="{}")
@@ -441,6 +475,9 @@ class TestDevicesKeycloakSync:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device = device_service.create_device(device_model_id=model.id, config="{}")
@@ -450,6 +487,9 @@ class TestDevicesKeycloakSync:
             container.keycloak_admin_service(),
             "create_client",
             return_value=MagicMock(client_id="test", secret="new-secret"),
+        ), patch.object(
+            container.keycloak_admin_service(),
+            "update_client_metadata",
         ), patch.object(
             container.keycloak_admin_service(),
             "get_client_status",
@@ -475,6 +515,9 @@ class TestDevicesKeycloakSync:
                 keycloak_service,
                 "create_client",
                 return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
             ):
                 device_service = container.device_service()
                 device = device_service.create_device(device_model_id=model.id, config="{}")
@@ -484,6 +527,9 @@ class TestDevicesKeycloakSync:
             container.keycloak_admin_service(),
             "create_client",
             return_value=MagicMock(client_id="test", secret="existing-secret"),
+        ), patch.object(
+            container.keycloak_admin_service(),
+            "update_client_metadata",
         ), patch.object(
             container.keycloak_admin_service(),
             "get_client_status",

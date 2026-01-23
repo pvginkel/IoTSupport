@@ -308,6 +308,13 @@ class DeviceService:
             self.db.add(device)
             self.db.flush()
 
+            # Sync metadata to Keycloak
+            self.keycloak_admin_service.update_client_metadata(
+                client_id,
+                name=device.device_name,
+                description="This device is being managed in IoT Support.",
+            )
+
             logger.info("Created device %s for model %s", key, model.code)
             return device
 
@@ -357,6 +364,13 @@ class DeviceService:
         # Extract and apply config fields for display
         self._apply_config_fields(device, config)
         self.db.flush()
+
+        # Sync metadata to Keycloak
+        self.keycloak_admin_service.update_client_metadata(
+            device.client_id,
+            name=device.device_name,
+            description="This device is being managed in IoT Support.",
+        )
 
         logger.info("Updated device %s config", device.key)
         return device
@@ -553,7 +567,7 @@ class DeviceService:
 
         console_url = None
         if exists and keycloak_uuid and self.config.keycloak_console_base_url:
-            console_url = f"{self.config.keycloak_console_base_url}/#/clients/{keycloak_uuid}"
+            console_url = f"{self.config.keycloak_console_base_url}/{keycloak_uuid}/settings"
 
         return {
             "exists": exists,
@@ -563,10 +577,10 @@ class DeviceService:
         }
 
     def sync_keycloak_client(self, device_id: int) -> dict[str, Any]:
-        """Create Keycloak client for a device if missing.
+        """Create Keycloak client for a device if missing and sync metadata.
 
-        Idempotent operation - if the client already exists, returns
-        current status without making changes.
+        Idempotent operation - creates client if missing, then updates
+        the client name and description to match the device.
 
         Args:
             device_id: Device ID
@@ -583,6 +597,13 @@ class DeviceService:
 
         # create_client is idempotent - returns existing client if present
         self.keycloak_admin_service.create_client(client_id)
+
+        # Sync device name and description to Keycloak
+        self.keycloak_admin_service.update_client_metadata(
+            client_id,
+            name=device.device_name,
+            description="This device is being managed in IoT Support.",
+        )
 
         logger.info("Synced Keycloak client for device %s", device.key)
 

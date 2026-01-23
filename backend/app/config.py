@@ -167,9 +167,9 @@ class Settings(BaseSettings):
 
     @property
     def keycloak_console_base_url(self) -> str | None:
-        """Derived console URL for deep links: {base}/admin/{realm}/console."""
+        """Derived console URL for deep links: {base}/admin/master/console/#/{realm}/clients."""
         if self.KEYCLOAK_BASE_URL and self.KEYCLOAK_REALM:
-            return f"{self.KEYCLOAK_BASE_URL}/admin/{self.KEYCLOAK_REALM}/console"
+            return f"{self.KEYCLOAK_BASE_URL}/admin/master/console/#/{self.KEYCLOAK_REALM}/clients"
         return None
 
     @field_validator("OIDC_TOKEN_URL", "KEYCLOAK_BASE_URL", "BASEURL", mode="after")
