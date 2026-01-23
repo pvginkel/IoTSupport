@@ -104,12 +104,13 @@ class RotationService:
 
         # Calculate next scheduled rotation
         next_scheduled = None
-        try:
-            cron_iter = croniter(self.config.ROTATION_CRON, datetime.utcnow())
-            next_time = cron_iter.get_next(datetime)
-            next_scheduled = next_time.isoformat() + "Z"
-        except Exception as e:
-            logger.warning("Failed to calculate next rotation time: %s", e)
+        if self.config.ROTATION_CRON:
+            try:
+                cron_iter = croniter(self.config.ROTATION_CRON, datetime.utcnow())
+                next_time = cron_iter.get_next(datetime)
+                next_scheduled = next_time.isoformat() + "Z"
+            except Exception as e:
+                logger.warning("Failed to calculate next rotation time: %s", e)
 
         return {
             "counts_by_state": counts_by_state,
@@ -162,9 +163,11 @@ class RotationService:
         )
 
         try:
-            # Step 1: Check CRON schedule
-            # Trigger if never scheduled before OR if schedule indicates it's time
-            if not last_scheduled_at or self._should_trigger_scheduled_rotation(last_scheduled_at):
+            # Step 1: Check CRON schedule (only if configured)
+            # Trigger if CRON is configured AND (never scheduled before OR schedule indicates it's time)
+            if self.config.ROTATION_CRON and (
+                not last_scheduled_at or self._should_trigger_scheduled_rotation(last_scheduled_at)
+            ):
                 queued_count = self.trigger_fleet_rotation()
                 result.scheduled_rotation_triggered = True
                 logger.info("Scheduled rotation triggered, queued %d devices", queued_count)
@@ -212,6 +215,10 @@ class RotationService:
         Returns:
             True if a new rotation should be triggered based on CRON schedule
         """
+        if not self.config.ROTATION_CRON:
+            logger.debug("ROTATION_CRON not configured, skipping scheduled rotation")
+            return False
+
         try:
             now = datetime.utcnow()
             cron_iter = croniter(self.config.ROTATION_CRON, now)
@@ -448,7 +455,8 @@ class RotationService:
         from sqlalchemy.orm import joinedload
 
         now = datetime.utcnow()
-        threshold_days = self.config.ROTATION_CRITICAL_THRESHOLD_DAYS
+        # Default to 7 days if not configured (for dev/test environments)
+        threshold_days = self.config.ROTATION_CRITICAL_THRESHOLD_DAYS or 7
 
         # Fetch all devices with their model info
         stmt = select(Device).options(joinedload(Device.device_model))

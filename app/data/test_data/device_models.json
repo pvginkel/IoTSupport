@@ -3,7 +3,43 @@
     {
       "code": "thermostat",
       "name": "Smart Thermostat",
-      "firmware_version": "1.2.3"
+      "firmware_version": "1.2.3",
+      "config_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://example.com/schemas/device-config.json",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "deviceEntityId",
+          "deviceName",
+          "enableOTA",
+          "mode",
+          "targetTemp"
+        ],
+        "properties": {
+          "deviceEntityId": {
+            "type": "string",
+            "description": "Unique identifier for the device entity"
+          },
+          "deviceName": {
+            "type": "string",
+            "description": "Human-readable device name"
+          },
+          "enableOTA": {
+            "type": "boolean",
+            "description": "Whether over-the-air updates are enabled"
+          },
+          "mode": {
+            "type": "string",
+            "description": "Operating mode of the device",
+            "enum": ["auto", "heat", "cool", "off"]
+          },
+          "targetTemp": {
+            "type": "number",
+            "description": "Target temperature setpoint"
+          }
+        }
+      }
     },
     {
       "code": "motion_sensor",

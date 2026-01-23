@@ -4,21 +4,27 @@
       "key": "abc12345",
       "model_code": "thermostat",
       "config": {
+        "deviceEntityId": "climate.living_room",
         "deviceName": "Living Room Thermostat",
+        "enableOTA": true,
         "targetTemp": 72,
         "mode": "auto"
       },
-      "rotation_state": "OK"
+      "rotation_state": "OK",
+      "last_rotation_completed_at": "3 days ago"
     },
     {
       "key": "def67890",
       "model_code": "thermostat",
       "config": {
+        "deviceEntityId": "climate.bedroom",
         "deviceName": "Bedroom Thermostat",
+        "enableOTA": true,
         "targetTemp": 68,
         "mode": "heat"
       },
-      "rotation_state": "OK"
+      "rotation_state": "OK",
+      "last_rotation_completed_at": "5 days ago"
     },
     {
       "key": "ghi11223",
@@ -28,7 +34,8 @@
         "sensitivity": "high",
         "timeout": 30
       },
-      "rotation_state": "OK"
+      "rotation_state": "OK",
+      "last_rotation_completed_at": "1 week ago"
     },
     {
       "key": "jkl44556",
@@ -37,7 +44,31 @@
         "deviceName": "Garage Door",
         "alertOnOpen": true
       },
-      "rotation_state": "OK"
+      "rotation_state": "OK",
+      "last_rotation_completed_at": "2 days ago"
+    },
+    {
+      "key": "mno77889",
+      "model_code": "motion_sensor",
+      "config": {
+        "deviceName": "Backyard Motion",
+        "sensitivity": "medium",
+        "timeout": 60
+      },
+      "rotation_state": "TIMEOUT",
+      "last_rotation_completed_at": "5 days ago",
+      "last_rotation_attempt_at": "1 day ago"
+    },
+    {
+      "key": "pqr99001",
+      "model_code": "door_sensor",
+      "config": {
+        "deviceName": "Front Door",
+        "alertOnOpen": true
+      },
+      "rotation_state": "TIMEOUT",
+      "last_rotation_completed_at": "3 weeks ago",
+      "last_rotation_attempt_at": "2 weeks ago"
     }
   ]
 }
