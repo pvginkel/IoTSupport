@@ -7,6 +7,7 @@
 import { type ReactNode } from 'react'
 import { useAuthContext } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
+import { ApiError } from '@/lib/api/api-error'
 
 interface AuthGateProps {
   children: ReactNode
@@ -26,9 +27,70 @@ function AuthLoading() {
 }
 
 /**
+ * Derive user-friendly error title and description based on error type.
+ * Server errors (5xx, network) get server-focused messaging,
+ * not auth-focused since 401s are already handled by redirect.
+ */
+function getErrorDisplay(error: Error): { title: string; description: string } {
+  const status = error instanceof ApiError ? error.status : undefined
+
+  // Network errors (no status) - connection failed entirely
+  if (status === undefined) {
+    return {
+      title: 'Connection Error',
+      description: 'Unable to connect to the server. Please check your network connection.',
+    }
+  }
+
+  // 502 Bad Gateway - backend service is down
+  if (status === 502) {
+    return {
+      title: 'Server Unavailable',
+      description: 'The server is currently unavailable. Please try again shortly.',
+    }
+  }
+
+  // 503 Service Unavailable
+  if (status === 503) {
+    return {
+      title: 'Service Unavailable',
+      description: 'The service is temporarily unavailable. Please try again shortly.',
+    }
+  }
+
+  // 504 Gateway Timeout
+  if (status === 504) {
+    return {
+      title: 'Server Timeout',
+      description: 'The server took too long to respond. Please try again.',
+    }
+  }
+
+  // Other 5xx errors
+  if (status >= 500) {
+    return {
+      title: 'Server Error',
+      description: 'The server encountered an error. Please try again later.',
+    }
+  }
+
+  // Fallback for unexpected error types
+  return {
+    title: 'Connection Error',
+    description: 'An unexpected error occurred. Please try again.',
+  }
+}
+
+/**
  * Error screen shown when auth check fails (non-401 errors).
+ * Displays server-focused messaging since 401s redirect to login.
  */
 function AuthError({ error, onRetry }: { error: Error; onRetry: () => void }) {
+  const { title, description } = getErrorDisplay(error)
+
+  // Log error details for debugging
+  console.error('[AuthGate] Auth check failed:', error)
+
   return (
     <div
       className="flex h-screen w-full items-center justify-center bg-zinc-950"
@@ -51,11 +113,8 @@ function AuthError({ error, onRetry }: { error: Error; onRetry: () => void }) {
             />
           </svg>
         </div>
-        <h2 className="text-lg font-semibold text-zinc-50">Authentication Error</h2>
-        <p className="text-sm text-zinc-400">
-          Unable to verify your authentication status. Please try again.
-        </p>
-        <p className="text-xs text-zinc-500">{error.message}</p>
+        <h2 className="text-lg font-semibold text-zinc-50">{title}</h2>
+        <p className="text-sm text-zinc-400">{description}</p>
         <Button
           variant="primary"
           onClick={onRetry}
