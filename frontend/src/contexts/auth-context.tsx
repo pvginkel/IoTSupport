@@ -6,6 +6,7 @@
 
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import { useAuth, type UserInfo } from '@/hooks/use-auth'
+import { buildLoginUrl } from '@/lib/auth-redirect'
 import { isTestMode } from '@/lib/config/test-mode'
 import { emitTestEvent } from '@/lib/test/event-emitter'
 import { TestEventKind, type UiStateTestEvent } from '@/types/test-events'
@@ -38,15 +39,6 @@ export function useAuthContext(): AuthContextValue {
 
 interface AuthProviderProps {
   children: ReactNode
-}
-
-/**
- * Build the login redirect URL with the current path preserved.
- */
-function buildLoginUrl(): string {
-  const currentPath = window.location.pathname + window.location.search
-  const encodedRedirect = encodeURIComponent(currentPath)
-  return `/api/auth/login?redirect=${encodedRedirect}`
 }
 
 /**
