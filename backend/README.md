@@ -140,6 +140,14 @@ app/
 └── config.py      # Application settings
 ```
 
+## Keycloak configuration
+
+Need an `iotsupport` client for authentication. It's authenticated and Direct access grants must be set.
+
+Also need an `iotsupport-admin` client with administrative access. That's also authenticated. The **only** authentication flow that needs to be checked is Service account roles. This enables the Service account roles tab. `manage-clients` must be added.
+
+
+
 ## License
 
 See LICENSE file for details.

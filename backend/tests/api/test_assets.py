@@ -69,6 +69,7 @@ def test_settings_with_assets(
         MQTT_URL="mqtt://mqtt.example.com:1883",
         WIFI_SSID="TestNetwork",
         WIFI_PASSWORD="test-wifi-password",
+        LOGGING_URL="https://logs.example.com/ingest",
     )
     # Configure for SQLite in-memory testing
     settings.set_engine_options_override({

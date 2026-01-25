@@ -187,6 +187,11 @@ class Settings(BaseSettings):
         description="WiFi password for device provisioning"
     )
 
+    # Logging Endpoint for Provisioning
+    LOGGING_URL: str = Field(
+        description="Logging service endpoint URL for device metrics and logs"
+    )
+
     # Rotation Settings
     ROTATION_CRON: str | None = Field(
         default=None,

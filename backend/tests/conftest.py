@@ -82,6 +82,7 @@ def _build_test_settings(tmp_path: Path) -> Settings:
         MQTT_URL="mqtt://mqtt.example.com:1883",
         WIFI_SSID="TestNetwork",
         WIFI_PASSWORD="test-wifi-password",
+        LOGGING_URL="https://logs.example.com/ingest",
     )
 
 
