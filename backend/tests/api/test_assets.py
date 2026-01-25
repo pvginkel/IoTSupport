@@ -581,7 +581,7 @@ class TestAssetsWithMqtt:
         container = app_with_assets.container
         mqtt_service = container.mqtt_service()
 
-        with patch.object(mqtt_service, "publish_asset_update") as mock_publish:
+        with patch.object(mqtt_service, "publish") as mock_publish:
             timestamp_str = datetime.now(UTC).isoformat()
             signature_str = sign_timestamp(timestamp_str)
 
@@ -600,8 +600,10 @@ class TestAssetsWithMqtt:
 
             assert response.status_code == 200
 
-            # Verify MQTT notification was published with correct filename
-            mock_publish.assert_called_once_with("firmware.bin")
+            # Verify MQTT notification was published with correct topic and filename
+            mock_publish.assert_called_once_with(
+                "iotsupport/updates/assets", "firmware.bin"
+            )
 
     def test_upload_asset_with_different_filenames_publishes_correctly(
         self, app_with_assets: Flask, client_with_assets: FlaskClient, sign_timestamp
@@ -613,7 +615,7 @@ class TestAssetsWithMqtt:
         filenames = ["firmware-v1.2.3.bin", "config.json", "image.png"]
 
         for filename in filenames:
-            with patch.object(mqtt_service, "publish_asset_update") as mock_publish:
+            with patch.object(mqtt_service, "publish") as mock_publish:
                 timestamp_str = datetime.now(UTC).isoformat()
                 signature_str = sign_timestamp(timestamp_str)
                 file_data = (io.BytesIO(b"test"), filename)
@@ -629,7 +631,9 @@ class TestAssetsWithMqtt:
                 )
 
                 assert response.status_code == 200
-                mock_publish.assert_called_once_with(filename)
+                mock_publish.assert_called_once_with(
+                    "iotsupport/updates/assets", filename
+                )
 
     def test_upload_asset_failure_does_not_publish_mqtt(
         self, app_with_assets: Flask, client_with_assets: FlaskClient
@@ -638,7 +642,7 @@ class TestAssetsWithMqtt:
         container = app_with_assets.container
         mqtt_service = container.mqtt_service()
 
-        with patch.object(mqtt_service, "publish_asset_update") as mock_publish:
+        with patch.object(mqtt_service, "publish") as mock_publish:
             # Invalid request - missing timestamp
             file_data = (io.BytesIO(b"test"), "firmware.bin")
 
@@ -660,7 +664,7 @@ class TestAssetsWithMqtt:
         container = app_with_assets.container
         mqtt_service = container.mqtt_service()
 
-        with patch.object(mqtt_service, "publish_asset_update") as mock_publish:
+        with patch.object(mqtt_service, "publish") as mock_publish:
             timestamp_str = datetime.now(UTC).isoformat()
             signature_str = sign_timestamp(timestamp_str)
 

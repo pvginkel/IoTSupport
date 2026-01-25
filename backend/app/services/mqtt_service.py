@@ -1,7 +1,6 @@
 """MQTT notification service for publishing device update notifications."""
 
 import atexit
-import json
 import logging
 import time
 from typing import Any
@@ -27,9 +26,8 @@ class MqttService:
     silently skip without errors.
     """
 
-    # MQTT topics for notifications
-    TOPIC_CONFIG_UPDATES = "iotsupport/updates/configs"
-    TOPIC_ASSET_UPDATES = "iotsupport/updates/assets"
+    # Root topic for update notifications
+    TOPIC_UPDATES = "iotsupport/updates"
 
     def __init__(
         self,
@@ -224,38 +222,14 @@ class MqttService:
         self.mqtt_connection_state.set(0)
         # paho-mqtt will automatically reconnect
 
-    def publish_config_update(self, filename: str) -> None:
-        """Publish notification that a config file was updated.
-
-        Publishes to iotsupport/updates/configs topic with payload:
-        {"filename": "<mac-address>.json"}
+    def publish(self, topic: str, payload: str) -> None:
+        """Publish an MQTT message.
 
         This is a fire-and-forget operation. Errors are logged but not raised.
-
-        Args:
-            filename: Config filename (e.g., "aa-bb-cc-dd-ee-ff.json")
-        """
-        self._publish(self.TOPIC_CONFIG_UPDATES, filename)
-
-    def publish_asset_update(self, filename: str) -> None:
-        """Publish notification that an asset file was uploaded.
-
-        Publishes to iotsupport/updates/assets topic with payload:
-        {"filename": "<asset-filename>"}
-
-        This is a fire-and-forget operation. Errors are logged but not raised.
-
-        Args:
-            filename: Asset filename (e.g., "firmware-v1.2.3.bin")
-        """
-        self._publish(self.TOPIC_ASSET_UPDATES, filename)
-
-    def _publish(self, topic: str, filename: str) -> None:
-        """Internal method to publish MQTT message.
 
         Args:
             topic: MQTT topic to publish to
-            filename: Filename to include in payload
+            payload: Plain text payload to send
         """
         # Skip if MQTT is disabled
         if not self.enabled or self.client is None:
@@ -264,9 +238,6 @@ class MqttService:
         start_time = time.perf_counter()
 
         try:
-            # Construct JSON payload
-            payload = json.dumps({"filename": filename})
-
             # Publish with QoS 1, no retain
             result = self.client.publish(topic, payload, qos=1, retain=False)
 
@@ -275,9 +246,9 @@ class MqttService:
                 self.mqtt_publish_total.labels(topic=topic, status="success").inc()
             else:
                 logger.warning(
-                    "MQTT publish failed for topic '%s', filename '%s': return code %d",
+                    "MQTT publish failed for topic '%s', payload '%s': return code %d",
                     topic,
-                    filename,
+                    payload,
                     result.rc,
                 )
                 self.mqtt_publish_total.labels(topic=topic, status="failure").inc()
@@ -285,9 +256,9 @@ class MqttService:
         except Exception as e:
             # Log error but don't raise (fire-and-forget)
             logger.error(
-                "Exception during MQTT publish to topic '%s', filename '%s': %s",
+                "Exception during MQTT publish to topic '%s', payload '%s': %s",
                 topic,
-                filename,
+                payload,
                 e,
             )
             self.mqtt_publish_total.labels(topic=topic, status="failure").inc()
