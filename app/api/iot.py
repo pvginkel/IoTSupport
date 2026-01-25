@@ -200,7 +200,7 @@ def get_firmware(
         stream = firmware_service.get_firmware_stream(model_code)
 
         # Use send_file with BytesIO stream
-        return send_file(
+        return send_file(  # type: ignore[call-arg]
             stream,
             mimetype="application/octet-stream",
             as_attachment=True,
@@ -321,6 +321,7 @@ def get_provisioning_for_rotation(
             "mqtt_url": app_config.MQTT_URL,
             "wifi_ssid": app_config.WIFI_SSID,
             "wifi_password": app_config.WIFI_PASSWORD,
+            "logging_url": app_config.LOGGING_URL,
         }
 
         logger.info("Generated rotation provisioning for device %s", device.key)

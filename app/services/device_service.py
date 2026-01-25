@@ -8,7 +8,7 @@ import secrets
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-import jsonschema
+import jsonschema  # type: ignore[import-untyped]
 from cryptography.fernet import Fernet
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -450,6 +450,7 @@ class DeviceService:
             "mqtt_url": self.config.MQTT_URL,
             "wifi_ssid": self.config.WIFI_SSID,
             "wifi_password": self.config.WIFI_PASSWORD,
+            "logging_url": self.config.LOGGING_URL,
         }
 
         # Generate NVS binary blob with specified partition size
