@@ -1,6 +1,5 @@
 """Tests for MqttService."""
 
-import json
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -149,11 +148,11 @@ def _simulate_successful_connection(service: MqttService, mock_client: MagicMock
 
 
 class TestMqttServicePublish:
-    """Tests for MQTT publish methods."""
+    """Tests for MQTT publish method."""
 
     @patch("app.services.mqtt_service.MqttClient")
-    def test_publish_config_update_when_enabled(self, mock_mqtt_client_class: Mock):
-        """Config update publishes to correct topic with correct payload."""
+    def test_publish_when_enabled(self, mock_mqtt_client_class: Mock):
+        """Publish sends message to correct topic with plain text payload."""
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
@@ -165,17 +164,16 @@ class TestMqttServicePublish:
         service = MqttService(mqtt_url="mqtt://localhost:1883")
         # Simulate successful connection
         _simulate_successful_connection(service, mock_client)
-        service.publish_config_update("aa-bb-cc-dd-ee-ff.json")
+        service.publish("iotsupport/updates/configs", "abc12345")
 
-        # Verify publish was called with correct parameters
-        expected_payload = json.dumps({"filename": "aa-bb-cc-dd-ee-ff.json"})
+        # Verify publish was called with correct topic and plain text payload
         mock_client.publish.assert_called_once_with(
-            "iotsupport/updates/configs", expected_payload, qos=1, retain=False
+            "iotsupport/updates/configs", "abc12345", qos=1, retain=False
         )
 
     @patch("app.services.mqtt_service.MqttClient")
-    def test_publish_asset_update_when_enabled(self, mock_mqtt_client_class: Mock):
-        """Asset update publishes to correct topic with correct payload."""
+    def test_publish_to_different_topic(self, mock_mqtt_client_class: Mock):
+        """Publish works with any topic."""
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
@@ -187,33 +185,23 @@ class TestMqttServicePublish:
         service = MqttService(mqtt_url="mqtt://localhost:1883")
         # Simulate successful connection
         _simulate_successful_connection(service, mock_client)
-        service.publish_asset_update("firmware-v1.2.3.bin")
+        service.publish("iotsupport/updates/assets", "firmware-v1.2.3.bin")
 
-        # Verify publish was called with correct parameters
-        expected_payload = json.dumps({"filename": "firmware-v1.2.3.bin"})
+        # Verify publish was called with correct topic and payload
         mock_client.publish.assert_called_once_with(
-            "iotsupport/updates/assets", expected_payload, qos=1, retain=False
+            "iotsupport/updates/assets", "firmware-v1.2.3.bin", qos=1, retain=False
         )
 
-    def test_publish_config_update_when_disabled_silent_skip(self):
+    def test_publish_when_disabled_silent_skip(self):
         """Publish is skipped silently when service is disabled."""
         service = MqttService(mqtt_url=None)
 
         # Should not raise exception
-        service.publish_config_update("aa-bb-cc-dd-ee-ff.json")
-
-    def test_publish_asset_update_when_disabled_silent_skip(self):
-        """Publish is skipped silently when service is disabled."""
-        service = MqttService(mqtt_url=None)
-
-        # Should not raise exception
-        service.publish_asset_update("firmware.bin")
+        service.publish("any/topic", "any-payload")
 
     @patch("app.services.mqtt_service.MqttClient")
-    def test_publish_with_special_characters_in_filename(
-        self, mock_mqtt_client_class: Mock
-    ):
-        """Filenames with special characters are correctly JSON-encoded."""
+    def test_publish_sends_payload_unchanged(self, mock_mqtt_client_class: Mock):
+        """Payload is sent as plain text without modification."""
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
@@ -225,15 +213,12 @@ class TestMqttServicePublish:
         service = MqttService(mqtt_url="mqtt://localhost:1883")
         # Simulate successful connection
         _simulate_successful_connection(service, mock_client)
-        service.publish_config_update('test"file\nwith\\special.json')
+        service.publish("test/topic", "test-payload")
 
-        # Verify JSON payload is properly escaped
+        # Verify payload is sent as-is
         call_args = mock_client.publish.call_args
         payload = call_args[0][1]
-
-        # Should be valid JSON
-        parsed = json.loads(payload)
-        assert parsed["filename"] == 'test"file\nwith\\special.json'
+        assert payload == "test-payload"
 
     @patch("app.services.mqtt_service.MqttClient")
     def test_publish_when_client_publish_raises_exception(
@@ -251,7 +236,7 @@ class TestMqttServicePublish:
         _simulate_successful_connection(service, mock_client)
 
         # Should not raise exception (fire-and-forget)
-        service.publish_config_update("test.json")
+        service.publish("test/topic", "test-payload")
 
     @patch("app.services.mqtt_service.MqttClient")
     def test_publish_when_result_indicates_failure(self, mock_mqtt_client_class: Mock):
@@ -269,7 +254,7 @@ class TestMqttServicePublish:
         _simulate_successful_connection(service, mock_client)
 
         # Should not raise exception
-        service.publish_config_update("test.json")
+        service.publish("test/topic", "test-payload")
 
 
 class TestMqttServiceConnectionCallbacks:

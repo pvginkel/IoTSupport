@@ -158,7 +158,7 @@ def upload_asset(
             raise
 
         # Publish MQTT notification after successful upload
-        mqtt_service.publish_asset_update(filename)
+        mqtt_service.publish(f"{MqttService.TOPIC_UPDATES}/assets", filename)
 
         # Return success response
         response = AssetUploadResponseSchema(

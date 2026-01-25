@@ -161,7 +161,9 @@ def update_device(
         device = device_service.update_device(device_id, config=data.config)
 
         # Publish MQTT notification for config update
-        mqtt_service.publish_config_update(f"{device.client_id}")
+        mqtt_service.publish(
+            f"{MqttService.TOPIC_UPDATES}/configs", device.client_id
+        )
 
         return DeviceResponseSchema.model_validate(device).model_dump()
 
