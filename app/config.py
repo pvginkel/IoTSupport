@@ -46,16 +46,9 @@ class Settings(BaseSettings):
         description="PostgreSQL connection string",
     )
 
-    # Asset upload settings
+    # Firmware storage directory
     ASSETS_DIR: Path = Field(
-        description="Path to assets upload directory"
-    )
-    SIGNING_KEY_PATH: Path = Field(
-        description="Path to RSA signing key file"
-    )
-    TIMESTAMP_TOLERANCE_SECONDS: int = Field(
-        default=300,
-        description="Timestamp validation tolerance in seconds"
+        description="Path to firmware storage directory"
     )
 
     # CORS settings
@@ -109,14 +102,6 @@ class Settings(BaseSettings):
     OIDC_CLOCK_SKEW_SECONDS: int = Field(
         default=30,
         description="Clock skew tolerance for token validation"
-    )
-    OIDC_ADMIN_ROLE: str = Field(
-        default="admin",
-        description="Role name for full administrative access"
-    )
-    OIDC_ASSET_ROLE: str = Field(
-        default="asset-uploader",
-        description="Role name for asset upload access"
     )
     OIDC_COOKIE_NAME: str = Field(
         default="access_token",

@@ -1,5 +1,6 @@
 """Tests for devices API endpoints."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 from flask import Flask
@@ -227,6 +228,52 @@ class TestDevicesUpdate:
         )
 
         assert response.status_code == 404
+
+    def test_update_device_publishes_mqtt_with_json_payload(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that updating a device publishes MQTT with JSON payload."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="upd_mqtt", name="Update MQTT")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id, config='{"setting": "old"}'
+                )
+                device_id = device.id
+                expected_client_id = device.client_id
+
+        mqtt_service = app.container.mqtt_service()
+
+        with patch.object(mqtt_service, "publish") as mock_publish, patch.object(
+            app.container.keycloak_admin_service(), "update_client_metadata"
+        ):
+            response = client.put(
+                f"/api/devices/{device_id}",
+                json={"config": '{"setting": "new"}'},
+            )
+
+            assert response.status_code == 200
+
+            # Verify MQTT was published with correct topic and JSON payload
+            mock_publish.assert_called_once()
+            call_args = mock_publish.call_args[0]
+            topic = call_args[0]
+            payload_str = call_args[1]
+
+            assert topic == "iotsupport/updates/config"
+            payload = json.loads(payload_str)
+            assert payload == {"client_id": expected_client_id}
 
 
 class TestDevicesDelete:

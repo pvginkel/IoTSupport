@@ -90,14 +90,14 @@ class TestAuthService:
 
                 assert "expired" in str(exc_info.value).lower()
 
-    def test_validate_token_with_asset_uploader_role(
+    def test_validate_token_with_pipeline_role(
         self, auth_settings, generate_test_jwt, mock_oidc_discovery
     ):
-        """Test token validation with asset-uploader role."""
+        """Test token validation with pipeline role."""
         metrics_service = MetricsService()
 
-        # Generate token with asset-uploader role
-        token = generate_test_jwt(roles=["asset-uploader"])
+        # Generate token with pipeline role
+        token = generate_test_jwt(roles=["pipeline"])
 
         with patch("httpx.get") as mock_get:
             mock_discovery_response = MagicMock()
@@ -117,7 +117,7 @@ class TestAuthService:
 
                 auth_context = auth_service.validate_token(token)
 
-                assert "asset-uploader" in auth_context.roles
+                assert "pipeline" in auth_context.roles
                 assert "admin" not in auth_context.roles
 
     def test_validate_token_m2m_without_email(

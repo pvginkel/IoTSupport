@@ -10,8 +10,6 @@ import pytest
 if TYPE_CHECKING:
     from app.services.device_model_service import DeviceModelService
     from app.services.device_service import DeviceService
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 from flask import Flask
 from prometheus_client import REGISTRY
 from sqlalchemy.orm import Session
@@ -51,20 +49,9 @@ def clear_prometheus_registry() -> Generator[None, None, None]:
 
 def _build_test_settings(tmp_path: Path) -> Settings:
     """Construct base Settings object for tests."""
-    # Create temporary assets directory and signing key for tests
+    # Create temporary assets directory for firmware storage
     assets_dir = tmp_path / "assets"
     assets_dir.mkdir(exist_ok=True)
-
-    # Create a valid RSA signing key file for all tests
-    signing_key_path = tmp_path / "test_signing_key.pem"
-    if not signing_key_path.exists():
-        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        pem = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-        signing_key_path.write_bytes(pem)
 
     return Settings(
         _env_file=None,  # type: ignore[call-arg]
@@ -72,8 +59,6 @@ def _build_test_settings(tmp_path: Path) -> Settings:
         SECRET_KEY="test-secret-key",
         DEBUG=True,
         ASSETS_DIR=assets_dir,
-        SIGNING_KEY_PATH=signing_key_path,
-        TIMESTAMP_TOLERANCE_SECONDS=300,
         CORS_ORIGINS=["http://localhost:3000"],
         ROTATION_CRON="0 8 1-7 * 6",
         ROTATION_CRITICAL_THRESHOLD_DAYS=7,

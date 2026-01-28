@@ -4,7 +4,6 @@ from dependency_injector import containers, providers
 from sqlalchemy.orm import sessionmaker
 
 from app.config import Settings
-from app.services.asset_upload_service import AssetUploadService
 from app.services.auth_service import AuthService
 from app.services.device_model_service import DeviceModelService
 from app.services.device_service import DeviceService
@@ -41,14 +40,6 @@ class ServiceContainer(containers.DeclarativeContainer):
         mqtt_url=config.provided.MQTT_URL,
         mqtt_username=config.provided.MQTT_USERNAME,
         mqtt_password=config.provided.MQTT_PASSWORD,
-    )
-
-    # AssetUploadService - Singleton to cache RSA key for performance
-    asset_upload_service = providers.Singleton(
-        AssetUploadService,
-        assets_dir=config.provided.ASSETS_DIR,
-        signing_key_path=config.provided.SIGNING_KEY_PATH,
-        timestamp_tolerance_seconds=config.provided.TIMESTAMP_TOLERANCE_SECONDS,
     )
 
     # TestDataService - Factory creates new instance per request with database session
