@@ -7,6 +7,7 @@ This service implements the rotation state machine and handles:
 - MQTT notifications for rotation triggers
 """
 
+import json
 import logging
 import time
 from dataclasses import dataclass
@@ -359,32 +360,20 @@ class RotationService:
 
         # Send MQTT notification (fire-and-forget)
         # Device receives this, calls /iot/provisioning to get new credentials
-        topic = f"iotsupport/{client_id}/rotation"
-        self._publish_rotation_notification(topic)
+        self._publish_provisioning_notification(client_id)
 
         logger.info("Device %s rotation initiated, MQTT notification sent", device.key)
 
-    def _publish_rotation_notification(self, topic: str) -> None:
-        """Publish MQTT rotation notification.
+    def _publish_provisioning_notification(self, client_id: str) -> None:
+        """Publish MQTT provisioning notification.
 
         Args:
-            topic: MQTT topic to publish to
+            client_id: Device client ID to notify
         """
-        if not self.mqtt_service.enabled:
-            logger.debug("MQTT disabled, skipping rotation notification")
-            return
+        from app.services.mqtt_service import MqttService
 
-        try:
-            # Publish empty payload - device just needs the trigger
-            if self.mqtt_service.client is not None:
-                result = self.mqtt_service.client.publish(
-                    topic, payload="", qos=1, retain=False
-                )
-                if result.rc != 0:
-                    logger.warning("MQTT publish failed for %s: rc=%d", topic, result.rc)
-        except Exception as e:
-            # Fire-and-forget - log but don't fail
-            logger.error("Exception publishing MQTT to %s: %s", topic, e)
+        payload = json.dumps({"client_id": client_id})
+        self.mqtt_service.publish(f"{MqttService.TOPIC_UPDATES}/provisioning", payload)
 
     def rotate_next_queued_device(self) -> bool:
         """Rotate the next queued device if one exists.

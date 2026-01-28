@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from app.config import Settings
     from app.services.device_model_service import DeviceModelService
     from app.services.keycloak_admin_service import KeycloakAdminService
+    from app.services.mqtt_service import MqttService
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class DeviceService:
         config: "Settings",
         device_model_service: "DeviceModelService",
         keycloak_admin_service: "KeycloakAdminService",
+        mqtt_service: "MqttService",
     ) -> None:
         """Initialize service with dependencies.
 
@@ -64,11 +66,13 @@ class DeviceService:
             config: Application settings
             device_model_service: Service for device model operations
             keycloak_admin_service: Service for Keycloak operations
+            mqtt_service: Service for MQTT messaging
         """
         self.db = db
         self.config = config
         self.device_model_service = device_model_service
         self.keycloak_admin_service = keycloak_admin_service
+        self.mqtt_service = mqtt_service
 
         # Initialize Fernet cipher for secret encryption
         fernet_key = config.FERNET_KEY
@@ -338,6 +342,8 @@ class DeviceService:
     def update_device(self, device_id: int, config: str) -> Device:
         """Update a device's configuration.
 
+        Updates the config, syncs to Keycloak, and notifies the device via MQTT.
+
         Args:
             device_id: Device ID
             config: New configuration JSON string
@@ -349,6 +355,8 @@ class DeviceService:
             RecordNotFoundException: If device doesn't exist
             ValidationException: If config is invalid JSON or fails schema validation
         """
+        from app.services.mqtt_service import MqttService
+
         device = self.get_device(device_id)
 
         # Validate config JSON
@@ -371,6 +379,10 @@ class DeviceService:
             name=device.device_name,
             description="This device is being managed in IoT Support.",
         )
+
+        # Publish MQTT notification for config update
+        payload = json.dumps({"client_id": device.client_id})
+        self.mqtt_service.publish(f"{MqttService.TOPIC_UPDATES}/config", payload)
 
         logger.info("Updated device %s config", device.key)
         return device

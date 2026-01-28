@@ -105,6 +105,7 @@ class ServiceContainer(containers.DeclarativeContainer):
         config=config,
         device_model_service=device_model_service,
         keycloak_admin_service=keycloak_admin_service,
+        mqtt_service=mqtt_service,
     )
 
     # RotationService - Factory creates new instance per request with database session
