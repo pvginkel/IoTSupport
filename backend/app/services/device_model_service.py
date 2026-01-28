@@ -218,6 +218,9 @@ class DeviceModelService:
         model.firmware_version = version
         self.db.flush()
 
+        # Refresh to ensure devices relationship is loaded
+        self.db.refresh(model)
+
         logger.info("Uploaded firmware for model %s: version %s", model.code, version)
         return model
 

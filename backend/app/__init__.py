@@ -60,7 +60,6 @@ def create_app(settings: "Settings | None" = None, skip_background_services: boo
     # Wire container with API modules
     wire_modules = [
         "app.api",
-        "app.api.assets",
         "app.api.auth",
         "app.api.device_models",
         "app.api.devices",
@@ -68,6 +67,7 @@ def create_app(settings: "Settings | None" = None, skip_background_services: boo
         "app.api.images",
         "app.api.iot",
         "app.api.metrics",
+        "app.api.pipeline",
         "app.api.rotation",
         "app.api.testing",
     ]

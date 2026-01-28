@@ -1,5 +1,6 @@
 """Device management API endpoints."""
 
+import json
 import time
 from typing import Any
 
@@ -161,9 +162,8 @@ def update_device(
         device = device_service.update_device(device_id, config=data.config)
 
         # Publish MQTT notification for config update
-        mqtt_service.publish(
-            f"{MqttService.TOPIC_UPDATES}/configs", device.client_id
-        )
+        payload = json.dumps({"client_id": device.client_id})
+        mqtt_service.publish(f"{MqttService.TOPIC_UPDATES}/config", payload)
 
         return DeviceResponseSchema.model_validate(device).model_dump()
 

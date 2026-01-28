@@ -131,46 +131,45 @@ class TestAuthenticationMiddleware:
 
         # Admin can access all endpoints
         assert client.get("/api/devices").status_code == 200
-        # Note: POST /api/assets requires actual file upload, so we check for 400 (validation) not 403 (authz)
-        # A 400 means we passed auth but failed validation, which is expected without proper data
-        response = client.post("/api/assets")
-        assert response.status_code in [400, 422]  # Validation error, not authorization error
+        # Admin can also access pipeline endpoints (404 is expected without model)
+        response = client.get("/api/pipeline/models/nonexistent/firmware-version")
+        assert response.status_code == 404  # Not found, not authorization error
 
-    def test_asset_uploader_restricted_to_post_assets(
+    def test_pipeline_role_restricted_to_pipeline_endpoints(
         self, auth_enabled_app, generate_test_jwt
     ):
-        """Test asset-uploader role is restricted to POST /api/assets only."""
+        """Test pipeline role is restricted to /api/pipeline endpoints only."""
         client = auth_enabled_app.test_client()
 
-        # Generate token with asset-uploader role
-        token = generate_test_jwt(roles=["asset-uploader"])
+        # Generate token with pipeline role
+        token = generate_test_jwt(roles=["pipeline"])
         client.set_cookie("access_token", token)
 
-        # Asset-uploader can POST to /api/assets (but will get validation error without proper data)
-        response = client.post("/api/assets")
-        assert response.status_code in [400, 422]  # Validation error, not authorization error
+        # Pipeline role can access /api/pipeline endpoints (404 is expected without model)
+        response = client.get("/api/pipeline/models/nonexistent/firmware-version")
+        assert response.status_code == 404  # Not found, not authorization error
 
-        # Asset-uploader cannot access other endpoints
+        # Pipeline role cannot access other endpoints
         response = client.get("/api/devices")
         assert response.status_code == 403
         data = response.get_json()
         assert "permission" in data["error"].lower()
 
-    def test_asset_uploader_cannot_get_devices(
+    def test_pipeline_role_cannot_get_devices(
         self, auth_enabled_app, generate_test_jwt
     ):
-        """Test asset-uploader explicitly denied access to GET /api/devices."""
+        """Test pipeline role explicitly denied access to GET /api/devices."""
         client = auth_enabled_app.test_client()
 
-        # Generate token with asset-uploader role
-        token = generate_test_jwt(roles=["asset-uploader"])
+        # Generate token with pipeline role
+        token = generate_test_jwt(roles=["pipeline"])
         client.set_cookie("access_token", token)
 
-        # GET /api/devices should be forbidden
+        # GET /api/devices should be forbidden (requires admin role)
         response = client.get("/api/devices")
         assert response.status_code == 403
         data = response.get_json()
-        assert "asset-uploader" in data["error"]
+        assert "admin" in data["error"]
 
     def test_no_token_returns_401(self, auth_enabled_app):
         """Test request without token returns 401 Unauthorized."""
@@ -272,14 +271,14 @@ class TestAuthenticationMiddleware:
         data = response.get_json()
         assert "permission" in data["error"].lower()
 
-    def test_asset_uploader_can_access_public_auth_endpoints(
+    def test_pipeline_role_can_access_public_auth_endpoints(
         self, auth_enabled_app, generate_test_jwt
     ):
-        """Test asset-uploader can access public endpoints like /api/auth/self."""
+        """Test pipeline role can access public endpoints like /api/auth/self."""
         client = auth_enabled_app.test_client()
 
-        # Generate token with asset-uploader role
-        token = generate_test_jwt(subject="uploader", roles=["asset-uploader"])
+        # Generate token with pipeline role
+        token = generate_test_jwt(subject="pipeline-ci", roles=["pipeline"])
         client.set_cookie("access_token", token)
 
         # /api/auth/self is public but validates token if present
@@ -288,8 +287,8 @@ class TestAuthenticationMiddleware:
         # Should succeed and return user info
         assert response.status_code == 200
         data = response.get_json()
-        assert data["subject"] == "uploader"
-        assert "asset-uploader" in data["roles"]
+        assert data["subject"] == "pipeline-ci"
+        assert "pipeline" in data["roles"]
 
 
 class TestTokenRefreshMiddleware:

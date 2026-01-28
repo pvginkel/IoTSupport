@@ -73,6 +73,28 @@ def public(func: Callable[..., Any]) -> Callable[..., Any]:
     return func
 
 
+def allow_roles(*roles: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Decorator to allow additional roles beyond admin to access an endpoint.
+
+    By default, all authenticated endpoints require the 'admin' role.
+    This decorator allows additional roles to access the endpoint.
+    Admin role is always implicitly allowed.
+
+    Args:
+        *roles: Role names that are allowed to access this endpoint
+
+    Usage:
+        @some_bp.route("/pipeline/upload")
+        @allow_roles("pipeline")
+        def upload_firmware():
+            return {"status": "uploaded"}
+    """
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        func.allowed_roles = set(roles)  # type: ignore[attr-defined]
+        return func
+    return decorator
+
+
 def get_auth_context() -> AuthContext | None:
     """Get the current authentication context from flask.g.
 
@@ -142,39 +164,43 @@ def extract_token_from_request(config: Settings) -> str | None:
     return None
 
 
-def check_authorization(auth_context: AuthContext, config: Settings) -> None:
+def check_authorization(auth_context: AuthContext, view_func: Callable[..., Any] | None = None) -> None:
     """Check if user has required authorization for the current request.
 
     Authorization rules:
-    - Admin role grants full access to all endpoints
-    - Asset-uploader role grants access only to POST /api/assets
-    - No other roles are recognized
+    - 'admin' role grants full access to all endpoints
+    - Endpoints decorated with @allow_roles("role") also allow those roles
+    - Without @allow_roles, only admin role is permitted
 
     Args:
         auth_context: Authenticated user context
-        config: Application settings for role names
+        view_func: The view function being called (to check for @allow_roles decorator)
 
     Raises:
         AuthorizationException: If user lacks required permissions
     """
-    # Admin role grants full access
-    if config.OIDC_ADMIN_ROLE in auth_context.roles:
+    # Admin role always grants full access
+    if "admin" in auth_context.roles:
         logger.debug("User has admin role - full access granted")
         return
 
-    # Asset-uploader role grants access only to POST /api/assets
-    if config.OIDC_ASSET_ROLE in auth_context.roles:
-        if request.method == "POST" and request.path == "/api/assets":
-            logger.debug("User has asset-uploader role - asset upload granted")
-            return
-        else:
+    # Check for additional allowed roles from @allow_roles decorator
+    if view_func is not None:
+        allowed_roles = getattr(view_func, "allowed_roles", set())
+        for role in allowed_roles:
+            if role in auth_context.roles:
+                logger.debug("User has '%s' role - access granted via @allow_roles", role)
+                return
+
+        # User has a role but it's not allowed for this endpoint
+        if allowed_roles:
             raise AuthorizationException(
-                f"Insufficient permissions - '{config.OIDC_ASSET_ROLE}' role only permits uploading assets"
+                f"Insufficient permissions - requires 'admin' or one of: {', '.join(sorted(allowed_roles))}"
             )
 
     # No recognized roles
     raise AuthorizationException(
-        "Insufficient permissions - no recognized roles in token"
+        "Insufficient permissions - 'admin' role required"
     )
 
 
@@ -182,6 +208,7 @@ def authenticate_request(
     auth_service: AuthService,
     config: Settings,
     oidc_client_service: OidcClientService | None = None,
+    view_func: Callable[..., Any] | None = None,
 ) -> None:
     """Authenticate the current request and store auth context in flask.g.
 
@@ -194,6 +221,7 @@ def authenticate_request(
         auth_service: AuthService instance for token validation
         config: Application settings
         oidc_client_service: OidcClientService for token refresh (optional)
+        view_func: The view function being called (to check for @allow_roles decorator)
 
     Raises:
         AuthenticationException: If token is missing, invalid, or expired
@@ -207,7 +235,7 @@ def authenticate_request(
         try:
             auth_context = auth_service.validate_token(access_token)
             g.auth_context = auth_context
-            check_authorization(auth_context, config)
+            check_authorization(auth_context, view_func)
             logger.info(
                 "Request authenticated: subject=%s email=%s roles=%s",
                 auth_context.subject,
@@ -258,7 +286,7 @@ def authenticate_request(
         access_token_expires_in=new_tokens.expires_in,
     )
 
-    check_authorization(auth_context, config)
+    check_authorization(auth_context, view_func)
 
     logger.info(
         "Request authenticated (after refresh): subject=%s email=%s roles=%s",
