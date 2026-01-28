@@ -95,6 +95,7 @@ class ServiceContainer(containers.DeclarativeContainer):
         DeviceModelService,
         db=db_session,
         firmware_service=firmware_service,
+        mqtt_service=mqtt_service,
     )
 
     # DeviceService - Factory creates new instance per request with database session

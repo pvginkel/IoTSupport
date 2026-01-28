@@ -1,6 +1,5 @@
 """Device model management API endpoints."""
 
-import json
 import time
 from typing import Any
 
@@ -20,7 +19,6 @@ from app.schemas.error import ErrorResponseSchema
 from app.services.container import ServiceContainer
 from app.services.device_model_service import DeviceModelService
 from app.services.metrics_service import MetricsService
-from app.services.mqtt_service import MqttService
 from app.utils.error_handling import handle_api_errors
 from app.utils.spectree_config import api
 
@@ -213,7 +211,6 @@ def upload_firmware(
     model_id: int,
     device_model_service: DeviceModelService = Provide[ServiceContainer.device_model_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
-    mqtt_service: MqttService = Provide[ServiceContainer.mqtt_service],
 ) -> Any:
     """Upload firmware binary for a device model.
 
@@ -236,14 +233,6 @@ def upload_firmware(
             raise ValidationException("No firmware content provided")
 
         model = device_model_service.upload_firmware(model_id, content)
-
-        # Publish MQTT notification for each device using this model
-        for device in model.devices:
-            payload = json.dumps({
-                "client_id": device.client_id,
-                "firmware_version": model.firmware_version,
-            })
-            mqtt_service.publish(f"{MqttService.TOPIC_UPDATES}/firmware", payload)
 
         return DeviceModelFirmwareResponseSchema.model_validate(model).model_dump()
 

@@ -46,10 +46,6 @@ class RotationService:
     the rotation state machine and scheduled rotation processing.
     """
 
-    # MQTT topic for rotation notifications
-    ROTATION_TOPIC_PREFIX = "iotsupport"
-    ROTATION_TOPIC_SUFFIX = "rotation"
-
     def __init__(
         self,
         db: Session,
@@ -363,7 +359,7 @@ class RotationService:
 
         # Send MQTT notification (fire-and-forget)
         # Device receives this, calls /iot/provisioning to get new credentials
-        topic = f"{self.ROTATION_TOPIC_PREFIX}/{client_id}/{self.ROTATION_TOPIC_SUFFIX}"
+        topic = f"iotsupport/{client_id}/rotation"
         self._publish_rotation_notification(topic)
 
         logger.info("Device %s rotation initiated, MQTT notification sent", device.key)

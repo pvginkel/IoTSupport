@@ -1,5 +1,6 @@
 """Device model service for managing hardware types."""
 
+import json
 import logging
 import re
 from typing import TYPE_CHECKING
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from io import BytesIO
 
     from app.services.firmware_service import FirmwareService
+    from app.services.mqtt_service import MqttService
 
 logger = logging.getLogger(__name__)
 
@@ -33,15 +35,22 @@ class DeviceModelService:
     firmware upload and version extraction.
     """
 
-    def __init__(self, db: Session, firmware_service: "FirmwareService") -> None:
-        """Initialize service with database session and firmware service.
+    def __init__(
+        self,
+        db: Session,
+        firmware_service: "FirmwareService",
+        mqtt_service: "MqttService",
+    ) -> None:
+        """Initialize service with database session and dependent services.
 
         Args:
             db: SQLAlchemy database session
             firmware_service: Service for firmware file management
+            mqtt_service: Service for MQTT messaging
         """
         self.db = db
         self.firmware_service = firmware_service
+        self.mqtt_service = mqtt_service
 
     def list_device_models(self) -> list[DeviceModel]:
         """List all device models ordered by code.
@@ -196,7 +205,8 @@ class DeviceModelService:
     def upload_firmware(self, model_id: int, content: bytes) -> DeviceModel:
         """Upload firmware for a device model.
 
-        Extracts version from ESP32 binary and saves to filesystem.
+        Extracts version from ESP32 binary, saves to filesystem, and notifies
+        all devices using this model via MQTT.
 
         Args:
             model_id: Device model ID
@@ -209,6 +219,8 @@ class DeviceModelService:
             RecordNotFoundException: If model doesn't exist
             ValidationException: If firmware format is invalid
         """
+        from app.services.mqtt_service import MqttService
+
         model = self.get_device_model(model_id)
 
         # Save firmware and extract version
@@ -221,7 +233,20 @@ class DeviceModelService:
         # Refresh to ensure devices relationship is loaded
         self.db.refresh(model)
 
-        logger.info("Uploaded firmware for model %s: version %s", model.code, version)
+        # Publish MQTT notification for each device using this model
+        for device in model.devices:
+            payload = json.dumps({
+                "client_id": device.client_id,
+                "firmware_version": version,
+            })
+            self.mqtt_service.publish(f"{MqttService.TOPIC_UPDATES}/firmware", payload)
+
+        logger.info(
+            "Uploaded firmware for model %s: version %s, notified %d devices",
+            model.code,
+            version,
+            len(model.devices),
+        )
         return model
 
     def get_firmware_stream(self, model_id: int) -> tuple["BytesIO", str]:
