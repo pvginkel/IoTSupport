@@ -680,3 +680,157 @@ class TestRotationServiceDashboard:
                 result = rotation_service.get_dashboard_status()
 
                 assert result["healthy"][0]["device_model_code"] == "thermo_v1"
+
+
+class TestRotationServiceMqttNotification:
+    """Tests for MQTT provisioning notifications during rotation."""
+
+    def test_rotation_publishes_mqtt_notification(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that rotating a device publishes MQTT notification with correct payload."""
+        import json
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="mqtt1", name="MQTT Test 1")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.QUEUED.value
+                device_client_id = device.client_id
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                mqtt_service = rotation_service.mqtt_service
+
+                with patch.object(mqtt_service, "publish") as mock_publish:
+                    result = rotation_service.rotate_next_queued_device()
+
+                    assert result is True
+                    assert device.rotation_state == RotationState.PENDING.value
+
+                    # Verify MQTT was published with correct topic and payload
+                    mock_publish.assert_called_once()
+                    call_args = mock_publish.call_args
+                    topic = call_args[0][0]
+                    payload_str = call_args[0][1]
+
+                    assert topic == "iotsupport/updates/provisioning"
+                    payload = json.loads(payload_str)
+                    assert payload["client_id"] == device_client_id
+
+    def test_rotation_publishes_mqtt_for_each_rotated_device(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that each device rotation triggers its own MQTT notification."""
+        import json
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="mqtt2", name="MQTT Test 2")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device1 = device_service.create_device(device_model_id=model.id, config="{}")
+                device2 = device_service.create_device(device_model_id=model.id, config="{}")
+
+                device1.rotation_state = RotationState.QUEUED.value
+                device2.rotation_state = RotationState.QUEUED.value
+                device1_client_id = device1.client_id
+                device2_client_id = device2.client_id
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                mqtt_service = rotation_service.mqtt_service
+
+                with patch.object(mqtt_service, "publish") as mock_publish:
+                    # Rotate first device
+                    result1 = rotation_service.rotate_next_queued_device()
+                    assert result1 is True
+                    assert mock_publish.call_count == 1
+
+                    first_payload = json.loads(mock_publish.call_args[0][1])
+                    first_rotated_client_id = first_payload["client_id"]
+
+                    # Complete first device rotation to allow second
+                    if device1.client_id == first_rotated_client_id:
+                        device1.rotation_state = RotationState.OK.value
+                    else:
+                        device2.rotation_state = RotationState.OK.value
+                    container.db_session().flush()
+
+                    # Rotate second device
+                    result2 = rotation_service.rotate_next_queued_device()
+                    assert result2 is True
+                    assert mock_publish.call_count == 2
+
+                # Verify both devices received notifications
+                published_client_ids = {
+                    json.loads(call[0][1])["client_id"]
+                    for call in mock_publish.call_args_list
+                }
+                assert device1_client_id in published_client_ids
+                assert device2_client_id in published_client_ids
+
+    def test_process_rotation_job_publishes_mqtt(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that process_rotation_job publishes MQTT when rotating a device."""
+        import json
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="mqtt3", name="MQTT Test 3")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.QUEUED.value
+                device_key = device.key
+                device_client_id = device.client_id
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                mqtt_service = rotation_service.mqtt_service
+
+                with patch.object(mqtt_service, "publish") as mock_publish:
+                    # Process rotation job should rotate the queued device
+                    result = rotation_service.process_rotation_job(
+                        last_scheduled_at=datetime.utcnow()
+                    )
+
+                    assert result.device_rotated == device_key
+                    assert device.rotation_state == RotationState.PENDING.value
+
+                    # Verify MQTT notification was published
+                    mock_publish.assert_called_once()
+                    topic, payload_str = mock_publish.call_args[0]
+                    assert topic == "iotsupport/updates/provisioning"
+                    payload = json.loads(payload_str)
+                    assert payload["client_id"] == device_client_id

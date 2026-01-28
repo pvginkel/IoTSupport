@@ -1,6 +1,5 @@
 """Device management API endpoints."""
 
-import json
 import time
 from typing import Any
 
@@ -23,7 +22,6 @@ from app.schemas.error import ErrorResponseSchema
 from app.services.container import ServiceContainer
 from app.services.device_service import DeviceService
 from app.services.metrics_service import MetricsService
-from app.services.mqtt_service import MqttService
 from app.utils.error_handling import handle_api_errors
 from app.utils.spectree_config import api
 
@@ -151,7 +149,6 @@ def update_device(
     device_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
-    mqtt_service: MqttService = Provide[ServiceContainer.mqtt_service],
 ) -> Any:
     """Update a device's configuration."""
     start_time = time.perf_counter()
@@ -160,10 +157,6 @@ def update_device(
     try:
         data = DeviceUpdateSchema.model_validate(request.get_json())
         device = device_service.update_device(device_id, config=data.config)
-
-        # Publish MQTT notification for config update
-        payload = json.dumps({"client_id": device.client_id})
-        mqtt_service.publish(f"{MqttService.TOPIC_UPDATES}/config", payload)
 
         return DeviceResponseSchema.model_validate(device).model_dump()
 
