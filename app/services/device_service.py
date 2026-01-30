@@ -1,7 +1,6 @@
 """Device service for managing IoT devices."""
 
 import base64
-import hashlib
 import json
 import logging
 import secrets
@@ -28,20 +27,6 @@ if TYPE_CHECKING:
     from app.services.mqtt_service import MqttService
 
 logger = logging.getLogger(__name__)
-
-
-def _derive_fernet_key(secret_key: str) -> bytes:
-    """Derive a Fernet-compatible key from SECRET_KEY.
-
-    Args:
-        secret_key: Application SECRET_KEY
-
-    Returns:
-        32-byte URL-safe base64 encoded key
-    """
-    # Use SHA256 to derive a 32-byte key from the secret
-    key_bytes = hashlib.sha256(secret_key.encode()).digest()
-    return base64.urlsafe_b64encode(key_bytes)
 
 
 class DeviceService:
@@ -75,13 +60,7 @@ class DeviceService:
         self.mqtt_service = mqtt_service
 
         # Initialize Fernet cipher for secret encryption
-        fernet_key = config.FERNET_KEY
-        if fernet_key:
-            self._fernet = Fernet(fernet_key.encode())
-        else:
-            # Derive from SECRET_KEY
-            derived_key = _derive_fernet_key(config.SECRET_KEY)
-            self._fernet = Fernet(derived_key)
+        self._fernet = Fernet(config.fernet_key.encode())
 
     def _generate_device_key(self, max_attempts: int = 3) -> str:
         """Generate a unique 8-character device key.
@@ -457,12 +436,12 @@ class DeviceService:
             "device_key": device.key,
             "client_id": client_id,
             "client_secret": secret,
-            "token_url": self.config.OIDC_TOKEN_URL,
-            "base_url": self.config.BASEURL,
-            "mqtt_url": self.config.MQTT_URL,
-            "wifi_ssid": self.config.WIFI_SSID,
-            "wifi_password": self.config.WIFI_PASSWORD,
-            "logging_url": self.config.LOGGING_URL,
+            "token_url": self.config.oidc_token_url,
+            "base_url": self.config.device_baseurl,
+            "mqtt_url": self.config.mqtt_url,
+            "wifi_ssid": self.config.wifi_ssid,
+            "wifi_password": self.config.wifi_password,
+            "logging_url": self.config.logging_url,
         }
 
         # Generate NVS binary blob with specified partition size

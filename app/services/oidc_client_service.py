@@ -64,24 +64,14 @@ class OidcClientService:
             metrics_service: Metrics service for recording operations
 
         Raises:
-            ValueError: If OIDC is enabled but required config is missing
+            ValueError: If OIDC endpoint discovery fails
         """
         self.config = config
         self.metrics_service = metrics_service
         self._endpoints: OidcEndpoints | None = None
 
-        # Validate configuration if OIDC is enabled
-        if config.OIDC_ENABLED:
-            if not config.OIDC_ISSUER_URL:
-                raise ValueError("OIDC_ISSUER_URL is required when OIDC_ENABLED=True")
-            if not config.OIDC_CLIENT_ID:
-                raise ValueError("OIDC_CLIENT_ID is required when OIDC_ENABLED=True")
-            if not config.OIDC_CLIENT_SECRET:
-                raise ValueError(
-                    "OIDC_CLIENT_SECRET is required when OIDC_ENABLED=True"
-                )
-
-            # Discover endpoints at initialization (may raise ValueError if discovery fails)
+        # Discover endpoints at initialization if OIDC is enabled
+        if config.oidc_enabled:
             try:
                 self._discover_endpoints()
                 logger.info("OidcClientService initialized with OIDC enabled")
@@ -97,7 +87,7 @@ class OidcClientService:
         Raises:
             ValueError: If discovery fails or required endpoints are missing
         """
-        discovery_url = f"{self.config.OIDC_ISSUER_URL}/.well-known/openid-configuration"
+        discovery_url = f"{self.config.oidc_issuer_url}/.well-known/openid-configuration"
 
         logger.info("Discovering OIDC endpoints from %s", discovery_url)
 
@@ -217,14 +207,14 @@ class OidcClientService:
         )
 
         # Construct redirect URI
-        redirect_uri = f"{self.config.BASEURL}/api/auth/callback"
+        redirect_uri = f"{self.config.baseurl}/api/auth/callback"
 
         # Build authorization URL with parameters
         params = {
-            "client_id": self.config.OIDC_CLIENT_ID,
+            "client_id": self.config.oidc_client_id,
             "response_type": "code",
             "redirect_uri": redirect_uri,
-            "scope": self.config.OIDC_SCOPES,
+            "scope": self.config.oidc_scopes,
             "state": nonce,
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
@@ -255,15 +245,15 @@ class OidcClientService:
         Raises:
             AuthenticationException: If token exchange fails
         """
-        redirect_uri = f"{self.config.BASEURL}/api/auth/callback"
+        redirect_uri = f"{self.config.baseurl}/api/auth/callback"
 
         # Prepare token request
         data = {
             "grant_type": "authorization_code",
             "code": code,
             "redirect_uri": redirect_uri,
-            "client_id": self.config.OIDC_CLIENT_ID,
-            "client_secret": self.config.OIDC_CLIENT_SECRET,
+            "client_id": self.config.oidc_client_id,
+            "client_secret": self.config.oidc_client_secret,
             "code_verifier": code_verifier,
         }
 
@@ -338,8 +328,8 @@ class OidcClientService:
         data = {
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
-            "client_id": self.config.OIDC_CLIENT_ID,
-            "client_secret": self.config.OIDC_CLIENT_SECRET,
+            "client_id": self.config.oidc_client_id,
+            "client_secret": self.config.oidc_client_secret,
         }
 
         try:

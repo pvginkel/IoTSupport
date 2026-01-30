@@ -63,7 +63,7 @@ def before_request_authentication(
 
     # In testing mode, check for test session token (bypasses OIDC)
     if config.is_testing:
-        token = request.cookies.get(config.OIDC_COOKIE_NAME)
+        token = request.cookies.get(config.oidc_cookie_name)
         if token:
             test_session = testing_service.get_session(token)
             if test_session:
@@ -84,7 +84,7 @@ def before_request_authentication(
                     return {"error": str(e)}, 403
 
     # Skip authentication if OIDC is disabled
-    if not config.OIDC_ENABLED:
+    if not config.oidc_enabled:
         logger.debug("OIDC disabled - skipping authentication")
         return None
 
@@ -125,19 +125,19 @@ def after_request_set_cookies(
     if getattr(g, "clear_auth_cookies", False):
         cookie_secure = get_cookie_secure(config)
         response.set_cookie(
-            config.OIDC_COOKIE_NAME,
+            config.oidc_cookie_name,
             "",
             httponly=True,
             secure=cookie_secure,
-            samesite=config.OIDC_COOKIE_SAMESITE,
+            samesite=config.oidc_cookie_samesite,
             max_age=0,
         )
         response.set_cookie(
-            config.OIDC_REFRESH_COOKIE_NAME,
+            config.oidc_refresh_cookie_name,
             "",
             httponly=True,
             secure=cookie_secure,
-            samesite=config.OIDC_COOKIE_SAMESITE,
+            samesite=config.oidc_cookie_samesite,
             max_age=0,
         )
         return response
@@ -149,11 +149,11 @@ def after_request_set_cookies(
 
         # Set new access token cookie
         response.set_cookie(
-            config.OIDC_COOKIE_NAME,
+            config.oidc_cookie_name,
             pending.access_token,
             httponly=True,
             secure=cookie_secure,
-            samesite=config.OIDC_COOKIE_SAMESITE,
+            samesite=config.oidc_cookie_samesite,
             max_age=pending.access_token_expires_in,
         )
 
@@ -164,11 +164,11 @@ def after_request_set_cookies(
                 refresh_max_age = pending.access_token_expires_in
 
             response.set_cookie(
-                config.OIDC_REFRESH_COOKIE_NAME,
+                config.oidc_refresh_cookie_name,
                 pending.refresh_token,
                 httponly=True,
                 secure=cookie_secure,
-                samesite=config.OIDC_COOKIE_SAMESITE,
+                samesite=config.oidc_cookie_samesite,
                 max_age=refresh_max_age,
             )
 

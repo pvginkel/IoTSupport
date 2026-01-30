@@ -55,10 +55,10 @@ class AuthService:
         self._jwks_uri: str | None = None
 
         # Initialize JWKS client if OIDC is enabled
-        if config.OIDC_ENABLED:
-            if not config.OIDC_ISSUER_URL:
+        if config.oidc_enabled:
+            if not config.oidc_issuer_url:
                 raise ValueError("OIDC_ISSUER_URL is required when OIDC_ENABLED=True")
-            if not config.OIDC_CLIENT_ID:
+            if not config.oidc_client_id:
                 raise ValueError("OIDC_CLIENT_ID is required when OIDC_ENABLED=True")
 
             logger.info("Initializing AuthService with OIDC enabled")
@@ -100,7 +100,7 @@ class AuthService:
         Raises:
             AuthenticationException: If discovery fails or JWKS URI not found
         """
-        discovery_url = f"{self.config.OIDC_ISSUER_URL}/.well-known/openid-configuration"
+        discovery_url = f"{self.config.oidc_issuer_url}/.well-known/openid-configuration"
 
         try:
             response = httpx.get(discovery_url, timeout=10.0)
@@ -147,17 +147,17 @@ class AuthService:
             # Get signing key from JWKS
             signing_key = self._jwks_client.get_signing_key_from_jwt(token)
 
-            # Determine expected audience (use OIDC_AUDIENCE if set, otherwise client_id)
-            expected_audience = self.config.OIDC_AUDIENCE or self.config.OIDC_CLIENT_ID
+            # Use resolved audience (already includes client_id fallback from Settings.load())
+            expected_audience = self.config.oidc_audience
 
             # Validate and decode token
             payload = jwt.decode(
                 token,
                 signing_key.key,
                 algorithms=["RS256", "RS384", "RS512"],
-                issuer=self.config.OIDC_ISSUER_URL,
+                issuer=self.config.oidc_issuer_url,
                 audience=expected_audience,
-                leeway=self.config.OIDC_CLOCK_SKEW_SECONDS,
+                leeway=self.config.oidc_clock_skew_seconds,
             )
 
             # Extract user information

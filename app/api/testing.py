@@ -98,11 +98,11 @@ def create_test_session(
 
     # Set the same cookie that the real OIDC callback would set
     response.set_cookie(
-        config.OIDC_COOKIE_NAME,
+        config.oidc_cookie_name,
         token,
         httponly=True,
         secure=cookie_secure,
-        samesite=config.OIDC_COOKIE_SAMESITE,
+        samesite=config.oidc_cookie_samesite,
         max_age=3600,  # 1 hour for test sessions
     )
 
@@ -131,7 +131,7 @@ def clear_test_session(
         204: Session cleared successfully with cookie invalidated
     """
     # Get current token from cookie (if any)
-    token = request.cookies.get(config.OIDC_COOKIE_NAME)
+    token = request.cookies.get(config.oidc_cookie_name)
     if token:
         testing_service.clear_session(token)
 
@@ -143,11 +143,11 @@ def clear_test_session(
 
     # Clear the session cookie
     response.set_cookie(
-        config.OIDC_COOKIE_NAME,
+        config.oidc_cookie_name,
         "",
         httponly=True,
         secure=cookie_secure,
-        samesite=config.OIDC_COOKIE_SAMESITE,
+        samesite=config.oidc_cookie_samesite,
         max_age=0,
     )
 

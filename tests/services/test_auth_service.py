@@ -16,11 +16,13 @@ class TestAuthService:
     @pytest.fixture
     def auth_settings(self, test_settings: Settings) -> Settings:
         """Create settings with OIDC enabled."""
-        test_settings.OIDC_ENABLED = True
-        test_settings.OIDC_ISSUER_URL = "https://auth.example.com/realms/iot"
-        test_settings.OIDC_CLIENT_ID = "iot-backend"
-        test_settings.OIDC_CLIENT_SECRET = "test-secret"
-        return test_settings
+        # Use model_copy to create a new Settings instance with updated values
+        return test_settings.model_copy(update={
+            "oidc_enabled": True,
+            "oidc_issuer_url": "https://auth.example.com/realms/iot",
+            "oidc_client_id": "iot-backend",
+            "oidc_client_secret": "test-secret",
+        })
 
     def test_validate_token_success_with_admin_role(
         self, auth_settings, generate_test_jwt, mock_oidc_discovery, mock_jwks

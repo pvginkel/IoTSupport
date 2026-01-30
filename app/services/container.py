@@ -37,9 +37,9 @@ class ServiceContainer(containers.DeclarativeContainer):
     # MqttService - Singleton to maintain persistent MQTT connection
     mqtt_service = providers.Singleton(
         MqttService,
-        mqtt_url=config.provided.MQTT_URL,
-        mqtt_username=config.provided.MQTT_USERNAME,
-        mqtt_password=config.provided.MQTT_PASSWORD,
+        mqtt_url=config.provided.mqtt_url,
+        mqtt_username=config.provided.mqtt_username,
+        mqtt_password=config.provided.mqtt_password,
     )
 
     # TestDataService - Factory creates new instance per request with database session
@@ -87,7 +87,7 @@ class ServiceContainer(containers.DeclarativeContainer):
     # FirmwareService - Singleton for firmware file management
     firmware_service = providers.Singleton(
         FirmwareService,
-        assets_dir=config.provided.ASSETS_DIR,
+        assets_dir=config.provided.assets_dir,
     )
 
     # DeviceModelService - Factory creates new instance per request with database session

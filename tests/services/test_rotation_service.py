@@ -246,7 +246,7 @@ class TestRotationServiceProcessJob:
 
                 # Put device in pending state with old timestamp
                 device.rotation_state = RotationState.PENDING.value
-                timeout_seconds = test_settings.ROTATION_TIMEOUT_SECONDS
+                timeout_seconds = test_settings.rotation_timeout_seconds
                 device.last_rotation_attempt_at = datetime.utcnow() - timedelta(
                     seconds=timeout_seconds + 60
                 )
@@ -568,7 +568,7 @@ class TestRotationServiceDashboard:
                 device = device_service.create_device(device_model_id=model.id, config="{}")
                 device.rotation_state = RotationState.TIMEOUT.value
                 # Less than threshold days ago
-                threshold_days = test_settings.ROTATION_CRITICAL_THRESHOLD_DAYS
+                threshold_days = test_settings.rotation_critical_threshold_days
                 device.last_rotation_completed_at = datetime.utcnow() - timedelta(
                     days=threshold_days - 1
                 )
@@ -604,7 +604,7 @@ class TestRotationServiceDashboard:
                 device = device_service.create_device(device_model_id=model.id, config="{}")
                 device.rotation_state = RotationState.TIMEOUT.value
                 # More than threshold days ago
-                threshold_days = test_settings.ROTATION_CRITICAL_THRESHOLD_DAYS
+                threshold_days = test_settings.rotation_critical_threshold_days
                 device.last_rotation_completed_at = datetime.utcnow() - timedelta(
                     days=threshold_days + 1
                 )

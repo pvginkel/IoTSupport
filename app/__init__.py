@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from app.config import Settings
 
 from app.app import App
-from app.config import get_settings
+from app.config import Settings
 from app.extensions import db
 from app.services.container import ServiceContainer
 
@@ -20,14 +20,14 @@ def create_app(settings: "Settings | None" = None, skip_background_services: boo
 
     # Load configuration
     if settings is None:
-        settings = get_settings()
+        settings = Settings.load()
 
     # Validate production configuration
     # Skip validation in testing mode to allow tests to run with minimal config
-    if settings.FLASK_ENV != "testing":
+    if settings.flask_env != "testing":
         settings.validate_production_config()
 
-    app.config.from_object(settings)
+    app.config.from_object(settings.to_flask_config())
 
     # Initialize Flask-SQLAlchemy
     db.init_app(app)
@@ -77,10 +77,10 @@ def create_app(settings: "Settings | None" = None, skip_background_services: boo
     app.container = container
 
     # Configure CORS
-    CORS(app, origins=settings.CORS_ORIGINS)
+    CORS(app, origins=settings.cors_origins)
 
     # Configure logging
-    debug_mode = settings.FLASK_ENV in ("development", "testing")
+    debug_mode = settings.flask_env in ("development", "testing")
     logging.basicConfig(
         level=logging.DEBUG if debug_mode else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",

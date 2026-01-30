@@ -148,7 +148,7 @@ def extract_token_from_request(config: Settings) -> str | None:
         JWT token string or None if not found
     """
     # Check cookie first
-    token = request.cookies.get(config.OIDC_COOKIE_NAME)
+    token = request.cookies.get(config.oidc_cookie_name)
     if token:
         logger.debug("Token extracted from cookie")
         return token
@@ -254,7 +254,7 @@ def authenticate_request(
             logger.debug("Access token expired, attempting refresh")
 
     # No valid access token - try refresh if we have the service and a refresh token
-    refresh_token = request.cookies.get(config.OIDC_REFRESH_COOKIE_NAME)
+    refresh_token = request.cookies.get(config.oidc_refresh_cookie_name)
 
     if not refresh_token:
         # No refresh token available
@@ -348,8 +348,8 @@ def deserialize_auth_state(signed_data: str, secret_key: str, max_age: int = 600
 def get_cookie_secure(config: Settings) -> bool:
     """Determine if cookies should use Secure flag.
 
-    If OIDC_COOKIE_SECURE is explicitly set, use that value.
-    Otherwise, infer from BASEURL (true for HTTPS, false for HTTP).
+    In the new config system, oidc_cookie_secure is always resolved
+    (either explicit or inferred from baseurl), so we just return it.
 
     Args:
         config: Application settings
@@ -357,9 +357,7 @@ def get_cookie_secure(config: Settings) -> bool:
     Returns:
         True if cookies should use Secure flag, False otherwise
     """
-    if config.OIDC_COOKIE_SECURE is not None:
-        return config.OIDC_COOKIE_SECURE
-    return config.BASEURL.startswith("https://")
+    return config.oidc_cookie_secure
 
 
 def validate_redirect_url(redirect_url: str, base_url: str) -> None:
