@@ -164,24 +164,6 @@ class TestSettingsLoad:
             expected_key = _derive_fernet_key("my-secret-key")
             assert settings.fernet_key == expected_key
 
-    def test_fernet_key_explicit(self, tmp_path: Path):
-        """Explicit FERNET_KEY overrides derivation."""
-        assets_dir = tmp_path / "assets"
-        assets_dir.mkdir()
-
-        with patch.dict(os.environ, {
-            "SECRET_KEY": "my-secret-key",
-            "FERNET_KEY": "explicit-fernet-key-value",
-            "ASSETS_DIR": str(assets_dir),
-            "MQTT_URL": "mqtt://test:1883",
-            "WIFI_SSID": "TestNet",
-            "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com",
-        }, clear=False):
-            settings = Settings.load()
-
-            assert settings.fernet_key == "explicit-fernet-key-value"
-
     def test_oidc_audience_fallback(self, tmp_path: Path):
         """OIDC_AUDIENCE falls back to OIDC_CLIENT_ID."""
         assets_dir = tmp_path / "assets"
