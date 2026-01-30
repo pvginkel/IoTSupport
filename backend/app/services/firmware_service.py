@@ -46,6 +46,7 @@ class FirmwareService:
             assets_dir: Directory for storing firmware files
         """
         self.assets_dir = assets_dir
+        self.assets_dir.mkdir(parents=True, exist_ok=True)
         logger.info("FirmwareService initialized with assets_dir: %s", assets_dir)
 
     def get_firmware_path(self, model_code: str) -> Path:

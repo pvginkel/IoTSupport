@@ -214,6 +214,26 @@ class TestAuthenticationMiddleware:
         # Will return 401 because endpoint manually checks for token, but passes before_request
         assert response.status_code == 401
 
+    def test_iot_endpoints_bypass_user_authentication(
+        self, auth_enabled_app
+    ):
+        """Test that /api/iot endpoints bypass user authentication via @public decorator.
+
+        IoT endpoints are marked @public to skip user auth, but have their own
+        before_request hook for device authentication. Without a device token,
+        they return 401 from device auth, not from user auth.
+        """
+        client = auth_enabled_app.test_client()
+
+        # IoT endpoint without any token - should get past user auth but fail device auth
+        response = client.get("/api/iot/config")
+
+        # Should return 401 from device auth, not 403 from user auth (no admin role)
+        assert response.status_code == 401
+        data = response.get_json()
+        # The error should be about missing token, not about admin role
+        assert "admin" not in data["error"].lower()
+
     def test_oidc_disabled_bypasses_authentication(self, test_settings):
         """Test that OIDC_ENABLED=False bypasses all authentication."""
         # Configure SQLite engine options for testing

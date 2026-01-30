@@ -141,6 +141,10 @@ class Settings(BaseSettings):
         default=None,
         description="Keycloak admin service account client secret"
     )
+    KEYCLOAK_DEVICE_SCOPE_NAME: str = Field(
+        default="iot-device-audience",
+        description="Client scope name to add to device clients (must contain audience mapper)"
+    )
 
     @property
     def keycloak_admin_url(self) -> str | None:

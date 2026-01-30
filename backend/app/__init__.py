@@ -96,10 +96,6 @@ def create_app(settings: "Settings | None" = None, skip_background_services: boo
 
     app.register_blueprint(metrics_bp)
 
-    # Register IoT blueprint (at root, not under /api)
-    from app.api.iot import iot_bp
-
-    app.register_blueprint(iot_bp)
 
     # Request teardown handler for database session management
     @app.teardown_request
