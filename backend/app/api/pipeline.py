@@ -145,7 +145,7 @@ def get_upload_script(
     backend_url = f"{proto}://{host}"
 
     # Get token URL from config
-    token_url = config.OIDC_TOKEN_URL or ""
+    token_url = config.oidc_token_url or ""
 
     script = render_template(
         "upload_firmware.sh.j2",
@@ -188,7 +188,7 @@ def get_upload_script_powershell(
     backend_url = f"{proto}://{host}"
 
     # Get token URL from config
-    token_url = config.OIDC_TOKEN_URL or ""
+    token_url = config.oidc_token_url or ""
 
     script = render_template(
         "upload_firmware.ps1.j2",

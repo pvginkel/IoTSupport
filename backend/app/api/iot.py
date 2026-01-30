@@ -49,7 +49,7 @@ def before_request_device_auth(
     This hook validates the device JWT token before every request.
     """
     # Skip authentication if OIDC is disabled (for testing)
-    if not config.OIDC_ENABLED:
+    if not config.oidc_enabled:
         logger.debug("OIDC disabled - skipping device authentication")
         return None
 
@@ -321,12 +321,12 @@ def get_provisioning_for_rotation(
             "device_key": device.key,
             "client_id": client_id,
             "client_secret": new_secret,
-            "token_url": app_config.OIDC_TOKEN_URL,
-            "base_url": app_config.BASEURL,
-            "mqtt_url": app_config.MQTT_URL,
-            "wifi_ssid": app_config.WIFI_SSID,
-            "wifi_password": app_config.WIFI_PASSWORD,
-            "logging_url": app_config.LOGGING_URL,
+            "token_url": app_config.oidc_token_url,
+            "base_url": app_config.device_baseurl,
+            "mqtt_url": app_config.mqtt_url,
+            "wifi_ssid": app_config.wifi_ssid,
+            "wifi_password": app_config.wifi_password,
+            "logging_url": app_config.logging_url,
         }
 
         logger.info("Generated rotation provisioning for device %s", device.key)

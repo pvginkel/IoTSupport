@@ -314,7 +314,7 @@ class TestNvsGeneratorIntegration:
         blob = generate_nvs_blob(data, partition_size=TEST_PARTITION_SIZE)
 
         # The UTF-8 encoding of "Café" should be in the blob
-        assert "Café".encode("utf-8") in blob
+        assert "Café".encode() in blob
 
     def test_various_partition_sizes(self) -> None:
         """Test that different valid partition sizes work correctly."""

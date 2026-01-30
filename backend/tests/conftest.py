@@ -48,27 +48,79 @@ def clear_prometheus_registry() -> Generator[None, None, None]:
 
 
 def _build_test_settings(tmp_path: Path) -> Settings:
-    """Construct base Settings object for tests."""
+    """Construct base Settings object for tests.
+
+    Settings is now a plain Pydantic BaseModel with lowercase fields.
+    For tests, we construct it directly instead of using Settings.load().
+    """
     # Create temporary assets directory for firmware storage
     assets_dir = tmp_path / "assets"
     assets_dir.mkdir(exist_ok=True)
 
     return Settings(
-        _env_file=None,  # type: ignore[call-arg]
-        DATABASE_URL="sqlite:///:memory:",
-        SECRET_KEY="test-secret-key",
-        DEBUG=True,
-        ASSETS_DIR=assets_dir,
-        CORS_ORIGINS=["http://localhost:3000"],
-        ROTATION_CRON="0 8 1-7 * 6",
-        ROTATION_CRITICAL_THRESHOLD_DAYS=7,
-        # Required for provisioning
-        OIDC_TOKEN_URL="https://auth.example.com/realms/iot/protocol/openid-connect/token",
-        MQTT_URL="mqtt://mqtt.example.com:1883",
-        WIFI_SSID="TestNetwork",
-        WIFI_PASSWORD="test-wifi-password",
-        LOGGING_URL="https://logs.example.com/ingest",
+        # Flask settings
+        secret_key="test-secret-key",
+        flask_env="development",
+        debug=True,
+        # Database settings
+        database_url="sqlite:///:memory:",
+        # Firmware storage
+        assets_dir=assets_dir,
+        # CORS settings
+        cors_origins=["http://localhost:3000"],
+        # MQTT settings
+        mqtt_url="mqtt://mqtt.example.com:1883",
+        mqtt_username=None,
+        mqtt_password=None,
+        # OIDC settings (disabled for most tests)
+        baseurl="http://localhost:3200",
+        device_baseurl="http://localhost:3200",
+        oidc_enabled=False,
+        oidc_issuer_url="https://auth.example.com/realms/iot",
+        oidc_client_id="iot-support",
+        oidc_client_secret=None,
+        oidc_scopes="openid profile email",
+        oidc_audience="iot-support",
+        oidc_clock_skew_seconds=30,
+        oidc_cookie_name="access_token",
+        oidc_cookie_secure=False,
+        oidc_cookie_samesite="Lax",
+        oidc_refresh_cookie_name="refresh_token",
+        # Keycloak Admin API settings
+        oidc_token_url="https://auth.example.com/realms/iot/protocol/openid-connect/token",
+        keycloak_base_url="https://auth.example.com",
+        keycloak_realm="iot",
+        keycloak_admin_client_id="iot-admin",
+        keycloak_admin_client_secret="admin-secret",
+        keycloak_device_scope_name="iot-device-audience",
+        keycloak_admin_url="https://auth.example.com/admin/realms/iot",
+        keycloak_console_base_url="https://auth.example.com/admin/master/console/#/iot/clients",
+        # WiFi credentials for provisioning
+        wifi_ssid="TestNetwork",
+        wifi_password="test-wifi-password",
+        # Logging endpoint
+        logging_url="https://logs.example.com/ingest",
+        # Rotation settings
+        rotation_cron="0 8 1-7 * 6",
+        rotation_timeout_seconds=300,
+        rotation_critical_threshold_days=7,
+        # Fernet key (derived from "test-secret-key" using SHA256 + base64)
+        fernet_key="LOrG82NjxiRqZMyoBc1DynoBsU6y_MUyzuw_YPL33xw=",
     )
+
+
+def _override_settings_for_sqlite(settings: Settings, conn: sqlite3.Connection) -> Settings:
+    """Create a copy of settings configured for SQLite with static pool."""
+    new_settings = settings.model_copy(
+        update={
+            "database_url": "sqlite://",
+            "sqlalchemy_engine_options": {
+                "poolclass": StaticPool,
+                "creator": lambda: conn,
+            },
+        }
+    )
+    return new_settings
 
 
 @pytest.fixture(scope="session")
@@ -82,12 +134,7 @@ def template_connection(session_tmp_path: Path) -> Generator[sqlite3.Connection,
     """Create a template SQLite database once and apply migrations."""
     conn = sqlite3.connect(":memory:", check_same_thread=False)
 
-    settings = _build_test_settings(session_tmp_path).model_copy()
-    settings.DATABASE_URL = "sqlite://"
-    settings.set_engine_options_override({
-        "poolclass": StaticPool,
-        "creator": lambda: conn,
-    })
+    settings = _override_settings_for_sqlite(_build_test_settings(session_tmp_path), conn)
 
     template_app = create_app(settings, skip_background_services=True)
     with template_app.app_context():
@@ -110,12 +157,7 @@ def app(test_settings: Settings, template_connection: sqlite3.Connection) -> Gen
     clone_conn = sqlite3.connect(":memory:", check_same_thread=False)
     template_connection.backup(clone_conn)
 
-    settings = test_settings.model_copy()
-    settings.DATABASE_URL = "sqlite://"
-    settings.set_engine_options_override({
-        "poolclass": StaticPool,
-        "creator": lambda: clone_conn,
-    })
+    settings = _override_settings_for_sqlite(test_settings, clone_conn)
 
     app = create_app(settings, skip_background_services=True)
 
@@ -260,7 +302,7 @@ def make_asset_file(test_settings: Settings) -> Any:
     """Factory fixture for creating asset files."""
 
     def _make(filename: str, content: bytes) -> Path:
-        file_path = test_settings.ASSETS_DIR / filename
+        file_path = test_settings.assets_dir / filename
         file_path.write_bytes(content)
         return file_path
 
@@ -340,8 +382,8 @@ def generate_test_jwt(test_settings: Settings) -> Any:
 
         payload = {
             "sub": subject,
-            "iss": "https://wrong.example.com" if invalid_issuer else test_settings.OIDC_ISSUER_URL,
-            "aud": "wrong-client-id" if invalid_audience else test_settings.OIDC_CLIENT_ID,
+            "iss": "https://wrong.example.com" if invalid_issuer else test_settings.oidc_issuer_url,
+            "aud": "wrong-client-id" if invalid_audience else test_settings.oidc_client_id,
             "exp": exp,
             "iat": now,
             "realm_access": {"roles": roles},

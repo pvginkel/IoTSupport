@@ -101,9 +101,9 @@ class RotationService:
 
         # Calculate next scheduled rotation
         next_scheduled = None
-        if self.config.ROTATION_CRON:
+        if self.config.rotation_cron:
             try:
-                cron_iter = croniter(self.config.ROTATION_CRON, datetime.utcnow())
+                cron_iter = croniter(self.config.rotation_cron, datetime.utcnow())
                 next_time = cron_iter.get_next(datetime)
                 next_scheduled = next_time.isoformat() + "Z"
             except Exception as e:
@@ -162,7 +162,7 @@ class RotationService:
         try:
             # Step 1: Check CRON schedule (only if configured)
             # Trigger if CRON is configured AND (never scheduled before OR schedule indicates it's time)
-            if self.config.ROTATION_CRON and (
+            if self.config.rotation_cron and (
                 not last_scheduled_at or self._should_trigger_scheduled_rotation(last_scheduled_at)
             ):
                 queued_count = self.trigger_fleet_rotation()
@@ -212,13 +212,13 @@ class RotationService:
         Returns:
             True if a new rotation should be triggered based on CRON schedule
         """
-        if not self.config.ROTATION_CRON:
+        if not self.config.rotation_cron:
             logger.debug("ROTATION_CRON not configured, skipping scheduled rotation")
             return False
 
         try:
             now = datetime.utcnow()
-            cron_iter = croniter(self.config.ROTATION_CRON, now)
+            cron_iter = croniter(self.config.rotation_cron, now)
 
             # Get the most recent scheduled time before now
             prev_time = cron_iter.get_prev(datetime)
@@ -239,7 +239,7 @@ class RotationService:
         Returns:
             Number of devices processed
         """
-        timeout_seconds = self.config.ROTATION_TIMEOUT_SECONDS
+        timeout_seconds = self.config.rotation_timeout_seconds
         now = datetime.utcnow()
 
         # Find timed-out devices
@@ -441,7 +441,7 @@ class RotationService:
 
         now = datetime.utcnow()
         # Default to 7 days if not configured (for dev/test environments)
-        threshold_days = self.config.ROTATION_CRITICAL_THRESHOLD_DAYS or 7
+        threshold_days = self.config.rotation_critical_threshold_days or 7
 
         # Fetch all devices with their model info
         stmt = select(Device).options(joinedload(Device.device_model))

@@ -13,18 +13,19 @@ class TestAuthEndpoints:
     @pytest.fixture
     def auth_enabled_settings(self, test_settings: Settings) -> Settings:
         """Create settings with OIDC enabled and SQLite support."""
-        # Clone settings and configure for SQLite
-        test_settings.DATABASE_URL = "sqlite://"
-        test_settings.set_engine_options_override({
-            "poolclass": StaticPool,
-            "connect_args": {"check_same_thread": False},
+        # Use model_copy to create a new Settings instance with updated values
+        return test_settings.model_copy(update={
+            "database_url": "sqlite://",
+            "sqlalchemy_engine_options": {
+                "poolclass": StaticPool,
+                "connect_args": {"check_same_thread": False},
+            },
+            "oidc_enabled": True,
+            "oidc_issuer_url": "https://auth.example.com/realms/iot",
+            "oidc_client_id": "iot-backend",
+            "oidc_client_secret": "test-secret",
+            "baseurl": "http://localhost:3200",
         })
-        test_settings.OIDC_ENABLED = True
-        test_settings.OIDC_ISSUER_URL = "https://auth.example.com/realms/iot"
-        test_settings.OIDC_CLIENT_ID = "iot-backend"
-        test_settings.OIDC_CLIENT_SECRET = "test-secret"
-        test_settings.BASEURL = "http://localhost:3200"
-        return test_settings
 
     def test_get_current_user_with_oidc_disabled(self, client):
         """Test /api/auth/self returns default user when OIDC disabled."""

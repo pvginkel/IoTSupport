@@ -1,6 +1,5 @@
 """Tests for IoT device API endpoints."""
 
-import json
 from unittest.mock import MagicMock, patch
 
 from flask import Flask
@@ -174,7 +173,6 @@ class TestIotFirmwareVersion:
             firmware_service.save_firmware(model_code, firmware_content)
 
             # Update model with version
-            model_service = container.device_model_service()
             device_service = container.device_service()
             device = device_service.get_device_by_key(device_key)
             device.device_model.firmware_version = "2.1.0"

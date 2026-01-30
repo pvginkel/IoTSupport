@@ -11,7 +11,6 @@ from sqlalchemy.pool import StaticPool
 
 from app import create_app
 from app.config import Settings
-from app.services.oidc_client_service import TokenResponse
 
 
 class TestAuthenticationMiddleware:
@@ -20,18 +19,19 @@ class TestAuthenticationMiddleware:
     @pytest.fixture
     def auth_enabled_settings(self, test_settings: Settings) -> Settings:
         """Create settings with OIDC enabled and SQLite support."""
-        # Configure SQLite engine options for testing
-        test_settings.DATABASE_URL = "sqlite://"
-        test_settings.set_engine_options_override({
-            "poolclass": StaticPool,
-            "connect_args": {"check_same_thread": False},
+        # Use model_copy to create a new Settings instance with updated values
+        return test_settings.model_copy(update={
+            "database_url": "sqlite://",
+            "sqlalchemy_engine_options": {
+                "poolclass": StaticPool,
+                "connect_args": {"check_same_thread": False},
+            },
+            "oidc_enabled": True,
+            "oidc_issuer_url": "https://auth.example.com/realms/iot",
+            "oidc_client_id": "iot-backend",
+            "oidc_client_secret": "test-secret",
+            "baseurl": "http://localhost:3200",
         })
-        test_settings.OIDC_ENABLED = True
-        test_settings.OIDC_ISSUER_URL = "https://auth.example.com/realms/iot"
-        test_settings.OIDC_CLIENT_ID = "iot-backend"
-        test_settings.OIDC_CLIENT_SECRET = "test-secret"
-        test_settings.BASEURL = "http://localhost:3200"
-        return test_settings
 
     @pytest.fixture
     def auth_enabled_app(
@@ -236,15 +236,17 @@ class TestAuthenticationMiddleware:
 
     def test_oidc_disabled_bypasses_authentication(self, test_settings):
         """Test that OIDC_ENABLED=False bypasses all authentication."""
-        # Configure SQLite engine options for testing
-        test_settings.DATABASE_URL = "sqlite://"
-        test_settings.set_engine_options_override({
-            "poolclass": StaticPool,
-            "connect_args": {"check_same_thread": False},
+        # Use model_copy to create a new Settings instance with updated values
+        settings = test_settings.model_copy(update={
+            "database_url": "sqlite://",
+            "sqlalchemy_engine_options": {
+                "poolclass": StaticPool,
+                "connect_args": {"check_same_thread": False},
+            },
+            "oidc_enabled": False,
         })
-        test_settings.OIDC_ENABLED = False
 
-        app = create_app(test_settings, skip_background_services=True)
+        app = create_app(settings, skip_background_services=True)
 
         # Create database tables for this fresh app
         with app.app_context():
@@ -317,17 +319,19 @@ class TestTokenRefreshMiddleware:
     @pytest.fixture
     def auth_enabled_settings(self, test_settings: Settings) -> Settings:
         """Create settings with OIDC enabled and SQLite support."""
-        test_settings.DATABASE_URL = "sqlite://"
-        test_settings.set_engine_options_override({
-            "poolclass": StaticPool,
-            "connect_args": {"check_same_thread": False},
+        # Use model_copy to create a new Settings instance with updated values
+        return test_settings.model_copy(update={
+            "database_url": "sqlite://",
+            "sqlalchemy_engine_options": {
+                "poolclass": StaticPool,
+                "connect_args": {"check_same_thread": False},
+            },
+            "oidc_enabled": True,
+            "oidc_issuer_url": "https://auth.example.com/realms/iot",
+            "oidc_client_id": "iot-backend",
+            "oidc_client_secret": "test-secret",
+            "baseurl": "http://localhost:3200",
         })
-        test_settings.OIDC_ENABLED = True
-        test_settings.OIDC_ISSUER_URL = "https://auth.example.com/realms/iot"
-        test_settings.OIDC_CLIENT_ID = "iot-backend"
-        test_settings.OIDC_CLIENT_SECRET = "test-secret"
-        test_settings.BASEURL = "http://localhost:3200"
-        return test_settings
 
     @pytest.fixture
     def auth_enabled_app_with_refresh(

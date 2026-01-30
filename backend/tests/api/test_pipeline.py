@@ -228,7 +228,7 @@ class TestPipelineUploadScript:
         """Test that the script contains the token URL from config."""
         # Get the configured token URL
         config: Settings = container.config()
-        expected_token_url = config.OIDC_TOKEN_URL or ""
+        expected_token_url = config.oidc_token_url or ""
 
         response = client.get("/api/pipeline/upload.sh")
 
@@ -315,7 +315,7 @@ class TestPipelineUploadScriptPowerShell:
     ) -> None:
         """Test that the script contains the token URL from config."""
         config: Settings = container.config()
-        expected_token_url = config.OIDC_TOKEN_URL or ""
+        expected_token_url = config.oidc_token_url or ""
 
         response = client.get("/api/pipeline/upload.ps1")
 

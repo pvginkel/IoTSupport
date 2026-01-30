@@ -54,11 +54,11 @@ class KeycloakAdminService:
 
         # Check if Keycloak is configured
         self.enabled = all([
-            config.OIDC_TOKEN_URL,
-            config.KEYCLOAK_BASE_URL,
-            config.KEYCLOAK_REALM,
-            config.KEYCLOAK_ADMIN_CLIENT_ID,
-            config.KEYCLOAK_ADMIN_CLIENT_SECRET,
+            config.oidc_token_url,
+            config.keycloak_base_url,
+            config.keycloak_realm,
+            config.keycloak_admin_client_id,
+            config.keycloak_admin_client_secret,
         ])
 
         if self.enabled:
@@ -82,13 +82,18 @@ class KeycloakAdminService:
         logger.debug("Acquiring new Keycloak admin access token")
         start_time = time.perf_counter()
 
+        # These are guaranteed to be set when self.enabled is True (checked in __init__)
+        assert self.config.oidc_token_url is not None
+        assert self.config.keycloak_admin_client_id is not None
+        assert self.config.keycloak_admin_client_secret is not None
+
         try:
             response = self._http_client.post(
-                self.config.OIDC_TOKEN_URL or "",
+                self.config.oidc_token_url,
                 data={
                     "grant_type": "client_credentials",
-                    "client_id": self.config.KEYCLOAK_ADMIN_CLIENT_ID,
-                    "client_secret": self.config.KEYCLOAK_ADMIN_CLIENT_SECRET,
+                    "client_id": self.config.keycloak_admin_client_id,
+                    "client_secret": self.config.keycloak_admin_client_secret,
                 },
             )
             response.raise_for_status()
@@ -611,7 +616,7 @@ class KeycloakAdminService:
         # Scopes to add: custom device scope + standard OIDC scopes
         # Note: 'openid' is automatically included for OIDC clients, not a separate scope
         scopes_to_add = [
-            self.config.KEYCLOAK_DEVICE_SCOPE_NAME,
+            self.config.keycloak_device_scope_name,
             "profile",
             "email",
         ]
@@ -620,7 +625,7 @@ class KeycloakAdminService:
             scope_data = self._get_client_scope_by_name(scope_name, token)
 
             if not scope_data:
-                if scope_name == self.config.KEYCLOAK_DEVICE_SCOPE_NAME:
+                if scope_name == self.config.keycloak_device_scope_name:
                     logger.warning(
                         "Device scope '%s' not found in Keycloak - device tokens may fail "
                         "audience validation. Create the scope with an audience mapper.",

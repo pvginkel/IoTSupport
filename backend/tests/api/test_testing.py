@@ -17,38 +17,72 @@ from app.services.container import ServiceContainer
 
 def _build_testing_settings(tmp_path: Path) -> Settings:
     """Build settings for testing mode tests."""
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
-
-    # Create temporary assets directory and signing key for tests
+    # Create temporary assets directory for tests
     assets_dir = tmp_path / "assets"
     assets_dir.mkdir(exist_ok=True)
 
-    # Create a valid RSA signing key file for all tests
-    signing_key_path = tmp_path / "test_signing_key.pem"
-    if not signing_key_path.exists():
-        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        pem = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-        signing_key_path.write_bytes(pem)
-
     return Settings(
-        _env_file=None,  # type: ignore[call-arg]
-        DATABASE_URL="sqlite:///:memory:",
-        ASSETS_DIR=assets_dir,
-        SIGNING_KEY_PATH=signing_key_path,
-        TIMESTAMP_TOLERANCE_SECONDS=300,
-        SECRET_KEY="test-secret-key",
-        CORS_ORIGINS=["http://localhost:3000"],
-        FLASK_ENV="testing",  # Enable testing mode
-        # Required provisioning fields
-        MQTT_URL="mqtt://mqtt.example.com:1883",
-        WIFI_SSID="TestNetwork",
-        WIFI_PASSWORD="test-wifi-password",
-        LOGGING_URL="https://logs.example.com/ingest",
+        # Flask settings
+        secret_key="test-secret-key",
+        flask_env="testing",  # Enable testing mode
+        debug=True,
+        # Database settings
+        database_url="sqlite:///:memory:",
+        # Firmware storage
+        assets_dir=assets_dir,
+        # CORS settings
+        cors_origins=["http://localhost:3000"],
+        # MQTT settings
+        mqtt_url="mqtt://mqtt.example.com:1883",
+        mqtt_username=None,
+        mqtt_password=None,
+        # OIDC settings (disabled)
+        baseurl="http://localhost:3200",
+        device_baseurl="http://localhost:3200",
+        oidc_enabled=False,
+        oidc_issuer_url=None,
+        oidc_client_id=None,
+        oidc_client_secret=None,
+        oidc_scopes="openid profile email",
+        oidc_audience=None,
+        oidc_clock_skew_seconds=30,
+        oidc_cookie_name="access_token",
+        oidc_cookie_secure=False,
+        oidc_cookie_samesite="Lax",
+        oidc_refresh_cookie_name="refresh_token",
+        # Keycloak Admin API settings
+        oidc_token_url="https://auth.example.com/realms/iot/protocol/openid-connect/token",
+        keycloak_base_url="https://auth.example.com",
+        keycloak_realm="iot",
+        keycloak_admin_client_id="iot-admin",
+        keycloak_admin_client_secret="admin-secret",
+        keycloak_device_scope_name="iot-device-audience",
+        keycloak_admin_url="https://auth.example.com/admin/realms/iot",
+        keycloak_console_base_url="https://auth.example.com/admin/master/console/#/iot/clients",
+        # WiFi credentials for provisioning
+        wifi_ssid="TestNetwork",
+        wifi_password="test-wifi-password",
+        # Logging endpoint
+        logging_url="https://logs.example.com/ingest",
+        # Rotation settings
+        rotation_cron="0 8 1-7 * 6",
+        rotation_timeout_seconds=300,
+        rotation_critical_threshold_days=7,
+        # Fernet key (derived from "test-secret-key" using SHA256 + base64)
+        fernet_key="LOrG82NjxiRqZMyoBc1DynoBsU6y_MUyzuw_YPL33xw=",
+    )
+
+
+def _override_settings_for_sqlite(settings: Settings, conn: sqlite3.Connection) -> Settings:
+    """Create a copy of settings configured for SQLite with static pool."""
+    return settings.model_copy(
+        update={
+            "database_url": "sqlite://",
+            "sqlalchemy_engine_options": {
+                "poolclass": StaticPool,
+                "creator": lambda: conn,
+            },
+        }
     )
 
 
@@ -58,12 +92,7 @@ def testing_template_connection(tmp_path_factory) -> Generator[sqlite3.Connectio
     tmp_path = tmp_path_factory.mktemp("testing")
     conn = sqlite3.connect(":memory:", check_same_thread=False)
 
-    settings = _build_testing_settings(tmp_path)
-    settings.DATABASE_URL = "sqlite://"
-    settings.set_engine_options_override({
-        "poolclass": StaticPool,
-        "creator": lambda: conn,
-    })
+    settings = _override_settings_for_sqlite(_build_testing_settings(tmp_path), conn)
 
     template_app = create_app(settings, skip_background_services=True)
     with template_app.app_context():
@@ -85,12 +114,7 @@ def testing_app(testing_settings: Settings, testing_template_connection: sqlite3
     clone_conn = sqlite3.connect(":memory:", check_same_thread=False)
     testing_template_connection.backup(clone_conn)
 
-    settings = testing_settings.model_copy()
-    settings.DATABASE_URL = "sqlite://"
-    settings.set_engine_options_override({
-        "poolclass": StaticPool,
-        "creator": lambda: clone_conn,
-    })
+    settings = _override_settings_for_sqlite(testing_settings, clone_conn)
 
     app = create_app(settings, skip_background_services=True)
 

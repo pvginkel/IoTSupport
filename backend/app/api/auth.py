@@ -76,7 +76,7 @@ def get_current_user(
             }), forced_error
 
         # Check for test sessions
-        token = request.cookies.get(config.OIDC_COOKIE_NAME)
+        token = request.cookies.get(config.oidc_cookie_name)
         if token and token.startswith("test-session-"):
             test_session = testing_service.get_session(token)
             if test_session:
@@ -96,7 +96,7 @@ def get_current_user(
         raise AuthenticationException("No valid test session provided")
 
     # Check if OIDC is enabled (non-testing mode)
-    if not config.OIDC_ENABLED:
+    if not config.oidc_enabled:
         # Return a default "admin" user when auth is disabled
         return UserInfoResponseSchema(
             subject="local-user",
@@ -155,7 +155,7 @@ def login(
         400: Missing or invalid redirect parameter
     """
     # Check if OIDC is enabled
-    if not config.OIDC_ENABLED:
+    if not config.oidc_enabled:
         raise ValidationException("Authentication is not enabled")
 
     # Get and validate redirect parameter
@@ -164,7 +164,7 @@ def login(
         raise ValidationException("Missing required 'redirect' parameter")
 
     # Validate redirect URL to prevent open redirect attacks
-    validate_redirect_url(redirect_url, config.BASEURL)
+    validate_redirect_url(redirect_url, config.baseurl)
 
     # Generate authorization URL with PKCE
     authorization_url, auth_state = oidc_client_service.generate_authorization_url(
@@ -172,7 +172,7 @@ def login(
     )
 
     # Serialize auth state into signed cookie
-    signed_state = serialize_auth_state(auth_state, config.SECRET_KEY)
+    signed_state = serialize_auth_state(auth_state, config.secret_key)
 
     # Determine cookie security settings
     cookie_secure = get_cookie_secure(config)
@@ -186,7 +186,7 @@ def login(
         signed_state,
         httponly=True,
         secure=cookie_secure,
-        samesite=config.OIDC_COOKIE_SAMESITE,
+        samesite=config.oidc_cookie_samesite,
         max_age=600,  # 10 minutes
     )
 
@@ -218,7 +218,7 @@ def callback(
         401: Token exchange failed
     """
     # Check if OIDC is enabled
-    if not config.OIDC_ENABLED:
+    if not config.oidc_enabled:
         raise ValidationException("Authentication is not enabled")
 
     # Get callback parameters
@@ -235,7 +235,7 @@ def callback(
     if not signed_state:
         raise ValidationException("Missing authentication state cookie")
 
-    auth_state = deserialize_auth_state(signed_state, config.SECRET_KEY)
+    auth_state = deserialize_auth_state(signed_state, config.secret_key)
 
     # Verify state matches
     if state != auth_state.nonce:
@@ -264,11 +264,11 @@ def callback(
 
     # Set access token cookie
     response.set_cookie(
-        config.OIDC_COOKIE_NAME,
+        config.oidc_cookie_name,
         token_response.access_token,
         httponly=True,
         secure=cookie_secure,
-        samesite=config.OIDC_COOKIE_SAMESITE,
+        samesite=config.oidc_cookie_samesite,
         max_age=token_response.expires_in,
     )
 
@@ -281,11 +281,11 @@ def callback(
             refresh_max_age = token_response.expires_in
 
         response.set_cookie(
-            config.OIDC_REFRESH_COOKIE_NAME,
+            config.oidc_refresh_cookie_name,
             token_response.refresh_token,
             httponly=True,
             secure=cookie_secure,
-            samesite=config.OIDC_COOKIE_SAMESITE,
+            samesite=config.oidc_cookie_samesite,
             max_age=refresh_max_age,
         )
 
@@ -296,7 +296,7 @@ def callback(
             token_response.id_token,
             httponly=True,
             secure=cookie_secure,
-            samesite=config.OIDC_COOKIE_SAMESITE,
+            samesite=config.oidc_cookie_samesite,
             max_age=token_response.expires_in,
         )
 
@@ -306,7 +306,7 @@ def callback(
         "",
         httponly=True,
         secure=cookie_secure,
-        samesite=config.OIDC_COOKIE_SAMESITE,
+        samesite=config.oidc_cookie_samesite,
         max_age=0,
     )
 
@@ -335,7 +335,7 @@ def logout(
     redirect_url = request.args.get("redirect", "/")
 
     # Validate redirect URL to prevent open redirect attacks
-    validate_redirect_url(redirect_url, config.BASEURL)
+    validate_redirect_url(redirect_url, config.baseurl)
 
     # Determine cookie security settings
     cookie_secure = get_cookie_secure(config)
@@ -345,12 +345,12 @@ def logout(
 
     # Build the post-logout redirect URI (must be absolute for OIDC)
     if redirect_url.startswith("/"):
-        post_logout_redirect_uri = f"{config.BASEURL}{redirect_url}"
+        post_logout_redirect_uri = f"{config.baseurl}{redirect_url}"
     else:
         post_logout_redirect_uri = redirect_url
 
     # Determine where to redirect
-    if config.OIDC_ENABLED:
+    if config.oidc_enabled:
         try:
             end_session_endpoint = oidc_client_service.endpoints.end_session_endpoint
             if end_session_endpoint:
@@ -358,7 +358,7 @@ def logout(
                 from urllib.parse import urlencode
 
                 logout_params: dict[str, str] = {
-                    "client_id": config.OIDC_CLIENT_ID or "",
+                    "client_id": config.oidc_client_id or "",
                     "post_logout_redirect_uri": post_logout_redirect_uri,
                 }
 
@@ -391,21 +391,21 @@ def logout(
 
     # Clear access token cookie
     response.set_cookie(
-        config.OIDC_COOKIE_NAME,
+        config.oidc_cookie_name,
         "",
         httponly=True,
         secure=cookie_secure,
-        samesite=config.OIDC_COOKIE_SAMESITE,
+        samesite=config.oidc_cookie_samesite,
         max_age=0,
     )
 
     # Clear refresh token cookie
     response.set_cookie(
-        config.OIDC_REFRESH_COOKIE_NAME,
+        config.oidc_refresh_cookie_name,
         "",
         httponly=True,
         secure=cookie_secure,
-        samesite=config.OIDC_COOKIE_SAMESITE,
+        samesite=config.oidc_cookie_samesite,
         max_age=0,
     )
 
@@ -415,7 +415,7 @@ def logout(
         "",
         httponly=True,
         secure=cookie_secure,
-        samesite=config.OIDC_COOKIE_SAMESITE,
+        samesite=config.oidc_cookie_samesite,
         max_age=0,
     )
 
