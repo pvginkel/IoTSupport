@@ -90,7 +90,7 @@ const ToastComponent = React.forwardRef<
       )}
     >
       <div className="p-4">
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           <div className="flex-shrink-0 leading-none">
             <span className="text-lg">{iconMap[toast.type]}</span>
           </div>
