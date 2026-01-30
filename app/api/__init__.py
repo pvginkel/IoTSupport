@@ -184,6 +184,7 @@ from app.api.device_models import device_models_bp  # noqa: E402
 from app.api.devices import devices_bp  # noqa: E402
 from app.api.health import health_bp  # noqa: E402
 from app.api.images import images_bp  # noqa: E402
+from app.api.iot import iot_bp  # noqa: E402
 from app.api.pipeline import pipeline_bp  # noqa: E402
 from app.api.rotation import rotation_bp  # noqa: E402
 from app.api.testing import testing_bp  # noqa: E402
@@ -193,6 +194,7 @@ api_bp.register_blueprint(device_models_bp)  # type: ignore[attr-defined]
 api_bp.register_blueprint(devices_bp)  # type: ignore[attr-defined]
 api_bp.register_blueprint(health_bp)  # type: ignore[attr-defined]
 api_bp.register_blueprint(images_bp)  # type: ignore[attr-defined]
+api_bp.register_blueprint(iot_bp)  # type: ignore[attr-defined]
 api_bp.register_blueprint(pipeline_bp)  # type: ignore[attr-defined]
 api_bp.register_blueprint(rotation_bp)  # type: ignore[attr-defined]
 api_bp.register_blueprint(testing_bp)  # type: ignore[attr-defined]

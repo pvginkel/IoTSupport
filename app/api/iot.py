@@ -26,6 +26,7 @@ from app.services.firmware_service import FirmwareService
 from app.services.keycloak_admin_service import KeycloakAdminService
 from app.services.metrics_service import MetricsService
 from app.services.rotation_service import RotationService
+from app.utils.auth import public
 from app.utils.device_auth import (
     authenticate_device_request,
     get_device_auth_context,
@@ -61,6 +62,7 @@ def before_request_device_auth(
 
 
 @iot_bp.route("/config", methods=["GET"])
+@public
 @handle_api_errors
 @inject
 def get_config(
@@ -168,6 +170,7 @@ def _check_rotation_completion(
 
 
 @iot_bp.route("/firmware", methods=["GET"])
+@public
 @handle_api_errors
 @inject
 def get_firmware(
@@ -217,6 +220,7 @@ def get_firmware(
 
 
 @iot_bp.route("/firmware-version", methods=["GET"])
+@public
 @handle_api_errors
 @inject
 def get_firmware_version(
@@ -264,6 +268,7 @@ def get_firmware_version(
 
 
 @iot_bp.route("/provisioning", methods=["GET"])
+@public
 @handle_api_errors
 @inject
 def get_provisioning_for_rotation(

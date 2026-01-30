@@ -148,7 +148,9 @@ class KeycloakAdminService:
         try:
             existing = self._get_client_by_client_id(client_id, token)
             if existing:
-                # Client exists, get its secret
+                # Client exists - ensure it has the device scope (idempotent)
+                self._add_device_scopes_to_client(existing["id"], token)
+                # Get its secret
                 secret = self._get_client_secret(existing["id"], token)
                 duration = time.perf_counter() - start_time
                 logger.info("Client %s already exists, returning existing secret (%.3fs)", client_id, duration)
@@ -189,6 +191,9 @@ class KeycloakAdminService:
                         "Client created but could not be retrieved"
                     )
                 internal_id = client_data["id"]
+
+            # Add the device audience scope to the client
+            self._add_device_scopes_to_client(internal_id, token)
 
             # Get the generated secret
             secret = self._get_client_secret(internal_id, token)
@@ -551,3 +556,84 @@ class KeycloakAdminService:
 
         secret_data = response.json()
         return cast(str, secret_data["value"])
+
+    def _get_client_scope_by_name(self, scope_name: str, token: str) -> dict[str, Any] | None:
+        """Get client scope data by name.
+
+        Args:
+            scope_name: The name of the client scope
+            token: Admin access token
+
+        Returns:
+            Client scope data dict or None if not found
+        """
+        admin_url = self.config.keycloak_admin_url
+        response = self._http_client.get(
+            f"{admin_url}/client-scopes",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        response.raise_for_status()
+
+        scopes: list[dict[str, Any]] = response.json()
+        for scope in scopes:
+            if scope.get("name") == scope_name:
+                return scope
+        return None
+
+    def _add_default_client_scope(
+        self, client_internal_id: str, scope_internal_id: str, token: str
+    ) -> None:
+        """Add a default client scope to a client.
+
+        Args:
+            client_internal_id: Internal Keycloak client ID (UUID)
+            scope_internal_id: Internal Keycloak client scope ID (UUID)
+            token: Admin access token
+        """
+        admin_url = self.config.keycloak_admin_url
+        response = self._http_client.put(
+            f"{admin_url}/clients/{client_internal_id}/default-client-scopes/{scope_internal_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        response.raise_for_status()
+
+    def _add_device_scopes_to_client(self, client_internal_id: str, token: str) -> None:
+        """Add required scopes to a device client.
+
+        Adds the following scopes as default client scopes:
+        - The custom device audience scope (configured in KEYCLOAK_DEVICE_SCOPE_NAME)
+        - Standard OIDC scopes: openid, profile, email (required for Mosquitto JWT validation)
+
+        Args:
+            client_internal_id: Internal Keycloak client ID (UUID)
+            token: Admin access token
+        """
+        # Scopes to add: custom device scope + standard OIDC scopes
+        # Note: 'openid' is automatically included for OIDC clients, not a separate scope
+        scopes_to_add = [
+            self.config.KEYCLOAK_DEVICE_SCOPE_NAME,
+            "profile",
+            "email",
+        ]
+
+        for scope_name in scopes_to_add:
+            scope_data = self._get_client_scope_by_name(scope_name, token)
+
+            if not scope_data:
+                if scope_name == self.config.KEYCLOAK_DEVICE_SCOPE_NAME:
+                    logger.warning(
+                        "Device scope '%s' not found in Keycloak - device tokens may fail "
+                        "audience validation. Create the scope with an audience mapper.",
+                        scope_name,
+                    )
+                else:
+                    logger.warning(
+                        "Standard scope '%s' not found in Keycloak - device tokens may fail "
+                        "Mosquitto JWT validation.",
+                        scope_name,
+                    )
+                continue
+
+            scope_internal_id = scope_data["id"]
+            self._add_default_client_scope(client_internal_id, scope_internal_id, token)
+            logger.debug("Added scope '%s' to client %s", scope_name, client_internal_id)

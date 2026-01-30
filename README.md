@@ -142,11 +142,42 @@ app/
 
 ## Keycloak configuration
 
-Need an `iotsupport` client for authentication. It's authenticated and Direct access grants must be set.
+### User authentication client
 
-Also need an `iotsupport-admin` client with administrative access. That's also authenticated. The **only** authentication flow that needs to be checked is Service account roles. This enables the Service account roles tab. `manage-clients` must be added.
+Need an `iotsupport` client for user authentication. It's authenticated and Direct access grants must be set.
 
+### Admin client
 
+Need an `iotsupport-admin` client with administrative access. That's also authenticated. The **only** authentication flow that needs to be checked is Service account roles. This enables the Service account roles tab. `manage-clients` must be added.
+
+### Device client scope configuration
+
+Device clients (created automatically when provisioning devices) need specific scopes in their tokens:
+
+1. **Audience mapper** - Required for backend authentication. Without this, device authentication fails with "Token issuer or audience does not match expected values".
+
+2. **Standard OIDC scopes** - Required for Mosquitto MQTT broker JWT validation:
+   - `openid` - Required for OIDC compliance
+   - `profile` - Includes name claims
+   - `email` - Includes email claim
+
+Configure a client scope for the audience mapper:
+
+1. Go to **Client scopes** and create a new scope named `iot-device-audience` (or set `KEYCLOAK_DEVICE_SCOPE_NAME` to use a different name)
+2. In the scope's **Mappers** tab, create a new mapper:
+   - **Mapper type**: Audience
+   - **Name**: iot-audience
+   - **Included Client Audience**: Set to the value of `OIDC_AUDIENCE` (or `OIDC_CLIENT_ID` if `OIDC_AUDIENCE` is not set)
+   - **Add to access token**: ON
+
+The backend automatically adds the following scopes to device clients when they are created:
+- `iot-device-audience` (or custom name from `KEYCLOAK_DEVICE_SCOPE_NAME`)
+- `profile`
+- `email`
+
+Note: The `openid` scope is automatically included for all OIDC clients and doesn't need to be explicitly assigned.
+
+If any scope doesn't exist in Keycloak, a warning is logged but client creation continues.
 
 ## License
 

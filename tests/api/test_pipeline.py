@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 from flask import Flask
 from flask.testing import FlaskClient
 
+from app.config import Settings
 from app.services.container import ServiceContainer
 
 
@@ -48,7 +49,7 @@ class TestPipelineFirmwareUpload:
         """Test uploading firmware using model code."""
         with app.app_context():
             model_service = container.device_model_service()
-            model = model_service.create_device_model(code="pipetest", name="Pipeline Test")
+            model_service.create_device_model(code="pipetest", name="Pipeline Test")
             container.db_session().commit()
 
         firmware_content = self._create_test_firmware(b"1.0.0")
@@ -192,3 +193,175 @@ class TestPipelineFirmwareVersion:
         assert response.status_code == 404
         data = response.get_json()
         assert "nonexistent" in data["error"]
+
+
+class TestPipelineUploadScript:
+    """Tests for GET /api/pipeline/upload.sh."""
+
+    def test_get_upload_script_returns_shell_script(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that upload script endpoint returns a valid shell script."""
+        response = client.get("/api/pipeline/upload.sh")
+
+        assert response.status_code == 200
+        assert response.content_type == "text/x-shellscript; charset=utf-8"
+
+        script = response.data.decode("utf-8")
+        assert script.startswith("#!/bin/sh")
+        assert "IOTSUPPORT_CLIENT_ID" in script
+        assert "IOTSUPPORT_CLIENT_SECRET" in script
+
+    def test_get_upload_script_contains_backend_url(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that the script contains the inferred backend URL."""
+        response = client.get("/api/pipeline/upload.sh")
+
+        script = response.data.decode("utf-8")
+        # Flask test client uses localhost by default
+        assert 'BACKEND_URL="http://localhost"' in script
+
+    def test_get_upload_script_contains_token_url(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that the script contains the token URL from config."""
+        # Get the configured token URL
+        config: Settings = container.config()
+        expected_token_url = config.OIDC_TOKEN_URL or ""
+
+        response = client.get("/api/pipeline/upload.sh")
+
+        script = response.data.decode("utf-8")
+        assert f'TOKEN_URL="{expected_token_url}"' in script
+
+    def test_get_upload_script_respects_forwarded_headers(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that the script uses X-Forwarded-* headers when present."""
+        response = client.get(
+            "/api/pipeline/upload.sh",
+            headers={
+                "X-Forwarded-Proto": "https",
+                "X-Forwarded-Host": "iotsupport.example.com",
+            },
+        )
+
+        script = response.data.decode("utf-8")
+        assert 'BACKEND_URL="https://iotsupport.example.com"' in script
+
+    def test_get_upload_script_is_public(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that upload script endpoint is accessible without authentication."""
+        # This test verifies the @public decorator works
+        # The client fixture doesn't set up auth, so if this returns 200
+        # it means the endpoint is correctly marked as public
+        response = client.get("/api/pipeline/upload.sh")
+        assert response.status_code == 200
+
+    def test_get_upload_script_contains_usage_instructions(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that the script contains usage instructions."""
+        response = client.get("/api/pipeline/upload.sh")
+
+        script = response.data.decode("utf-8")
+        assert "Usage:" in script
+        assert "model_code" in script
+        assert "firmware.bin" in script
+
+    def test_get_upload_script_contains_auto_detect_logic(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that the script contains auto-detection from project_description.json."""
+        response = client.get("/api/pipeline/upload.sh")
+
+        script = response.data.decode("utf-8")
+        assert "project_description.json" in script
+        assert "project_name" in script
+        assert "Auto-detected" in script
+
+
+class TestPipelineUploadScriptPowerShell:
+    """Tests for GET /api/pipeline/upload.ps1."""
+
+    def test_get_upload_script_returns_powershell_script(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that upload script endpoint returns a valid PowerShell script."""
+        response = client.get("/api/pipeline/upload.ps1")
+
+        assert response.status_code == 200
+        assert response.content_type == "text/plain; charset=utf-8"
+
+        script = response.data.decode("utf-8")
+        assert "function Upload-Firmware" in script
+        assert "IOTSUPPORT_CLIENT_ID" in script
+        assert "IOTSUPPORT_CLIENT_SECRET" in script
+
+    def test_get_upload_script_contains_backend_url(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that the script contains the inferred backend URL."""
+        response = client.get("/api/pipeline/upload.ps1")
+
+        script = response.data.decode("utf-8")
+        # Flask test client uses localhost by default
+        assert '$BackendUrl = "http://localhost"' in script
+
+    def test_get_upload_script_contains_token_url(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that the script contains the token URL from config."""
+        config: Settings = container.config()
+        expected_token_url = config.OIDC_TOKEN_URL or ""
+
+        response = client.get("/api/pipeline/upload.ps1")
+
+        script = response.data.decode("utf-8")
+        assert f'$TokenUrl = "{expected_token_url}"' in script
+
+    def test_get_upload_script_respects_forwarded_headers(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that the script uses X-Forwarded-* headers when present."""
+        response = client.get(
+            "/api/pipeline/upload.ps1",
+            headers={
+                "X-Forwarded-Proto": "https",
+                "X-Forwarded-Host": "iotsupport.example.com",
+            },
+        )
+
+        script = response.data.decode("utf-8")
+        assert '$BackendUrl = "https://iotsupport.example.com"' in script
+
+    def test_get_upload_script_is_public(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that upload script endpoint is accessible without authentication."""
+        response = client.get("/api/pipeline/upload.ps1")
+        assert response.status_code == 200
+
+    def test_get_upload_script_contains_usage_instructions(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that the script contains usage instructions."""
+        response = client.get("/api/pipeline/upload.ps1")
+
+        script = response.data.decode("utf-8")
+        assert "Usage:" in script
+        assert "model_code" in script
+        assert "firmware.bin" in script
+
+    def test_get_upload_script_contains_auto_detect_logic(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that the script contains auto-detection from project_description.json."""
+        response = client.get("/api/pipeline/upload.ps1")
+
+        script = response.data.decode("utf-8")
+        assert "project_description.json" in script
+        assert "project_name" in script
+        assert "Auto-detected" in script

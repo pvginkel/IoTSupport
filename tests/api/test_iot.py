@@ -37,7 +37,7 @@ def create_test_device(
 
 
 class TestIotConfig:
-    """Tests for GET /iot/config."""
+    """Tests for GET /api/iot/config."""
 
     def test_get_config_success(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
@@ -49,7 +49,7 @@ class TestIotConfig:
         )
 
         # OIDC is disabled in tests, so we use query param
-        response = client.get(f"/iot/config?device_key={device_key}")
+        response = client.get(f"/api/iot/config?device_key={device_key}")
 
         assert response.status_code == 200
         data = response.get_json()
@@ -58,13 +58,13 @@ class TestIotConfig:
 
     def test_get_config_missing_key(self, client: FlaskClient) -> None:
         """Test getting config without device key."""
-        response = client.get("/iot/config")
+        response = client.get("/api/iot/config")
 
         assert response.status_code == 401
 
     def test_get_config_invalid_key(self, client: FlaskClient) -> None:
         """Test getting config with invalid device key."""
-        response = client.get("/iot/config?device_key=invalid1")
+        response = client.get("/api/iot/config?device_key=invalid1")
 
         assert response.status_code == 404
 
@@ -84,12 +84,12 @@ class TestIotConfig:
             container.db_session().flush()
 
         # Get config - should complete rotation (in test mode without real JWT validation)
-        response = client.get(f"/iot/config?device_key={device_key}")
+        response = client.get(f"/api/iot/config?device_key={device_key}")
         assert response.status_code == 200
 
 
 class TestIotFirmware:
-    """Tests for GET /iot/firmware."""
+    """Tests for GET /api/iot/firmware."""
 
     def test_get_firmware_success(
         self, app: Flask, client: FlaskClient, container: ServiceContainer, tmp_path
@@ -104,7 +104,7 @@ class TestIotFirmware:
             firmware_service = container.firmware_service()
             firmware_service.save_firmware(model_code, firmware_content)
 
-        response = client.get(f"/iot/firmware?device_key={device_key}")
+        response = client.get(f"/api/iot/firmware?device_key={device_key}")
 
         assert response.status_code == 200
         assert response.content_type == "application/octet-stream"
@@ -116,13 +116,13 @@ class TestIotFirmware:
         """Test getting firmware when none uploaded."""
         _, device_key, _ = create_test_device(app, container, model_code="fw2")
 
-        response = client.get(f"/iot/firmware?device_key={device_key}")
+        response = client.get(f"/api/iot/firmware?device_key={device_key}")
 
         assert response.status_code == 404
 
     def test_get_firmware_missing_key(self, client: FlaskClient) -> None:
         """Test getting firmware without device key."""
-        response = client.get("/iot/firmware")
+        response = client.get("/api/iot/firmware")
 
         assert response.status_code == 401
 
@@ -158,7 +158,7 @@ class TestIotFirmware:
 
 
 class TestIotFirmwareVersion:
-    """Tests for GET /iot/firmware-version."""
+    """Tests for GET /api/iot/firmware-version."""
 
     def test_get_firmware_version_success(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
@@ -180,7 +180,7 @@ class TestIotFirmwareVersion:
             device.device_model.firmware_version = "2.1.0"
             container.db_session().flush()
 
-        response = client.get(f"/iot/firmware-version?device_key={device_key}")
+        response = client.get(f"/api/iot/firmware-version?device_key={device_key}")
 
         assert response.status_code == 200
         data = response.get_json()
@@ -192,7 +192,7 @@ class TestIotFirmwareVersion:
         """Test getting firmware version when no firmware uploaded."""
         _, device_key, _ = create_test_device(app, container, model_code="fv2")
 
-        response = client.get(f"/iot/firmware-version?device_key={device_key}")
+        response = client.get(f"/api/iot/firmware-version?device_key={device_key}")
 
         assert response.status_code == 200
         data = response.get_json()
@@ -200,19 +200,19 @@ class TestIotFirmwareVersion:
 
     def test_get_firmware_version_missing_key(self, client: FlaskClient) -> None:
         """Test getting firmware version without device key."""
-        response = client.get("/iot/firmware-version")
+        response = client.get("/api/iot/firmware-version")
 
         assert response.status_code == 401
 
     def test_get_firmware_version_invalid_key(self, client: FlaskClient) -> None:
         """Test getting firmware version with invalid device key."""
-        response = client.get("/iot/firmware-version?device_key=invalid1")
+        response = client.get("/api/iot/firmware-version?device_key=invalid1")
 
         assert response.status_code == 404
 
 
 class TestIotProvisioning:
-    """Tests for GET /iot/provisioning."""
+    """Tests for GET /api/iot/provisioning."""
 
     def test_get_provisioning_regenerates_secret(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
@@ -228,7 +228,7 @@ class TestIotProvisioning:
             ), patch.object(
                 keycloak_service, "regenerate_secret", return_value="new-secret"
             ) as mock_regen:
-                response = client.get(f"/iot/provisioning?device_key={device_key}")
+                response = client.get(f"/api/iot/provisioning?device_key={device_key}")
 
                 assert response.status_code == 200
                 mock_regen.assert_called_once()
@@ -256,7 +256,7 @@ class TestIotProvisioning:
             ), patch.object(
                 keycloak_service, "regenerate_secret", return_value="new-secret"
             ):
-                response = client.get(f"/iot/provisioning?device_key={device_key}")
+                response = client.get(f"/api/iot/provisioning?device_key={device_key}")
                 assert response.status_code == 200
 
             # Verify old secret was cached (encrypted)
@@ -283,7 +283,7 @@ class TestIotProvisioning:
             ), patch.object(
                 keycloak_service, "regenerate_secret", return_value="new-secret"
             ):
-                response = client.get(f"/iot/provisioning?device_key={device_key}")
+                response = client.get(f"/api/iot/provisioning?device_key={device_key}")
                 assert response.status_code == 200
 
                 # Check secret_created_at was updated
@@ -295,7 +295,7 @@ class TestIotProvisioning:
 
     def test_get_provisioning_missing_key(self, client: FlaskClient) -> None:
         """Test getting provisioning without device key."""
-        response = client.get("/iot/provisioning")
+        response = client.get("/api/iot/provisioning")
 
         assert response.status_code == 401
 
@@ -313,7 +313,7 @@ class TestIotProvisioning:
             ), patch.object(
                 keycloak_service, "regenerate_secret", return_value="new-secret"
             ):
-                response = client.get(f"/iot/provisioning?device_key={device_key}")
+                response = client.get(f"/api/iot/provisioning?device_key={device_key}")
 
                 assert response.status_code == 200
                 data = response.get_json()
