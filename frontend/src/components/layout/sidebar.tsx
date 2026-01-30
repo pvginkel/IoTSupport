@@ -50,7 +50,7 @@ export function Sidebar({
 
   return (
     <div
-      className={`bg-zinc-950 border-r border-zinc-800 transition-all duration-300 h-full ${widthClass}`}
+      className={`bg-background border-r border-border transition-all duration-300 h-full ${widthClass}`}
       data-testid="app-shell.sidebar"
       data-state={dataState}
       data-variant={variant}
@@ -67,7 +67,7 @@ export function Sidebar({
               <li key={item.to} data-testid={`app-shell.sidebar.item.${item.testId}`}>
                 <Link
                   to={item.to}
-                  className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-zinc-400 hover:bg-zinc-900 hover:text-zinc-50 [&.active]:bg-zinc-900 [&.active]:text-zinc-50 [&.active]:font-medium whitespace-nowrap"
+                  className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-muted-foreground hover:bg-secondary hover:text-foreground [&.active]:bg-secondary [&.active]:text-foreground [&.active]:font-medium whitespace-nowrap"
                   data-testid={`app-shell.sidebar.link.${item.testId}`}
                   data-nav-target={item.to}
                   title={item.label}

@@ -41,11 +41,11 @@ interface ProvisionDeviceModalProps {
 function ProgressBar({ progress }: { progress: number }) {
   return (
     <div
-      className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden"
+      className="w-full h-2 bg-muted rounded-full overflow-hidden"
       data-testid="devices.provision-modal.progress-bar"
     >
       <div
-        className="h-full bg-blue-500 transition-all duration-300 ease-out"
+        className="h-full bg-primary transition-all duration-300 ease-out"
         style={{ width: `${progress}%` }}
       />
     </div>
@@ -64,7 +64,7 @@ function PhaseIndicator({ phase, message }: { phase: string; message: string }) 
         return <XCircle className="h-5 w-5 text-red-500" />;
       default:
         return (
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         );
     }
   };
@@ -73,7 +73,7 @@ function PhaseIndicator({ phase, message }: { phase: string; message: string }) 
     <div className="flex items-center gap-3">
       {getPhaseIcon()}
       <span
-        className="text-sm text-zinc-300"
+        className="text-sm text-muted-foreground"
         data-testid="devices.provision-modal.status-message"
       >
         {message}
@@ -184,11 +184,11 @@ export function ProvisionDeviceModal({
 
     return (
       <div className="space-y-4">
-        <div className="flex items-start gap-3 p-4 bg-zinc-800/50 border border-zinc-700 rounded-lg">
-          <Cpu className="h-5 w-5 text-blue-400 shrink-0 mt-0.5" />
-          <div className="text-sm text-zinc-300 space-y-2">
+        <div className="flex items-start gap-3 p-4 bg-secondary/50 border border-border rounded-lg">
+          <Cpu className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+          <div className="text-sm text-muted-foreground space-y-2">
             <p>To provision this device:</p>
-            <ol className="list-decimal list-inside space-y-1 text-zinc-400">
+            <ol className="list-decimal list-inside space-y-1 text-muted-foreground/80">
               <li>Connect your ESP32 device via USB</li>
               <li>Click "Connect" and select the device from the browser popup</li>
               <li>Wait for the credentials to be written to the device</li>

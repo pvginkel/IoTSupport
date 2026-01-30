@@ -93,7 +93,7 @@ function KeycloakClientStatus({ deviceId }: KeycloakClientStatusProps) {
   // Show loading state
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-zinc-400">
+      <div className="flex items-center gap-2 text-muted-foreground">
         <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
         <span>Checking Keycloak status...</span>
       </div>
@@ -103,7 +103,7 @@ function KeycloakClientStatus({ deviceId }: KeycloakClientStatusProps) {
   // Show error state
   if (isError || !status) {
     return (
-      <span className="text-zinc-500" data-testid="devices.editor.keycloak-status-error">
+      <span className="text-muted-foreground" data-testid="devices.editor.keycloak-status-error">
         Unable to check Keycloak status
       </span>
     )
@@ -124,7 +124,7 @@ function KeycloakClientStatus({ deviceId }: KeycloakClientStatusProps) {
             href={status.consoleUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-zinc-400 hover:text-zinc-200"
+            className="text-muted-foreground hover:text-foreground"
             title="Open in Keycloak console"
             data-testid="devices.editor.keycloak-console-link"
           >
@@ -134,7 +134,7 @@ function KeycloakClientStatus({ deviceId }: KeycloakClientStatusProps) {
         <button
           onClick={startSync}
           disabled={isBlinking}
-          className="cursor-pointer text-zinc-400 hover:text-zinc-200 disabled:cursor-not-allowed"
+          className="cursor-pointer text-muted-foreground hover:text-foreground disabled:cursor-not-allowed"
           title="Resync Keycloak client"
           data-testid="devices.editor.keycloak-sync"
         >
@@ -377,10 +377,10 @@ export function DeviceEditor({
 
   return (
     <div className="flex h-full flex-col" data-testid="devices.editor">
-      <div className="border-b border-zinc-800 bg-zinc-950 p-4">
+      <div className="border-b border-border bg-background p-4">
         <div className="flex items-center justify-between">
           {/* Left side: Title */}
-          <h1 className="text-2xl font-bold text-zinc-50">
+          <h1 className="text-2xl font-bold text-foreground">
             {getTitle()}
           </h1>
           {/* Right side: Device actions + separator + form actions */}
@@ -399,7 +399,7 @@ export function DeviceEditor({
                   Provision Device
                 </Button>
                 {/* Vertical separator */}
-                <div className="h-6 w-px bg-zinc-700 mx-1" />
+                <div className="h-6 w-px bg-border mx-1" />
               </>
             )}
             <Button
@@ -438,11 +438,11 @@ export function DeviceEditor({
           {/* Device Key (read-only in edit mode) */}
           {mode === 'edit' && initialKey && (
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
+              <label className="block text-sm font-medium text-muted-foreground mb-2">
                 Device Key
               </label>
               <div className="flex items-center">
-                <span className="font-mono text-zinc-50" data-testid="devices.editor.key-display">
+                <span className="font-mono text-foreground" data-testid="devices.editor.key-display">
                   {initialKey}
                 </span>
               </div>
@@ -452,7 +452,7 @@ export function DeviceEditor({
           {/* Keycloak Client Status (edit mode only) */}
           {mode === 'edit' && deviceId && (
             <div data-testid="devices.editor.keycloak-section">
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
+              <label className="block text-sm font-medium text-muted-foreground mb-2">
                 Keycloak Client
               </label>
               <KeycloakClientStatus deviceId={deviceId} />
@@ -461,7 +461,7 @@ export function DeviceEditor({
 
           {/* Device Model Selection */}
           <div>
-            <label htmlFor="device-model" className="block text-sm font-medium text-zinc-300 mb-2">
+            <label htmlFor="device-model" className="block text-sm font-medium text-muted-foreground mb-2">
               Device Model
             </label>
             {mode === 'edit' ? (
@@ -471,13 +471,13 @@ export function DeviceEditor({
                   <Link
                     to="/device-models/$modelId"
                     params={{ modelId: String(initialDeviceModelId) }}
-                    className="text-blue-400 hover:text-blue-300 hover:underline"
+                    className="text-link hover:text-link-hover hover:underline"
                     data-testid="devices.editor.model-display"
                   >
                     {initialDeviceModel ? `${initialDeviceModel.name} (${initialDeviceModel.code})` : 'Unknown'}
                   </Link>
                 ) : (
-                  <span className="text-zinc-50" data-testid="devices.editor.model-display">
+                  <span className="text-foreground" data-testid="devices.editor.model-display">
                     Unknown
                   </span>
                 )}
@@ -501,7 +501,7 @@ export function DeviceEditor({
                   </SelectContent>
                 </Select>
                 {selectedModel && (
-                  <p className="mt-1 text-xs text-zinc-500">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {selectedModel.deviceCount} device{selectedModel.deviceCount !== 1 ? 's' : ''} using this model
                     {selectedModel.firmwareVersion && ` | Firmware: ${selectedModel.firmwareVersion}`}
                   </p>
@@ -513,13 +513,13 @@ export function DeviceEditor({
           {/* JSON Configuration */}
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <label htmlFor="json-config" className="block text-sm font-medium text-zinc-300">
+              <label htmlFor="json-config" className="block text-sm font-medium text-muted-foreground">
                 Configuration (JSON)
               </label>
-              {jsonError && <span className="text-sm text-red-400">{jsonError}</span>}
+              {jsonError && <span className="text-sm text-destructive">{jsonError}</span>}
             </div>
             <div
-              className="rounded-md border border-zinc-700 overflow-hidden"
+              className="rounded-md border border-border overflow-hidden"
               style={{ height: '425px' }}
               data-testid="devices.editor.json-editor"
               data-state={jsonError ? 'invalid' : 'valid'}

@@ -19,14 +19,14 @@ interface TopBarProps {
 export function TopBar({ onMenuToggle, isMobile = false }: TopBarProps) {
   return (
     <header
-      className="flex h-14 items-center border-b border-zinc-800 bg-zinc-950 px-4"
+      className="flex h-14 items-center border-b border-border bg-background px-4"
       data-testid="app-shell.topbar"
     >
       {/* Hamburger menu button */}
       <button
         type="button"
         onClick={onMenuToggle}
-        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-900 hover:text-zinc-50 transition-colors"
+        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
         aria-label={isMobile ? 'Toggle mobile menu' : 'Toggle sidebar'}
         data-testid="app-shell.topbar.hamburger"
       >
@@ -49,7 +49,7 @@ export function TopBar({ onMenuToggle, isMobile = false }: TopBarProps) {
       {/* Logo and title - links to home */}
       <Link
         to="/"
-        className="ml-3 flex items-center gap-2 text-zinc-50 hover:text-zinc-200 transition-colors text-xl"
+        className="ml-3 flex items-center gap-2 text-foreground hover:text-primary transition-colors text-xl"
         data-testid="app-shell.topbar.home-link"
       >
         {/* Logo - 110% of text height via em units inherited from parent font-size */}

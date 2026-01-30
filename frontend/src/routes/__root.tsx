@@ -74,7 +74,7 @@ function AppShellFrame() {
 
   return (
     <div
-      className="flex h-screen flex-col overflow-hidden bg-zinc-950"
+      className="flex h-screen flex-col overflow-hidden bg-background"
       data-testid="app-shell.root"
       data-mobile-menu-state={mobileMenuOpen ? 'open' : 'closed'}
     >

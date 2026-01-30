@@ -7,7 +7,7 @@ import type { DeviceSummary } from '@/hooks/use-devices'
 import type { DeviceModelSummary } from '@/hooks/use-device-models'
 import type { SortPreference } from '@/lib/utils/sort-preferences'
 
-// Helper to get rotation state badge styling
+// Helper to get rotation state badge styling - using semantic and status colors
 function getRotationStateBadge(state: string): { bgColor: string; textColor: string } {
   switch (state.toUpperCase()) {
     case 'OK':
@@ -15,11 +15,11 @@ function getRotationStateBadge(state: string): { bgColor: string; textColor: str
     case 'QUEUED':
       return { bgColor: 'bg-yellow-900/30', textColor: 'text-yellow-400' }
     case 'PENDING':
-      return { bgColor: 'bg-blue-900/30', textColor: 'text-blue-400' }
+      return { bgColor: 'bg-primary/20', textColor: 'text-primary' }
     case 'TIMEOUT':
       return { bgColor: 'bg-red-900/30', textColor: 'text-red-400' }
     default:
-      return { bgColor: 'bg-zinc-800', textColor: 'text-zinc-400' }
+      return { bgColor: 'bg-muted', textColor: 'text-muted-foreground' }
   }
 }
 
@@ -95,7 +95,7 @@ export function DeviceListTable({
     return (
       <th
         key={column}
-        className="px-4 py-3 text-left text-sm font-semibold text-zinc-50 cursor-pointer hover:bg-zinc-800"
+        className="px-4 py-3 text-left text-sm font-semibold text-foreground cursor-pointer hover:bg-secondary"
         onClick={() => onSortChange(column)}
         data-testid={`devices.list.header.${column}`}
       >
@@ -112,7 +112,7 @@ export function DeviceListTable({
   return (
     <div className="overflow-x-auto" data-testid="devices.list.table">
       <table className="w-full border-collapse">
-        <thead className="border-b border-zinc-800">
+        <thead className="border-b border-border">
           <tr>
             {renderSortHeader('key', 'Device Key')}
             {renderSortHeader('modelName', 'Model')}
@@ -120,7 +120,7 @@ export function DeviceListTable({
             {renderSortHeader('deviceEntityId', 'Entity ID')}
             {renderSortHeader('rotationState', 'Rotation State')}
             {renderSortHeader('enableOta', 'OTA Status')}
-            <th className="px-4 py-3 text-right text-sm font-semibold text-zinc-50">Actions</th>
+            <th className="px-4 py-3 text-right text-sm font-semibold text-foreground">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -129,27 +129,27 @@ export function DeviceListTable({
             return (
               <tr
                 key={device.id}
-                className="border-b border-zinc-800 hover:bg-zinc-900"
+                className="border-b border-border hover:bg-secondary/50"
                 data-testid="devices.list.row"
                 data-device-id={device.id}
                 data-device-key={device.key}
                 data-rotation-state={device.rotationState}
               >
-                <td className="px-4 py-3 text-sm text-zinc-50 font-mono">{device.key}</td>
-                <td className="px-4 py-3 text-sm text-zinc-300" data-testid="devices.list.row.model">
+                <td className="px-4 py-3 text-sm text-foreground font-mono">{device.key}</td>
+                <td className="px-4 py-3 text-sm text-muted-foreground" data-testid="devices.list.row.model">
                   {device.modelName}
                 </td>
-                <td className="px-4 py-3 text-sm text-zinc-300">{device.deviceName || '—'}</td>
-                <td className="px-4 py-3 text-sm text-zinc-300 font-mono">{device.deviceEntityId || '—'}</td>
+                <td className="px-4 py-3 text-sm text-muted-foreground">{device.deviceName || '—'}</td>
+                <td className="px-4 py-3 text-sm text-muted-foreground font-mono">{device.deviceEntityId || '—'}</td>
                 <td className="px-4 py-3 text-sm" data-testid="devices.list.row.rotation-state">
                   <span className={`px-2 py-1 rounded-md text-xs ${rotationBadge.bgColor} ${rotationBadge.textColor}`}>
                     {device.rotationState}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-sm text-zinc-300">
+                <td className="px-4 py-3 text-sm text-muted-foreground">
                   {device.enableOta === true && <span className="text-green-400">✓</span>}
                   {device.enableOta === false && <span className="text-red-400">✕</span>}
-                  {device.enableOta === null && <span className="text-zinc-600">—</span>}
+                  {device.enableOta === null && <span className="text-muted-foreground/50">—</span>}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-2">

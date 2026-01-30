@@ -60,7 +60,7 @@ export function DeviceModelListTable({
     return (
       <th
         key={column}
-        className="px-4 py-3 text-left text-sm font-semibold text-zinc-50 cursor-pointer hover:bg-zinc-800"
+        className="px-4 py-3 text-left text-sm font-semibold text-foreground cursor-pointer hover:bg-secondary"
         onClick={() => onSortChange(column)}
         data-testid={`device-models.list.header.${column}`}
       >
@@ -77,37 +77,37 @@ export function DeviceModelListTable({
   return (
     <div className="overflow-x-auto" data-testid="device-models.list.table">
       <table className="w-full border-collapse">
-        <thead className="border-b border-zinc-800">
+        <thead className="border-b border-border">
           <tr>
             {renderSortHeader('code', 'Code')}
             {renderSortHeader('name', 'Name')}
             {renderSortHeader('deviceCount', 'Devices')}
-            <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-50">Schema</th>
-            <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-50">Firmware</th>
-            <th className="px-4 py-3 text-right text-sm font-semibold text-zinc-50">Actions</th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Schema</th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-foreground">Firmware</th>
+            <th className="px-4 py-3 text-right text-sm font-semibold text-foreground">Actions</th>
           </tr>
         </thead>
         <tbody>
           {sortedModels.map((model) => (
             <tr
               key={model.id}
-              className="border-b border-zinc-800 hover:bg-zinc-900"
+              className="border-b border-border hover:bg-secondary/50"
               data-testid="device-models.list.row"
               data-model-id={model.id}
               data-model-code={model.code}
             >
-              <td className="px-4 py-3 text-sm text-zinc-50 font-mono">{model.code}</td>
-              <td className="px-4 py-3 text-sm text-zinc-300">{model.name}</td>
-              <td className="px-4 py-3 text-sm text-zinc-300">{model.deviceCount}</td>
-              <td className="px-4 py-3 text-sm text-zinc-300">
+              <td className="px-4 py-3 text-sm text-foreground font-mono">{model.code}</td>
+              <td className="px-4 py-3 text-sm text-muted-foreground">{model.name}</td>
+              <td className="px-4 py-3 text-sm text-muted-foreground">{model.deviceCount}</td>
+              <td className="px-4 py-3 text-sm text-muted-foreground">
                 {model.hasConfigSchema ? (
                   <span className="text-green-400">Defined</span>
                 ) : (
-                  <span className="text-zinc-600">None</span>
+                  <span className="text-muted-foreground/50">None</span>
                 )}
               </td>
-              <td className="px-4 py-3 text-sm text-zinc-300 font-mono">
-                {model.firmwareVersion || <span className="text-zinc-600">—</span>}
+              <td className="px-4 py-3 text-sm text-muted-foreground font-mono">
+                {model.firmwareVersion || <span className="text-muted-foreground/50">—</span>}
               </td>
               <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">

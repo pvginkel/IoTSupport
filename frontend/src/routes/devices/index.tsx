@@ -58,8 +58,8 @@ function DeviceList() {
   if (error) {
     return (
       <div className="p-8" data-testid="devices.list.error">
-        <h1 className="text-2xl font-bold text-zinc-50">Devices</h1>
-        <p className="mt-4 text-red-400">Failed to load devices: {error.message}</p>
+        <h1 className="text-2xl font-bold text-foreground">Devices</h1>
+        <p className="mt-4 text-destructive">Failed to load devices: {error.message}</p>
       </div>
     )
   }
@@ -68,7 +68,7 @@ function DeviceList() {
     return (
       <div className="p-8">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-zinc-50">Devices</h1>
+          <h1 className="text-2xl font-bold text-foreground">Devices</h1>
           <Link to="/devices/new">
             <Button variant="primary" data-testid="devices.list.header.new-device">
               New Device
@@ -92,7 +92,7 @@ function DeviceList() {
   return (
     <div className="p-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-zinc-50">Devices</h1>
+        <h1 className="text-2xl font-bold text-foreground">Devices</h1>
         <Link to="/devices/new">
           <Button variant="primary" data-testid="devices.list.header.new-device">
             New Device

@@ -28,15 +28,15 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   }, ref) => {
     const Comp = asChild ? Slot : 'button'
 
-    const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:pointer-events-none disabled:opacity-50 cursor-pointer'
+    const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 cursor-pointer'
 
     const variantClasses = {
-      default: 'bg-zinc-800 text-zinc-50 hover:bg-zinc-700 border border-zinc-700',
-      primary: 'bg-blue-600 text-zinc-50 hover:bg-blue-700',
-      secondary: 'bg-zinc-700 text-zinc-50 hover:bg-zinc-600',
-      outline: 'border border-zinc-700 bg-transparent hover:bg-zinc-800 text-zinc-50',
-      ghost: 'hover:bg-zinc-800 text-zinc-50',
-      destructive: 'bg-red-600 text-zinc-50 hover:bg-red-700'
+      default: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border',
+      primary: 'bg-primary text-primary-foreground hover:bg-primary/90',
+      secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+      outline: 'border border-border bg-transparent hover:bg-secondary text-foreground',
+      ghost: 'hover:bg-secondary text-foreground',
+      destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
     }
 
     const sizeClasses = {

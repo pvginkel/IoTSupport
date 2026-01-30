@@ -20,7 +20,7 @@ interface AuthGateProps {
 function AuthLoading() {
   return (
     <div
-      className="h-screen w-full bg-zinc-950"
+      className="h-screen w-full bg-background"
       data-testid="auth.gate.loading"
     />
   )
@@ -93,13 +93,13 @@ function AuthError({ error, onRetry }: { error: Error; onRetry: () => void }) {
 
   return (
     <div
-      className="flex h-screen w-full items-center justify-center bg-zinc-950"
+      className="flex h-screen w-full items-center justify-center bg-background"
       data-testid="auth.gate.error"
     >
-      <div className="flex max-w-md flex-col items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-8 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-900/50">
+      <div className="flex max-w-md flex-col items-center gap-4 rounded-lg border border-border bg-card p-8 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/20">
           <svg
-            className="h-6 w-6 text-red-400"
+            className="h-6 w-6 text-destructive"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -113,8 +113,8 @@ function AuthError({ error, onRetry }: { error: Error; onRetry: () => void }) {
             />
           </svg>
         </div>
-        <h2 className="text-lg font-semibold text-zinc-50">{title}</h2>
-        <p className="text-sm text-zinc-400">{description}</p>
+        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+        <p className="text-sm text-muted-foreground">{description}</p>
         <Button
           variant="primary"
           onClick={onRetry}

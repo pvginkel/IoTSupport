@@ -15,7 +15,7 @@ function EditDeviceModelRoute() {
   if (isNaN(numericId)) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
-        <p className="text-red-400">Invalid model ID</p>
+        <p className="text-destructive">Invalid model ID</p>
         <Link to="/device-models">
           <Button variant="outline">Back to Device Models</Button>
         </Link>
@@ -26,7 +26,7 @@ function EditDeviceModelRoute() {
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-zinc-400">Loading device model...</p>
+        <p className="text-muted-foreground">Loading device model...</p>
       </div>
     )
   }
@@ -35,7 +35,7 @@ function EditDeviceModelRoute() {
     const errorMessage = error?.message || 'Device model not found'
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
-        <p className="text-red-400">{errorMessage}</p>
+        <p className="text-destructive">{errorMessage}</p>
         <Link to="/device-models">
           <Button variant="outline">Back to Device Models</Button>
         </Link>

@@ -67,7 +67,7 @@ export function UserDropdown() {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-900 hover:text-zinc-50 transition-colors"
+        className="flex cursor-pointer items-center gap-1 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
         aria-expanded={isOpen}
         aria-haspopup="true"
         data-testid="app-shell.topbar.user"
@@ -92,7 +92,7 @@ export function UserDropdown() {
       {/* Dropdown menu */}
       {isOpen && (
         <div
-          className="absolute right-0 top-full z-50 mt-1 w-48 rounded-md border border-zinc-800 bg-zinc-900 py-1 shadow-lg"
+          className="absolute right-0 top-full z-50 mt-1 w-48 rounded-md border border-border bg-popover py-1 shadow-lg"
           role="menu"
           aria-orientation="vertical"
           data-testid="app-shell.topbar.user.dropdown"
@@ -100,7 +100,7 @@ export function UserDropdown() {
           <button
             type="button"
             onClick={handleLogout}
-            className="flex w-full cursor-pointer items-center px-4 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-50 transition-colors"
+            className="flex w-full cursor-pointer items-center px-4 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
             role="menuitem"
             data-testid="app-shell.topbar.user.logout"
           >

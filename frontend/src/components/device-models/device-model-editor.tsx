@@ -214,9 +214,9 @@ export function DeviceModelEditor({
 
   return (
     <div className="flex h-full flex-col" data-testid="device-models.editor">
-      <div className="border-b border-zinc-800 bg-zinc-950 p-4">
+      <div className="border-b border-border bg-background p-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-zinc-50">
+          <h1 className="text-2xl font-bold text-foreground">
             {getTitle()}
           </h1>
           <div className="flex items-center gap-2">
@@ -245,12 +245,12 @@ export function DeviceModelEditor({
         <div className="mx-auto max-w-4xl space-y-6">
           {/* Model Code */}
           <div>
-            <label htmlFor="model-code" className="block text-sm font-medium text-zinc-300 mb-2">
+            <label htmlFor="model-code" className="block text-sm font-medium text-muted-foreground mb-2">
               Model Code
             </label>
             {mode === 'edit' ? (
               <div className="flex items-center">
-                <span className="font-mono text-zinc-50" data-testid="device-models.editor.code-display">
+                <span className="font-mono text-foreground" data-testid="device-models.editor.code-display">
                   {initialCode}
                 </span>
               </div>
@@ -264,7 +264,7 @@ export function DeviceModelEditor({
                   disabled={isPending}
                   data-testid="device-models.editor.code-input"
                 />
-                <p className="mt-1 text-xs text-zinc-500">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Unique identifier for this model (lowercase, alphanumeric, underscores allowed)
                 </p>
               </>
@@ -273,7 +273,7 @@ export function DeviceModelEditor({
 
           {/* Model Name */}
           <div>
-            <label htmlFor="model-name" className="block text-sm font-medium text-zinc-300 mb-2">
+            <label htmlFor="model-name" className="block text-sm font-medium text-muted-foreground mb-2">
               Model Name
             </label>
             <Input
@@ -284,7 +284,7 @@ export function DeviceModelEditor({
               disabled={isPending}
               data-testid="device-models.editor.name-input"
             />
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Human-readable name for this device model
             </p>
           </div>
@@ -292,11 +292,11 @@ export function DeviceModelEditor({
           {/* JSON Schema */}
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <label htmlFor="json-schema" className="block text-sm font-medium text-zinc-300">
+              <label htmlFor="json-schema" className="block text-sm font-medium text-muted-foreground">
                 Configuration Schema (JSON Schema)
               </label>
               <div className="flex items-center gap-2">
-                {jsonError && <span className="text-sm text-red-400">{jsonError}</span>}
+                {jsonError && <span className="text-sm text-destructive">{jsonError}</span>}
                 <Button
                   variant="outline"
                   size="sm"
@@ -309,7 +309,7 @@ export function DeviceModelEditor({
               </div>
             </div>
             <div
-              className="rounded-md border border-zinc-700 overflow-hidden"
+              className="rounded-md border border-border overflow-hidden"
               style={{ height: '350px' }}
               data-testid="device-models.editor.schema-editor"
               data-state={jsonError ? 'invalid' : 'valid'}
@@ -329,7 +329,7 @@ export function DeviceModelEditor({
                 }}
               />
             </div>
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Optional JSON Schema to validate device configurations. Leave empty for no validation.
             </p>
           </div>

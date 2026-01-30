@@ -111,7 +111,7 @@ function DeviceTable({ devices, textColor, modelNameMap }: DeviceTableProps) {
 
   return (
     <table className="w-full border-collapse">
-      <thead className="border-b border-zinc-700">
+      <thead className="border-b border-border">
         <tr>
           <th className={`px-4 py-2 text-left text-sm font-semibold ${textColor} whitespace-nowrap`}>Device Key</th>
           <th className={`px-4 py-2 text-left text-sm font-semibold ${textColor}`} style={{ width: '25%' }}>Device Name</th>
@@ -127,7 +127,7 @@ function DeviceTable({ devices, textColor, modelNameMap }: DeviceTableProps) {
           return (
             <tr
               key={device.id}
-              className="border-b border-zinc-700/50 hover:bg-zinc-800/30"
+              className="border-b border-border/50 hover:bg-secondary/30"
               data-testid="rotation.dashboard.row"
               data-device-id={device.id}
               data-rotation-state={device.rotationState}
@@ -219,7 +219,7 @@ function StackedBar({ healthy, warning, critical }: StackedBarProps) {
 
   if (total === 0) {
     return (
-      <div className="h-10 bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 text-sm">
+      <div className="h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground text-sm">
         No devices
       </div>
     )
@@ -342,8 +342,8 @@ export function RotationDashboard() {
   if (error) {
     return (
       <div className="p-8" data-testid="rotation.dashboard.error">
-        <h1 className="text-2xl font-bold text-zinc-50">Rotation Dashboard</h1>
-        <p className="mt-4 text-red-400">Failed to load rotation data: {error.message}</p>
+        <h1 className="text-2xl font-bold text-foreground">Rotation Dashboard</h1>
+        <p className="mt-4 text-destructive">Failed to load rotation data: {error.message}</p>
       </div>
     )
   }
@@ -351,7 +351,7 @@ export function RotationDashboard() {
   return (
     <div className="p-8" data-testid="rotation.dashboard">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-zinc-50">Rotation Dashboard</h1>
+        <h1 className="text-2xl font-bold text-foreground">Rotation Dashboard</h1>
         <Button
           variant="primary"
           onClick={handleTriggerRotation}
@@ -379,30 +379,30 @@ export function RotationDashboard() {
 
       {/* Schedule Info */}
       {status && (
-        <div className="mb-6 bg-zinc-900 rounded-lg p-4 border border-zinc-800" data-testid="rotation.dashboard.schedule">
+        <div className="mb-6 bg-card rounded-lg p-4 border border-border" data-testid="rotation.dashboard.schedule">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <div className="text-zinc-400 text-sm">Last Rotation Completed</div>
-              <div className="text-zinc-50">{formatDate(status.lastRotationCompletedAt)}</div>
+              <div className="text-muted-foreground text-sm">Last Rotation Completed</div>
+              <div className="text-foreground">{formatDate(status.lastRotationCompletedAt)}</div>
             </div>
             <div>
-              <div className="text-zinc-400 text-sm">Next Scheduled Rotation</div>
-              <div className="text-zinc-50">{formatDate(status.nextScheduledRotation)}</div>
+              <div className="text-muted-foreground text-sm">Next Scheduled Rotation</div>
+              <div className="text-foreground">{formatDate(status.nextScheduledRotation)}</div>
             </div>
             <div>
-              <div className="text-zinc-400 text-sm">Currently Pending</div>
+              <div className="text-muted-foreground text-sm">Currently Pending</div>
               {status.pendingDeviceId ? (
                 <Link
                   to="/devices/$deviceId"
                   params={{ deviceId: String(status.pendingDeviceId) }}
-                  className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300"
+                  className="inline-flex items-center gap-1 text-link hover:text-link-hover"
                   data-testid="rotation.dashboard.pending-device-link"
                 >
                   View Device
                   <ExternalLink className="h-3 w-3" />
                 </Link>
               ) : (
-                <div className="text-zinc-50" data-testid="rotation.dashboard.no-pending">
+                <div className="text-foreground" data-testid="rotation.dashboard.no-pending">
                   None
                 </div>
               )}

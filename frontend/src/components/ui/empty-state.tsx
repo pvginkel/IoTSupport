@@ -23,9 +23,9 @@ export function EmptyState({
       className={cn('flex flex-col items-center justify-center p-8 text-center', className)}
       data-testid={testId}
     >
-      {icon && <div className="mb-4 text-zinc-500">{icon}</div>}
-      <h3 className="text-lg font-semibold text-zinc-50">{title}</h3>
-      {description && <p className="mt-2 text-sm text-zinc-400">{description}</p>}
+      {icon && <div className="mb-4 text-muted-foreground">{icon}</div>}
+      <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+      {description && <p className="mt-2 text-sm text-muted-foreground">{description}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   )
