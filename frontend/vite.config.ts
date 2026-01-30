@@ -78,6 +78,14 @@ export default defineConfig({
         target: backendProxyTarget,
         changeOrigin: true,
         secure: false,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (req.headers.host) {
+              proxyReq.setHeader('X-Forwarded-Host', req.headers.host);
+              proxyReq.setHeader('X-Forwarded-Proto', 'http');
+            }
+          });
+        },
       }
     },
     watch: process.env.VITE_TEST_MODE === 'true'
@@ -92,6 +100,14 @@ export default defineConfig({
         target: backendProxyTarget,
         changeOrigin: true,
         secure: false,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (req.headers.host) {
+              proxyReq.setHeader('X-Forwarded-Host', req.headers.host);
+              proxyReq.setHeader('X-Forwarded-Proto', 'http');
+            }
+          });
+        },
       }
     }
   },
