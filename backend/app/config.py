@@ -73,7 +73,8 @@ class Environment(BaseSettings):
     )
 
     # Firmware storage directory
-    ASSETS_DIR: Path = Field(
+    ASSETS_DIR: Path | None = Field(
+        default=None,
         description="Path to firmware storage directory"
     )
 
@@ -84,7 +85,8 @@ class Environment(BaseSettings):
     )
 
     # MQTT settings
-    MQTT_URL: str = Field(
+    MQTT_URL: str | None = Field(
+        default=None,
         description="MQTT broker URL (e.g., mqtt://localhost:1883, mqtts://broker:8883)"
     )
     MQTT_USERNAME: str | None = Field(
@@ -177,15 +179,18 @@ class Environment(BaseSettings):
     )
 
     # WiFi Credentials for Provisioning
-    WIFI_SSID: str = Field(
+    WIFI_SSID: str | None = Field(
+        default=None,
         description="WiFi SSID for device provisioning"
     )
-    WIFI_PASSWORD: str = Field(
+    WIFI_PASSWORD: str | None = Field(
+        default=None,
         description="WiFi password for device provisioning"
     )
 
     # Logging Endpoint for Provisioning
-    LOGGING_URL: str = Field(
+    LOGGING_URL: str | None = Field(
+        default=None,
         description="Logging service endpoint URL for device metrics and logs"
     )
 
@@ -232,13 +237,13 @@ class Settings(BaseModel):
     database_url: str
 
     # Firmware storage directory
-    assets_dir: Path
+    assets_dir: Path | None
 
     # CORS settings
     cors_origins: list[str]
 
     # MQTT settings
-    mqtt_url: str
+    mqtt_url: str | None
     mqtt_username: str | None
     mqtt_password: str | None
 
@@ -268,11 +273,11 @@ class Settings(BaseModel):
     keycloak_console_base_url: str | None  # Resolved: computed from base + realm
 
     # WiFi Credentials for Provisioning
-    wifi_ssid: str
-    wifi_password: str
+    wifi_ssid: str | None
+    wifi_password: str | None
 
     # Logging Endpoint for Provisioning
-    logging_url: str
+    logging_url: str | None
 
     # Rotation Settings
     rotation_cron: str | None
@@ -339,10 +344,22 @@ class Settings(BaseModel):
                 f"Keycloak settings required for device provisioning: {', '.join(keycloak_missing)}"
             )
 
+        # ASSETS_DIR required for firmware storage
+        if self.is_production and not self.assets_dir:
+            errors.append(
+                "ASSETS_DIR must be set for firmware storage"
+            )
+
         # MQTT_URL required for provisioning
         if self.is_production and not self.mqtt_url:
             errors.append(
                 "MQTT_URL must be set for device provisioning"
+            )
+
+        # LOGGING_URL required for device provisioning
+        if self.is_production and not self.logging_url:
+            errors.append(
+                "LOGGING_URL must be set for device provisioning"
             )
 
         # WiFi settings required for provisioning
@@ -404,7 +421,7 @@ class Settings(BaseModel):
             Settings instance with all values resolved
         """
         if env is None:
-            env = Environment()  # type: ignore[call-arg]
+            env = Environment()
 
         # Helper to strip trailing slashes from URLs
         def strip_slashes(url: str | None) -> str | None:
