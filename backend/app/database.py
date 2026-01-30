@@ -76,51 +76,43 @@ def get_current_revision() -> str | None:
 
 
 def get_pending_migrations() -> list[str]:
-    """Get list of pending migration revisions.
+    """Get list of pending migration revisions."""
+    config = _get_alembic_config()
 
-    Optimized version that reduces queries by reusing connection and catching exceptions.
-    """
-    try:
-        config = _get_alembic_config()
+    with db.engine.connect() as connection:
+        config.attributes["connection"] = connection
+        script = ScriptDirectory.from_config(config)
 
-        with db.engine.connect() as connection:
-            config.attributes["connection"] = connection
-            script = ScriptDirectory.from_config(config)
+        # Get current revision (optimized to use single query)
+        current_rev = get_current_revision()
 
-            # Get current revision (optimized to use single query)
-            current_rev = get_current_revision()
+        # Get head revision from script directory (no DB query, just reads migration files)
+        head_rev = script.get_current_head()
 
-            # Get head revision from script directory (no DB query, just reads migration files)
-            head_rev = script.get_current_head()
+        if not head_rev:
+            return []
 
-            if not head_rev:
-                return []
-
-            if not current_rev:
-                # No migrations applied yet, return all from base to head
-                revisions = []
-                for rev in script.walk_revisions(base="base", head=head_rev):
-                    if rev.revision != head_rev:  # Don't include head twice
-                        revisions.append(rev.revision)
-                revisions.reverse()  # Want chronological order
-                revisions.append(head_rev)
-                return revisions
-
-            if current_rev == head_rev:
-                return []  # Up to date
-
-            # Get pending revisions between current and head
+        if not current_rev:
+            # No migrations applied yet, return all from base to head
             revisions = []
-            for rev in script.walk_revisions(base=current_rev, head=head_rev):
-                if rev.revision != current_rev:  # Don't include current
+            for rev in script.walk_revisions(base="base", head=head_rev):
+                if rev.revision != head_rev:  # Don't include head twice
                     revisions.append(rev.revision)
-
             revisions.reverse()  # Want chronological order
+            revisions.append(head_rev)
             return revisions
 
-    except Exception:
-        # On any error, treat as no pending migrations (fail safe)
-        return []
+        if current_rev == head_rev:
+            return []  # Up to date
+
+        # Get pending revisions between current and head
+        revisions = []
+        for rev in script.walk_revisions(base=current_rev, head=head_rev):
+            if rev.revision != current_rev:  # Don't include current
+                revisions.append(rev.revision)
+
+        revisions.reverse()  # Want chronological order
+        return revisions
 
 
 def drop_all_tables() -> None:
