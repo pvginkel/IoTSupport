@@ -208,12 +208,6 @@ class Environment(BaseSettings):
         description="Days after which a timed-out device is considered critical"
     )
 
-    # Secret Encryption Key (for cached_secret encryption)
-    # Derived from SECRET_KEY if not explicitly set
-    FERNET_KEY: str | None = Field(
-        default=None,
-        description="Fernet encryption key for cached secrets (32-byte base64 encoded)"
-    )
 
 
 class Settings(BaseModel):
@@ -284,7 +278,7 @@ class Settings(BaseModel):
     rotation_timeout_seconds: int
     rotation_critical_threshold_days: int | None
 
-    # Secret Encryption Key (resolved: explicit or derived from secret_key)
+    # Secret Encryption Key (derived from secret_key)
     fernet_key: str
 
     # SQLAlchemy engine options
@@ -324,12 +318,6 @@ class Settings(BaseModel):
                 "(current value is the insecure default)"
             )
 
-        # FERNET_KEY should be explicitly set in production
-        # (we always have a derived one, but production should be explicit)
-        if self.is_production and self.fernet_key == _derive_fernet_key(_DEFAULT_SECRET_KEY):
-            errors.append(
-                "FERNET_KEY must be set in production for encrypted secret storage"
-            )
 
         # Keycloak settings required when provisioning is used
         keycloak_settings = [
@@ -431,11 +419,8 @@ class Settings(BaseModel):
         baseurl = strip_slashes(env.BASEURL) or "http://localhost:3200"
         device_baseurl = strip_slashes(env.DEVICE_BASEURL) or baseurl
 
-        # Compute Fernet key: use explicit value or derive from secret_key
-        if env.FERNET_KEY:
-            fernet_key = env.FERNET_KEY
-        else:
-            fernet_key = _derive_fernet_key(env.SECRET_KEY)
+        # Derive Fernet key from SECRET_KEY for encrypting cached secrets
+        fernet_key = _derive_fernet_key(env.SECRET_KEY)
 
         # Compute OIDC audience: use explicit value or fall back to client_id
         oidc_audience = env.OIDC_AUDIENCE or env.OIDC_CLIENT_ID
