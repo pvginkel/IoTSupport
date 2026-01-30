@@ -12,8 +12,9 @@ WORKDIR /app
 COPY pyproject.toml poetry.lock ./
 RUN poetry install --only main --no-root --no-interaction --no-ansi
 
-COPY run.py ./
+COPY run.py alembic.ini ./
 COPY app ./app
+COPY alembic ./alembic
 
 # Runtime image
 FROM python:3.12-slim
