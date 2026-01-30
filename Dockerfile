@@ -18,8 +18,10 @@ COPY app ./app
 # Runtime image
 FROM python:3.12-slim
 
+# netcat-openbsd is used by the setup job to find whether the database has started up.
+
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends tini && \
+    apt-get install -y --no-install-recommends tini netcat-openbsd && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
