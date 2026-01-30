@@ -23,9 +23,7 @@ def create_app(settings: "Settings | None" = None, skip_background_services: boo
         settings = Settings.load()
 
     # Validate production configuration
-    # Skip validation in testing mode to allow tests to run with minimal config
-    if settings.flask_env != "testing":
-        settings.validate_production_config()
+    settings.validate_production_config()
 
     app.config.from_object(settings.to_flask_config())
 
