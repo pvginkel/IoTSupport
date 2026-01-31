@@ -3,7 +3,7 @@ import { test, expect } from './support/fixtures';
 test.describe('Smoke Tests', () => {
   test('frontend loads and shows app shell', async ({ page, auth }) => {
     // Authenticate first
-    await auth.createSession({ name: 'Test User' });
+    await auth.createSession({ name: 'Test User', roles: ['admin'] });
 
     await page.goto('/');
 
@@ -21,7 +21,7 @@ test.describe('Smoke Tests', () => {
   });
 
   test('root redirects to /devices', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User' });
+    await auth.createSession({ name: 'Test User', roles: ['admin'] });
 
     await page.goto('/');
 
@@ -40,7 +40,7 @@ test.describe('Smoke Tests', () => {
   });
 
   test('sidebar navigation shows active state', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User' });
+    await auth.createSession({ name: 'Test User', roles: ['admin'] });
 
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/devices');

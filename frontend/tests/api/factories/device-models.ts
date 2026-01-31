@@ -33,19 +33,22 @@ export class DeviceModelsFactory {
 
   /**
    * Generate a random model code for testing
-   * Format: lowercase alphanumeric with underscores (e.g., "sensor_abc123")
+   * Format: lowercase alphanumeric with underscores (e.g., "sensor_abc123def456")
+   * Uses 16 characters from ULID to include both timestamp and random parts,
+   * ensuring uniqueness across parallel test workers.
    */
   randomModelCode(prefix = 'model'): string {
-    const suffix = ulid().toLowerCase().slice(0, 8);
+    const suffix = ulid().toLowerCase().slice(0, 16);
     return `${prefix}_${suffix}`;
   }
 
   /**
    * Generate a random model name for testing
-   * Format: Human-readable name (e.g., "Test Model ABC123")
+   * Format: Human-readable name (e.g., "Test Model ABC123DEF456")
+   * Uses 12 characters from ULID to include randomness for parallel test isolation.
    */
   randomModelName(prefix = 'Test Model'): string {
-    const suffix = ulid().slice(0, 6);
+    const suffix = ulid().slice(0, 12);
     return `${prefix} ${suffix}`;
   }
 

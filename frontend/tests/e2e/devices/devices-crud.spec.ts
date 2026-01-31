@@ -71,7 +71,7 @@ test.describe('Device List', () => {
   });
 
   test('navigates to new device editor', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User' });
+    await auth.createSession({ name: 'Test User', roles: ['admin'] });
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.goto();
@@ -104,8 +104,8 @@ test.describe('Device List', () => {
 
 test.describe('Create Device', () => {
   test('creates a new device with valid data', async ({ page, devices, deviceModels }) => {
-    // Create a device model first
-    const model = await deviceModels.create({ name: 'Test Model' });
+    // Create a device model with unique name to avoid selector collisions
+    const model = await deviceModels.create();
 
     const devicesPage = new DevicesPage(page);
 
@@ -151,7 +151,7 @@ test.describe('Create Device', () => {
   });
 
   test('save button is disabled when no model is selected', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User' });
+    await auth.createSession({ name: 'Test User', roles: ['admin'] });
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.gotoNew();
@@ -162,7 +162,7 @@ test.describe('Create Device', () => {
   });
 
   test('cancel navigates back to list', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User' });
+    await auth.createSession({ name: 'Test User', roles: ['admin'] });
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.gotoNew();
@@ -468,7 +468,7 @@ test.describe('Error Handling', () => {
   });
 
   test('shows error when opening non-existent device', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User' });
+    await auth.createSession({ name: 'Test User', roles: ['admin'] });
 
     const devicesPage = new DevicesPage(page);
 
@@ -483,7 +483,7 @@ test.describe('Error Handling', () => {
   });
 
   test('back to list button works on 404 page', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User' });
+    await auth.createSession({ name: 'Test User', roles: ['admin'] });
 
     const devicesPage = new DevicesPage(page);
 

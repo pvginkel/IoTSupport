@@ -35,7 +35,8 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
 
   devices: async ({ _serviceManager, page, auth }, use) => {
     // Authenticate first - backend requires auth for all API calls
-    await auth.createSession({ name: 'Test User' });
+    // Device operations require admin role
+    await auth.createSession({ name: 'Test User', roles: ['admin'] });
 
     // Use frontend URL and page.request to share cookies with browser
     const factory = new DevicesFactory(_serviceManager.frontendUrl, page);
@@ -44,7 +45,8 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
 
   deviceModels: async ({ _serviceManager, page, auth }, use) => {
     // Authenticate first - backend requires auth for all API calls
-    await auth.createSession({ name: 'Test User' });
+    // Device model operations require admin role
+    await auth.createSession({ name: 'Test User', roles: ['admin'] });
 
     // Use frontend URL and page.request to share cookies with browser
     const factory = new DeviceModelsFactory(_serviceManager.frontendUrl, page);
