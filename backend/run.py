@@ -28,7 +28,14 @@ def main() -> None:
         app.run(host=host, port=port, debug=True)
     else:
         app.logger.info("Running in production mode with Waitress")
-        serve(app, host=host, port=port, threads=4)
+        serve(
+            app,
+            host=host,
+            port=port,
+            threads=4,
+            trusted_proxy="*",
+            trusted_proxy_headers="x-forwarded-for x-forwarded-host x-forwarded-proto x-forwarded-port",
+        )
 
 
 if __name__ == "__main__":
