@@ -144,6 +144,57 @@ class TestSettingsLoad:
 
             assert settings.device_baseurl == "https://devices.example.com"
 
+    def test_logging_url_relative_prefixed(self, tmp_path: Path):
+        """Relative LOGGING_URL is prefixed with DEVICE_BASEURL."""
+        assets_dir = tmp_path / "assets"
+        assets_dir.mkdir()
+
+        with patch.dict(os.environ, {
+            "ASSETS_DIR": str(assets_dir),
+            "MQTT_URL": "mqtt://test:1883",
+            "WIFI_SSID": "TestNet",
+            "WIFI_PASSWORD": "TestPass",
+            "LOGGING_URL": "/api/iot/logging",
+            "DEVICE_BASEURL": "https://devices.example.com",
+        }, clear=False):
+            settings = Settings.load()
+
+            assert settings.logging_url == "https://devices.example.com/api/iot/logging"
+
+    def test_logging_url_absolute_preserved(self, tmp_path: Path):
+        """Absolute LOGGING_URL is preserved as-is."""
+        assets_dir = tmp_path / "assets"
+        assets_dir.mkdir()
+
+        with patch.dict(os.environ, {
+            "ASSETS_DIR": str(assets_dir),
+            "MQTT_URL": "mqtt://test:1883",
+            "WIFI_SSID": "TestNet",
+            "WIFI_PASSWORD": "TestPass",
+            "LOGGING_URL": "https://logs.example.com/ingest",
+            "DEVICE_BASEURL": "https://devices.example.com",
+        }, clear=False):
+            settings = Settings.load()
+
+            assert settings.logging_url == "https://logs.example.com/ingest"
+
+    def test_logging_url_default(self, tmp_path: Path):
+        """Default LOGGING_URL is prefixed with DEVICE_BASEURL."""
+        assets_dir = tmp_path / "assets"
+        assets_dir.mkdir()
+
+        env = Environment(
+            _env_file=None,  # type: ignore[call-arg]
+            ASSETS_DIR=assets_dir,
+            MQTT_URL="mqtt://test:1883",
+            WIFI_SSID="TestNet",
+            WIFI_PASSWORD="TestPass",
+            DEVICE_BASEURL="https://devices.example.com",
+        )
+        settings = Settings.load(env)
+
+        assert settings.logging_url == "https://devices.example.com/api/iot/logging"
+
     def test_fernet_key_derived_from_secret(self, tmp_path: Path):
         """Fernet key is derived from SECRET_KEY if not explicit."""
         assets_dir = tmp_path / "assets"
