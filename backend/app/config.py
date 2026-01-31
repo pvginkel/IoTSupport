@@ -189,9 +189,10 @@ class Environment(BaseSettings):
     )
 
     # Logging Endpoint for Provisioning
-    LOGGING_URL: str | None = Field(
-        default=None,
-        description="Logging service endpoint URL for device metrics and logs"
+    LOGGING_URL: str = Field(
+        default="/api/iot/logging",
+        description="Logging service endpoint URL for device metrics and logs. "
+        "Relative paths are prefixed with DEVICE_BASEURL."
     )
 
     # Rotation Settings
@@ -271,7 +272,7 @@ class Settings(BaseModel):
     wifi_password: str | None
 
     # Logging Endpoint for Provisioning
-    logging_url: str | None
+    logging_url: str
 
     # Rotation Settings
     rotation_cron: str | None
@@ -344,12 +345,6 @@ class Settings(BaseModel):
                 "MQTT_URL must be set for device provisioning"
             )
 
-        # LOGGING_URL required for device provisioning
-        if self.is_production and not self.logging_url:
-            errors.append(
-                "LOGGING_URL must be set for device provisioning"
-            )
-
         # WiFi settings required for provisioning
         if self.is_production and (not self.wifi_ssid or not self.wifi_password):
             errors.append(
@@ -419,6 +414,11 @@ class Settings(BaseModel):
         baseurl = strip_slashes(env.BASEURL) or "http://localhost:3200"
         device_baseurl = strip_slashes(env.DEVICE_BASEURL) or baseurl
 
+        # Resolve logging_url: prefix relative paths with device_baseurl
+        logging_url = env.LOGGING_URL
+        if not logging_url.startswith(("http://", "https://")):
+            logging_url = f"{device_baseurl}{logging_url}"
+
         # Derive Fernet key from SECRET_KEY for encrypting cached secrets
         fernet_key = _derive_fernet_key(env.SECRET_KEY)
 
@@ -480,7 +480,7 @@ class Settings(BaseModel):
             keycloak_console_base_url=keycloak_console_base_url,
             wifi_ssid=env.WIFI_SSID,
             wifi_password=env.WIFI_PASSWORD,
-            logging_url=env.LOGGING_URL,
+            logging_url=logging_url,
             rotation_cron=env.ROTATION_CRON,
             rotation_timeout_seconds=env.ROTATION_TIMEOUT_SECONDS,
             rotation_critical_threshold_days=env.ROTATION_CRITICAL_THRESHOLD_DAYS,
