@@ -144,11 +144,58 @@ app/
 
 ### User authentication client
 
-Need an `iotsupport` client for user authentication. It's authenticated and Direct access grants must be set.
+Need an `iotsupport` client for user authentication. It's authenticated and Direct access grants must be set. Custom roles named `admin` and `pipeline` need to be added.
+
+#### Audience mapper (required)
+
+The `iotsupport` client needs an audience mapper so that access tokens include the client in the `aud` claim. Without this, authentication fails with "Token issuer or audience does not match expected values".
+
+1. Go to **Clients** → **iotsupport**
+2. Go to **Client scopes** tab
+3. Click on **iotsupport-dedicated**
+4. Go to **Mappers** tab → **Add mapper** → **By configuration**
+5. Select **Audience** and configure:
+   - **Name**: `iotsupport-audience`
+   - **Included Client Audience**: `iotsupport`
+   - **Add to ID token**: OFF
+   - **Add to access token**: ON
+
+#### User role assignment
+
+Users need the `admin` role assigned to access the application:
+
+1. Go to **Users** → select the user
+2. Go to **Role mapping** tab
+3. Click **Assign role** → filter by **clients** → select `iotsupport` → `admin`
 
 ### Admin client
 
 Need an `iotsupport-admin` client with administrative access. That's also authenticated. The **only** authentication flow that needs to be checked is Service account roles. This enables the Service account roles tab. `manage-clients` must be added.
+
+### Pipeline client
+
+Need an `iotsupport-pipeline` client for CI/CD pipeline access (e.g., firmware uploads).
+
+1. Create a new client named `iotsupport-pipeline`
+2. Set **Client authentication** to ON
+3. Under **Authentication flow**, check **only** "Service account roles"
+4. Save the client
+
+#### Audience mapper (required)
+
+1. Go to **Client scopes** tab
+2. Click on **iotsupport-pipeline-dedicated**
+3. Go to **Mappers** tab → **Add mapper** → **By configuration**
+4. Select **Audience** and configure:
+   - **Name**: `iotsupport-pipeline-audience`
+   - **Included Client Audience**: `iotsupport`
+   - **Add to ID token**: OFF
+   - **Add to access token**: ON
+
+#### Service account role assignment
+
+1. Go to **Service account roles** tab
+2. Click **Assign role** → filter by **clients** → select `iotsupport` → `pipeline`
 
 ### Device client scope configuration
 
@@ -166,7 +213,7 @@ Configure a client scope for the audience mapper:
 1. Go to **Client scopes** and create a new scope named `iot-device-audience` (or set `KEYCLOAK_DEVICE_SCOPE_NAME` to use a different name)
 2. In the scope's **Mappers** tab, create a new mapper:
    - **Mapper type**: Audience
-   - **Name**: iot-audience
+   - **Name**: iot-device-audience
    - **Included Client Audience**: Set to the value of `OIDC_AUDIENCE` (or `OIDC_CLIENT_ID` if `OIDC_AUDIENCE` is not set)
    - **Add to access token**: ON
 
