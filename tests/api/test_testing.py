@@ -34,6 +34,7 @@ def _build_testing_settings(tmp_path: Path) -> Settings:
         cors_origins=["http://localhost:3000"],
         # MQTT settings
         mqtt_url="mqtt://mqtt.example.com:1883",
+        device_mqtt_url="mqtt://mqtt.example.com:1883",
         mqtt_username=None,
         mqtt_password=None,
         # OIDC settings (disabled)

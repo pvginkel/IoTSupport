@@ -89,6 +89,10 @@ class Environment(BaseSettings):
         default=None,
         description="MQTT broker URL (e.g., mqtt://localhost:1883, mqtts://broker:8883)"
     )
+    DEVICE_MQTT_URL: str | None = Field(
+        default=None,
+        description="MQTT broker URL for device provisioning (defaults to MQTT_URL if not set)"
+    )
     MQTT_USERNAME: str | None = Field(
         default=None,
         description="MQTT broker username"
@@ -239,6 +243,7 @@ class Settings(BaseModel):
 
     # MQTT settings
     mqtt_url: str | None
+    device_mqtt_url: str | None  # Resolved: DEVICE_MQTT_URL or MQTT_URL
     mqtt_username: str | None
     mqtt_password: str | None
 
@@ -413,6 +418,7 @@ class Settings(BaseModel):
         # Compute derived values
         baseurl = strip_slashes(env.BASEURL) or "http://localhost:3200"
         device_baseurl = strip_slashes(env.DEVICE_BASEURL) or baseurl
+        device_mqtt_url = env.DEVICE_MQTT_URL or env.MQTT_URL
 
         # Resolve logging_url: prefix relative paths with device_baseurl
         logging_url = env.LOGGING_URL
@@ -455,6 +461,7 @@ class Settings(BaseModel):
             assets_dir=env.ASSETS_DIR,
             cors_origins=env.CORS_ORIGINS,
             mqtt_url=env.MQTT_URL,
+            device_mqtt_url=device_mqtt_url,
             mqtt_username=env.MQTT_USERNAME,
             mqtt_password=env.MQTT_PASSWORD,
             baseurl=baseurl,
