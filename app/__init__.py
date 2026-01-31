@@ -13,9 +13,13 @@ from app.config import Settings
 from app.extensions import db
 from app.services.container import ServiceContainer
 
+logger = logging.getLogger(__name__)
+
 
 def create_app(settings: "Settings | None" = None, skip_background_services: bool = False) -> App:
     """Create and configure Flask application."""
+    logger.info("create_app() called", stack_info=True)
+
     app = App(__name__)
 
     # Load configuration
