@@ -192,13 +192,15 @@ export function DeviceEditor({
   const formId = mode === 'edit' ? 'DeviceEditor_edit' : mode === 'duplicate' ? 'DeviceEditor_duplicate' : 'DeviceEditor_new'
   const { trackSubmit, trackSuccess, trackError } = useFormInstrumentation({ formId })
 
-  // Fetch full device model (with schema) for Monaco validation when in edit mode
-  const { deviceModel: fullDeviceModel } = useDeviceModel(initialDeviceModelId)
-
   // Device model is selectable for new devices, fixed for edits
   const [selectedModelId, setSelectedModelId] = useState<number | undefined>(
     mode === 'duplicate' ? initialDeviceModelId : initialDeviceModelId
   )
+
+  // Fetch full device model (with schema) for Monaco validation
+  // In edit mode, model is fixed; in new/duplicate mode, use the currently selected model
+  const modelIdForSchema = mode === 'edit' ? initialDeviceModelId : selectedModelId
+  const { deviceModel: fullDeviceModel } = useDeviceModel(modelIdForSchema)
   const [jsonConfig, setJsonConfig] = useState(JSON.stringify(initialConfig, null, 2))
   const [jsonError, setJsonError] = useState<string | null>(null)
 
