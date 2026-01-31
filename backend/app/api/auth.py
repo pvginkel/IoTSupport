@@ -246,19 +246,6 @@ def callback(
         code, auth_state.code_verifier
     )
 
-    # DEBUG: Log token payload for troubleshooting - REMOVE AFTER DEBUGGING
-    import base64
-    token_parts = token_response.access_token.split('.')
-    if len(token_parts) >= 2:
-        # Add padding if needed for base64 decoding
-        payload_b64 = token_parts[1] + '=' * (4 - len(token_parts[1]) % 4)
-        try:
-            payload = base64.urlsafe_b64decode(payload_b64).decode('utf-8')
-            logger.warning("DEBUG TOKEN PAYLOAD: %s", payload)
-        except Exception as e:
-            logger.warning("DEBUG: Failed to decode token: %s", e)
-    # END DEBUG
-
     # Validate access token
     auth_context = auth_service.validate_token(token_response.access_token)
 
