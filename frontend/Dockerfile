@@ -24,6 +24,7 @@ FROM nginx:alpine AS production
 
 # Copy custom NGINX configuration
 COPY nginx.conf /etc/nginx/nginx.conf
+COPY snippets/ /etc/nginx/snippets/
 
 # Copy built static assets from build stage
 COPY --from=build /app/dist /usr/share/nginx/html
