@@ -144,6 +144,45 @@ class TestSettingsLoad:
 
             assert settings.device_baseurl == "https://devices.example.com"
 
+    def test_device_mqtt_url_fallback(self, tmp_path: Path):
+        """DEVICE_MQTT_URL falls back to MQTT_URL if not set."""
+        assets_dir = tmp_path / "assets"
+        assets_dir.mkdir()
+
+        with patch.dict(os.environ, {
+            "ASSETS_DIR": str(assets_dir),
+            "MQTT_URL": "mqtt://broker.example.com:1883",
+            "WIFI_SSID": "TestNet",
+            "WIFI_PASSWORD": "TestPass",
+            "LOGGING_URL": "https://logs.example.com",
+            "BASEURL": "https://iot.example.com",
+        }, clear=False):
+            # Ensure DEVICE_MQTT_URL is not set
+            os.environ.pop("DEVICE_MQTT_URL", None)
+            settings = Settings.load()
+
+            assert settings.device_mqtt_url == "mqtt://broker.example.com:1883"
+
+    def test_device_mqtt_url_explicit(self, tmp_path: Path):
+        """DEVICE_MQTT_URL can be set explicitly."""
+        assets_dir = tmp_path / "assets"
+        assets_dir.mkdir()
+
+        with patch.dict(os.environ, {
+            "ASSETS_DIR": str(assets_dir),
+            "MQTT_URL": "mqtt://internal-broker:1883",
+            "DEVICE_MQTT_URL": "mqtt://device-broker.example.com:1883",
+            "WIFI_SSID": "TestNet",
+            "WIFI_PASSWORD": "TestPass",
+            "LOGGING_URL": "https://logs.example.com",
+            "BASEURL": "https://iot.example.com",
+        }, clear=False):
+            settings = Settings.load()
+
+            assert settings.device_mqtt_url == "mqtt://device-broker.example.com:1883"
+            # Original mqtt_url should still be the internal one
+            assert settings.mqtt_url == "mqtt://internal-broker:1883"
+
     def test_logging_url_relative_prefixed(self, tmp_path: Path):
         """Relative LOGGING_URL is prefixed with DEVICE_BASEURL."""
         assets_dir = tmp_path / "assets"
@@ -322,6 +361,7 @@ class TestSettingsDirectConstruction:
             assets_dir=assets_dir,
             cors_origins=["http://localhost:3000"],
             mqtt_url="mqtt://test:1883",
+            device_mqtt_url="mqtt://test:1883",
             mqtt_username=None,
             mqtt_password=None,
             baseurl="http://localhost:3200",
@@ -369,6 +409,7 @@ class TestSettingsDirectConstruction:
             "assets_dir": assets_dir,
             "cors_origins": [],
             "mqtt_url": "mqtt://test:1883",
+            "device_mqtt_url": "mqtt://test:1883",
             "mqtt_username": None,
             "mqtt_password": None,
             "baseurl": "http://localhost",
@@ -430,6 +471,7 @@ class TestSettingsValidation:
             assets_dir=assets_dir,
             cors_origins=[],
             mqtt_url="mqtt://test:1883",
+            device_mqtt_url="mqtt://test:1883",
             mqtt_username=None,
             mqtt_password=None,
             baseurl="http://localhost",
@@ -478,6 +520,7 @@ class TestSettingsValidation:
             assets_dir=assets_dir,
             cors_origins=[],
             mqtt_url="mqtt://test:1883",
+            device_mqtt_url="mqtt://test:1883",
             mqtt_username=None,
             mqtt_password=None,
             baseurl="https://iot.example.com",
@@ -532,6 +575,7 @@ class TestSettingsProperties:
             assets_dir=assets_dir,
             cors_origins=[],
             mqtt_url="mqtt://test:1883",
+            device_mqtt_url="mqtt://test:1883",
             mqtt_username=None,
             mqtt_password=None,
             baseurl="http://localhost",

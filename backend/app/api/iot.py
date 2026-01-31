@@ -323,7 +323,7 @@ def get_provisioning_for_rotation(
             "client_secret": new_secret,
             "token_url": app_config.oidc_token_url,
             "base_url": app_config.device_baseurl,
-            "mqtt_url": app_config.mqtt_url,
+            "mqtt_url": app_config.device_mqtt_url,
             "wifi_ssid": app_config.wifi_ssid,
             "wifi_password": app_config.wifi_password,
             "logging_url": app_config.logging_url,

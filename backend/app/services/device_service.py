@@ -438,7 +438,7 @@ class DeviceService:
             "client_secret": secret,
             "token_url": self.config.oidc_token_url,
             "base_url": self.config.device_baseurl,
-            "mqtt_url": self.config.mqtt_url,
+            "mqtt_url": self.config.device_mqtt_url,
             "wifi_ssid": self.config.wifi_ssid,
             "wifi_password": self.config.wifi_password,
             "logging_url": self.config.logging_url,
