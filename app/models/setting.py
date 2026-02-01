@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.database import db
 
 
-class Setting(db.Model):
+class Setting(db.Model):  # type: ignore[name-defined]
     """Key-value setting storage for application state.
 
     Used for storing persistent application state like rotation job timestamps.

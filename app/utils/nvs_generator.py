@@ -9,7 +9,7 @@ read using nvs_get_str() and similar functions on the device.
 
 from io import BytesIO
 
-from esp_idf_nvs_partition_gen.nvs_partition_gen import (
+from esp_idf_nvs_partition_gen.nvs_partition_gen import (  # type: ignore[import-untyped]
     Page,
     nvs_close,
     nvs_open,

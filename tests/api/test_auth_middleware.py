@@ -205,9 +205,10 @@ class TestAuthenticationMiddleware:
         """Test that @public decorator bypasses authentication."""
         client = auth_enabled_app.test_client()
 
-        # Health endpoint is public - should work without token
+        # Health endpoint is public - should not return auth errors (401/403)
+        # May return 503 if MQTT isn't connected in test environment
         response = client.get("/api/health")
-        assert response.status_code == 200
+        assert response.status_code not in (401, 403)
 
         # Auth endpoints are public
         response = client.get("/api/auth/self")

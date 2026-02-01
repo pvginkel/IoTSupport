@@ -186,7 +186,7 @@ def check_authorization(auth_context: AuthContext, view_func: Callable[..., Any]
 
     # Check for additional allowed roles from @allow_roles decorator
     if view_func is not None:
-        allowed_roles = getattr(view_func, "allowed_roles", set())
+        allowed_roles: set[str] = getattr(view_func, "allowed_roles", set())
         for role in allowed_roles:
             if role in auth_context.roles:
                 logger.debug("User has '%s' role - access granted via @allow_roles", role)
