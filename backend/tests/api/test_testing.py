@@ -69,6 +69,11 @@ def _build_testing_settings(tmp_path: Path) -> Settings:
         rotation_cron="0 8 1-7 * 6",
         rotation_timeout_seconds=300,
         rotation_critical_threshold_days=7,
+        # Elasticsearch settings
+        elasticsearch_url="http://elasticsearch.test:9200",
+        elasticsearch_username=None,
+        elasticsearch_password=None,
+        elasticsearch_index_pattern="logstash-http-*",
         # Fernet key (derived from "test-secret-key" using SHA256 + base64)
         fernet_key="LOrG82NjxiRqZMyoBc1DynoBsU6y_MUyzuw_YPL33xw=",
     )

@@ -264,11 +264,11 @@ def download_firmware(
         stream, model_code = device_model_service.get_firmware_stream(model_id)
 
         # Use send_file with BytesIO stream
-        return send_file(
+        return send_file(  # type: ignore[call-arg]
             stream,
             mimetype="application/octet-stream",
             as_attachment=True,
-            download_name=f"firmware-{model_code}.bin",
+            download_name=f"firmware-{model_code}.bin",  # Flask stubs outdated
         )
 
     except Exception:
