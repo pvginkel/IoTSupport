@@ -11,6 +11,7 @@ import { useConfirm } from '@/hooks/use-confirm'
 import { useFormInstrumentation } from '@/lib/test/form-instrumentation'
 import { configureMonacoSchemaValidation } from '@/lib/utils/monaco-schema'
 import { ProvisionDeviceModal } from './provision-device-modal'
+import { DeviceLogsViewer } from './device-logs-viewer'
 
 interface DeviceEditorProps {
   mode: 'new' | 'edit' | 'duplicate'
@@ -522,7 +523,7 @@ export function DeviceEditor({
             </div>
             <div
               className="rounded-md border border-border overflow-hidden"
-              style={{ height: '425px' }}
+              style={{ height: '300px' }}
               data-testid="devices.editor.json-editor"
               data-state={jsonError ? 'invalid' : 'valid'}
             >
@@ -546,6 +547,14 @@ export function DeviceEditor({
               />
             </div>
           </div>
+
+          {/* Device Logs Viewer (edit mode only) */}
+          {mode === 'edit' && deviceId && (
+            <DeviceLogsViewer
+              deviceId={deviceId}
+              deviceEntityId={initialConfig?.deviceEntityId as string | undefined}
+            />
+          )}
         </div>
       </div>
 

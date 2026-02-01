@@ -133,6 +133,23 @@ export class DevicesPage {
     return this.page.locator('[data-testid="devices.provision-modal.close-confirm-dialog"]');
   }
 
+  // Locators - Device Logs Viewer
+  get logsViewer(): Locator {
+    return this.page.locator('[data-testid="devices.logs.viewer"]');
+  }
+
+  get logsLiveCheckbox(): Locator {
+    return this.page.locator('[data-testid="devices.logs.live-checkbox"]');
+  }
+
+  get logsContainer(): Locator {
+    return this.page.locator('[data-testid="devices.logs.container"]');
+  }
+
+  get logsEntries(): Locator {
+    return this.page.locator('[data-testid="devices.logs.entry"]');
+  }
+
   // Locators - Dialogs
   get deleteConfirmDialog(): Locator {
     return this.page.locator('[data-testid="devices.delete.confirm-dialog"]');
@@ -321,5 +338,53 @@ export class DevicesPage {
    */
   async waitForProvisioningError(): Promise<void> {
     await this.page.locator('text=Provisioning Failed').waitFor({ state: 'visible', timeout: 30000 });
+  }
+
+  // Actions - Device Logs Viewer
+  /**
+   * Toggle the live updates checkbox for the log viewer
+   */
+  async toggleLogsLiveUpdates(): Promise<void> {
+    await this.logsLiveCheckbox.click();
+  }
+
+  /**
+   * Check if the logs viewer is visible
+   */
+  async isLogsViewerVisible(): Promise<boolean> {
+    return await this.logsViewer.isVisible();
+  }
+
+  /**
+   * Get the current scroll-at-bottom state of the logs container
+   */
+  async getLogsScrollAtBottom(): Promise<boolean> {
+    const value = await this.logsContainer.getAttribute('data-scroll-at-bottom');
+    return value === 'true';
+  }
+
+  /**
+   * Get the number of log entries currently displayed
+   */
+  async getLogsEntryCount(): Promise<number> {
+    return await this.logsEntries.count();
+  }
+
+  /**
+   * Scroll the logs container to top (simulates user scrolling up)
+   */
+  async scrollLogsToTop(): Promise<void> {
+    await this.logsContainer.evaluate((el) => {
+      el.scrollTop = 0;
+    });
+  }
+
+  /**
+   * Scroll the logs container to bottom
+   */
+  async scrollLogsToBottom(): Promise<void> {
+    await this.logsContainer.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
   }
 }
