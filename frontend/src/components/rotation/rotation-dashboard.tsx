@@ -319,7 +319,7 @@ export function RotationDashboard() {
         title: 'No Devices to Rotate',
         description: 'There are no devices in OK state ready for rotation.',
         confirmText: 'OK',
-        cancelText: ''
+        cancelText: 'Cancel'
       })
       return
     }

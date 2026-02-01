@@ -51,7 +51,7 @@ function DeviceModelList() {
         title: 'Cannot Delete Model',
         description: `This model has ${model.deviceCount} device${model.deviceCount > 1 ? 's' : ''} using it. Remove all devices first before deleting the model.`,
         confirmText: 'OK',
-        cancelText: ''
+        cancelText: 'Cancel'
       })
       return
     }
