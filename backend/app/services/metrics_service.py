@@ -94,6 +94,19 @@ class MetricsService:
             ["status"],
         )
 
+        # Elasticsearch metrics
+        self.elasticsearch_operations_total = Counter(
+            "iot_elasticsearch_operations_total",
+            "Total Elasticsearch operations",
+            ["operation", "status"],
+        )
+
+        self.elasticsearch_query_duration_seconds = Histogram(
+            "iot_elasticsearch_query_duration_seconds",
+            "Duration of Elasticsearch queries in seconds",
+            ["operation"],
+        )
+
     def record_operation(
         self, operation: str, status: str, duration: float | None = None
     ) -> None:

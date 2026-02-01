@@ -7,6 +7,7 @@ from app.config import Settings
 from app.services.auth_service import AuthService
 from app.services.device_model_service import DeviceModelService
 from app.services.device_service import DeviceService
+from app.services.elasticsearch_service import ElasticsearchService
 from app.services.firmware_service import FirmwareService
 from app.services.image_proxy_service import ImageProxyService
 from app.services.keycloak_admin_service import KeycloakAdminService
@@ -80,6 +81,13 @@ class ServiceContainer(containers.DeclarativeContainer):
     # KeycloakAdminService - Singleton for admin API access
     keycloak_admin_service = providers.Singleton(
         KeycloakAdminService,
+        config=config,
+        metrics_service=metrics_service,
+    )
+
+    # ElasticsearchService - Singleton for device log queries
+    elasticsearch_service = providers.Singleton(
+        ElasticsearchService,
         config=config,
         metrics_service=metrics_service,
     )

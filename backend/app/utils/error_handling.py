@@ -18,6 +18,7 @@ from app.exceptions import (
     ProcessingException,
     RecordExistsException,
     RecordNotFoundException,
+    ServiceUnavailableException,
     ValidationException,
 )
 from app.utils import get_current_correlation_id
@@ -114,6 +115,15 @@ def handle_api_errors(
                     {"message": "The resource already exists"},
                     code=e.error_code,
                     status_code=409,
+                )
+
+            except ServiceUnavailableException as e:
+                # Service unavailable (HTTP 503 Service Unavailable)
+                return _build_error_response(
+                    e.message,
+                    {"message": "Service is temporarily unavailable"},
+                    code=e.error_code,
+                    status_code=503,
                 )
 
             except ExternalServiceException as e:

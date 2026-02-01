@@ -213,6 +213,24 @@ class Environment(BaseSettings):
         description="Days after which a timed-out device is considered critical"
     )
 
+    # Elasticsearch Settings (for device logs)
+    ELASTICSEARCH_URL: str | None = Field(
+        default=None,
+        description="Elasticsearch base URL (e.g., https://elasticsearch.local:9200)"
+    )
+    ELASTICSEARCH_USERNAME: str | None = Field(
+        default=None,
+        description="Elasticsearch username for HTTP Basic Auth"
+    )
+    ELASTICSEARCH_PASSWORD: str | None = Field(
+        default=None,
+        description="Elasticsearch password for HTTP Basic Auth"
+    )
+    ELASTICSEARCH_INDEX_PATTERN: str = Field(
+        default="logstash-http-*",
+        description="Index pattern for device logs"
+    )
+
 
 
 class Settings(BaseModel):
@@ -283,6 +301,12 @@ class Settings(BaseModel):
     rotation_cron: str | None
     rotation_timeout_seconds: int
     rotation_critical_threshold_days: int | None
+
+    # Elasticsearch Settings (for device logs)
+    elasticsearch_url: str | None
+    elasticsearch_username: str | None
+    elasticsearch_password: str | None
+    elasticsearch_index_pattern: str
 
     # Secret Encryption Key (derived from secret_key)
     fernet_key: str
@@ -370,6 +394,12 @@ class Settings(BaseModel):
         if self.is_production and self.rotation_critical_threshold_days is None:
             errors.append(
                 "ROTATION_CRITICAL_THRESHOLD_DAYS must be set for dashboard status"
+            )
+
+        # Elasticsearch required for device logs
+        if self.is_production and not self.elasticsearch_url:
+            errors.append(
+                "ELASTICSEARCH_URL must be set for device logs"
             )
 
         # OIDC settings required when OIDC is enabled
@@ -491,6 +521,10 @@ class Settings(BaseModel):
             rotation_cron=env.ROTATION_CRON,
             rotation_timeout_seconds=env.ROTATION_TIMEOUT_SECONDS,
             rotation_critical_threshold_days=env.ROTATION_CRITICAL_THRESHOLD_DAYS,
+            elasticsearch_url=strip_slashes(env.ELASTICSEARCH_URL),
+            elasticsearch_username=env.ELASTICSEARCH_USERNAME,
+            elasticsearch_password=env.ELASTICSEARCH_PASSWORD,
+            elasticsearch_index_pattern=env.ELASTICSEARCH_INDEX_PATTERN,
             fernet_key=fernet_key,
             sqlalchemy_engine_options=sqlalchemy_engine_options,
         )

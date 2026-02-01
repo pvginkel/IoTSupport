@@ -391,6 +391,10 @@ class TestSettingsDirectConstruction:
             rotation_cron=None,
             rotation_timeout_seconds=300,
             rotation_critical_threshold_days=None,
+            elasticsearch_url=None,
+            elasticsearch_username=None,
+            elasticsearch_password=None,
+            elasticsearch_index_pattern="logstash-http-*",
             fernet_key="test-fernet-key-base64-encoded-32-bytes-here==",
         )
 
@@ -439,6 +443,10 @@ class TestSettingsDirectConstruction:
             "rotation_cron": None,
             "rotation_timeout_seconds": 300,
             "rotation_critical_threshold_days": None,
+            "elasticsearch_url": None,
+            "elasticsearch_username": None,
+            "elasticsearch_password": None,
+            "elasticsearch_index_pattern": "logstash-http-*",
             "fernet_key": "test-fernet-key-base64-encoded-32-bytes-here==",
         }
 
@@ -501,6 +509,10 @@ class TestSettingsValidation:
             rotation_cron=None,
             rotation_timeout_seconds=300,
             rotation_critical_threshold_days=None,
+            elasticsearch_url=None,
+            elasticsearch_username=None,
+            elasticsearch_password=None,
+            elasticsearch_index_pattern="logstash-http-*",
             fernet_key="test-key",
         )
 
@@ -550,6 +562,10 @@ class TestSettingsValidation:
             rotation_cron="0 8 * * *",
             rotation_timeout_seconds=300,
             rotation_critical_threshold_days=7,
+            elasticsearch_url=None,
+            elasticsearch_username=None,
+            elasticsearch_password=None,
+            elasticsearch_index_pattern="logstash-http-*",
             fernet_key="explicit-fernet-key",
         )
 
@@ -605,6 +621,10 @@ class TestSettingsProperties:
             rotation_cron=None,
             rotation_timeout_seconds=300,
             rotation_critical_threshold_days=None,
+            elasticsearch_url=None,
+            elasticsearch_username=None,
+            elasticsearch_password=None,
+            elasticsearch_index_pattern="logstash-http-*",
             fernet_key="test-fernet-key",
             sqlalchemy_engine_options={"pool_size": 10},
         )

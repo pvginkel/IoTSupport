@@ -1,6 +1,7 @@
 """Device management API endpoints."""
 
 import time
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from dependency_injector.wiring import Provide, inject
@@ -18,9 +19,15 @@ from app.schemas.device import (
     NvsProvisioningQuerySchema,
     NvsProvisioningResponseSchema,
 )
+from app.schemas.device_logs import (
+    DeviceLogsQuerySchema,
+    DeviceLogsResponseSchema,
+    LogEntrySchema,
+)
 from app.schemas.error import ErrorResponseSchema
 from app.services.container import ServiceContainer
 from app.services.device_service import DeviceService
+from app.services.elasticsearch_service import ElasticsearchService
 from app.services.metrics_service import MetricsService
 from app.utils.error_handling import handle_api_errors
 from app.utils.spectree_config import api
@@ -350,3 +357,75 @@ def sync_keycloak_client(
     finally:
         duration = time.perf_counter() - start_time
         metrics_service.record_operation("sync_keycloak_client", status, duration)
+
+
+@devices_bp.route("/<int:device_id>/logs", methods=["GET"])
+@api.validate(
+    query=DeviceLogsQuerySchema,
+    resp=SpectreeResponse(
+        HTTP_200=DeviceLogsResponseSchema,
+        HTTP_404=ErrorResponseSchema,
+        HTTP_503=ErrorResponseSchema,
+    )
+)
+@handle_api_errors
+@inject
+def get_device_logs(
+    device_id: int,
+    device_service: DeviceService = Provide[ServiceContainer.device_service],
+    elasticsearch_service: ElasticsearchService = Provide[ServiceContainer.elasticsearch_service],
+    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+) -> Any:
+    """Get logs for a device from Elasticsearch.
+
+    Returns log entries filtered by the device's entity_id. If the device
+    has no entity_id configured, returns an empty logs array.
+
+    Query parameters:
+    - start: Beginning of time range (defaults to 1 hour ago)
+    - end: End of time range (defaults to now)
+    - query: Wildcard search pattern for message field
+    """
+    start_time = time.perf_counter()
+    status = "success"
+
+    try:
+        # Validate query parameters
+        query_params = DeviceLogsQuerySchema.model_validate(request.args.to_dict())
+
+        # Get the device to retrieve its entity_id
+        device = device_service.get_device(device_id)
+
+        # Compute default time range
+        now = datetime.now(UTC)
+        query_start = query_params.start if query_params.start else now - timedelta(hours=1)
+        query_end = query_params.end if query_params.end else now
+
+        # Query Elasticsearch for logs
+        result = elasticsearch_service.query_logs(
+            entity_id=device.device_entity_id,
+            start=query_start,
+            end=query_end,
+            query=query_params.query,
+        )
+
+        # Convert to response schema
+        log_entries = [
+            LogEntrySchema(timestamp=log.timestamp, message=log.message)
+            for log in result.logs
+        ]
+
+        return DeviceLogsResponseSchema(
+            logs=log_entries,
+            has_more=result.has_more,
+            window_start=result.window_start,
+            window_end=result.window_end,
+        ).model_dump(mode="json")
+
+    except Exception:
+        status = "error"
+        raise
+
+    finally:
+        duration = time.perf_counter() - start_time
+        metrics_service.record_operation("get_device_logs", status, duration)
