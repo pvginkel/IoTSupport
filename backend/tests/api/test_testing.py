@@ -405,3 +405,52 @@ class TestTestSessionAuthenticationMiddleware:
         # But /api/auth/self returns 401 since there's no auth context
         response = testing_client.get("/api/auth/self")
         assert response.status_code == 401
+
+
+class TestKeycloakCleanupDisabled:
+    """Tests for Keycloak cleanup endpoint when not in testing mode."""
+
+    def test_keycloak_cleanup_returns_400_when_not_testing(self, client: FlaskClient):
+        """POST /api/testing/keycloak-cleanup returns 400 when not in testing mode."""
+        response = client.post(
+            "/api/testing/keycloak-cleanup",
+            json={"pattern": "^iotdevice-test_.*"},
+        )
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["code"] == "ROUTE_NOT_AVAILABLE"
+
+
+class TestKeycloakCleanup:
+    """Tests for POST /api/testing/keycloak-cleanup endpoint."""
+
+    def test_keycloak_cleanup_invalid_regex(self, testing_client: FlaskClient):
+        """Returns 400 for invalid regex pattern."""
+        response = testing_client.post(
+            "/api/testing/keycloak-cleanup",
+            json={"pattern": "[invalid(regex"},
+        )
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["code"] == "VALIDATION_FAILED"
+        assert "Invalid regex" in data["error"]
+
+    def test_keycloak_cleanup_missing_pattern(self, testing_client: FlaskClient):
+        """Returns 400 when pattern is missing."""
+        response = testing_client.post(
+            "/api/testing/keycloak-cleanup",
+            json={},
+        )
+
+        assert response.status_code == 400
+
+    def test_keycloak_cleanup_empty_pattern(self, testing_client: FlaskClient):
+        """Returns 400 when pattern is empty string."""
+        response = testing_client.post(
+            "/api/testing/keycloak-cleanup",
+            json={"pattern": ""},
+        )
+
+        assert response.status_code == 400

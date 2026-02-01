@@ -11,10 +11,12 @@ from app.config import Settings
 from app.exceptions import RouteNotAvailableException
 from app.schemas.testing import (
     ForceErrorQuerySchema,
+    KeycloakCleanupSchema,
     TestSessionCreateSchema,
     TestSessionResponseSchema,
 )
 from app.services.container import ServiceContainer
+from app.services.keycloak_admin_service import KeycloakAdminService
 from app.services.testing_service import TestingService
 from app.utils.auth import get_cookie_secure, public
 from app.utils.error_handling import handle_api_errors
@@ -181,3 +183,37 @@ def force_auth_error(
     logger.info("Configured forced auth error: status=%d", query.status)
 
     return "", 204
+
+
+@testing_bp.route("/keycloak-cleanup", methods=["POST"])
+@public
+@handle_api_errors
+@inject
+def cleanup_keycloak_clients(
+    keycloak_service: KeycloakAdminService = Provide[ServiceContainer.keycloak_admin_service],
+) -> tuple[dict[str, Any], int]:
+    """Delete Keycloak clients matching a regex pattern.
+
+    This endpoint is used by Playwright tests to clean up Keycloak clients
+    created during test runs. The pattern is matched against client IDs.
+
+    Request Body:
+        pattern: Regular expression to match against client IDs (required, non-empty)
+
+    Returns:
+        200: Cleanup completed with count and list of deleted client IDs
+    """
+    data = KeycloakCleanupSchema.model_validate(request.get_json())
+
+    deleted_client_ids = keycloak_service.delete_clients_by_pattern(data.pattern)
+
+    logger.info(
+        "Keycloak cleanup completed: deleted %d clients matching %r",
+        len(deleted_client_ids),
+        data.pattern,
+    )
+
+    return {
+        "deleted_count": len(deleted_client_ids),
+        "deleted_client_ids": deleted_client_ids,
+    }, 200
