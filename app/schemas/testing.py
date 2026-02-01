@@ -31,3 +31,16 @@ class ForceErrorQuerySchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     status: int = Field(..., description="HTTP status code to return on next /api/auth/self request")
+
+
+class KeycloakCleanupSchema(BaseModel):
+    """Request schema for Keycloak client cleanup by pattern."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    pattern: str = Field(
+        ...,
+        min_length=1,
+        description="Regular expression pattern to match against Keycloak client IDs",
+        examples=["^iotdevice-test_.*", ".*-playwright-.*"],
+    )

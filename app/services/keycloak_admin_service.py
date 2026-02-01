@@ -1,13 +1,14 @@
 """Keycloak admin API service for managing device clients."""
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
-from app.exceptions import ExternalServiceException
+from app.exceptions import ExternalServiceException, ValidationException
 
 if TYPE_CHECKING:
     from app.config import Settings
@@ -642,3 +643,79 @@ class KeycloakAdminService:
             scope_internal_id = scope_data["id"]
             self._add_default_client_scope(client_internal_id, scope_internal_id, token)
             logger.debug("Added scope '%s' to client %s", scope_name, client_internal_id)
+
+    def delete_clients_by_pattern(self, pattern: str) -> list[str]:
+        """Delete Keycloak clients matching a regex pattern.
+
+        This is used for test cleanup to remove clients created during
+        Playwright test runs. The pattern is matched against client IDs.
+
+        Args:
+            pattern: Regular expression pattern to match against client IDs
+
+        Returns:
+            List of deleted client IDs
+
+        Raises:
+            ValidationException: If pattern is not a valid regex
+            ExternalServiceException: If listing or deletion fails
+        """
+        try:
+            compiled = re.compile(pattern)
+        except re.error as e:
+            raise ValidationException(f"Invalid regex pattern: {e}") from e
+
+        if not self.enabled:
+            logger.info("Keycloak not configured, skipping client cleanup")
+            return []
+
+        start_time = time.perf_counter()
+        token = self._get_access_token()
+        deleted_client_ids: list[str] = []
+
+        try:
+            admin_url = self.config.keycloak_admin_url
+
+            # List all clients - we need to fetch all and filter client-side
+            # since Keycloak doesn't support regex search
+            response = self._http_client.get(
+                f"{admin_url}/clients",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"max": 1000},
+            )
+            response.raise_for_status()
+
+            clients: list[dict[str, Any]] = response.json()
+
+            # Filter by regex pattern and delete each matching client
+            for client in clients:
+                client_id = client.get("clientId", "")
+                if compiled.match(client_id):
+                    internal_id = client["id"]
+                    try:
+                        delete_response = self._http_client.delete(
+                            f"{admin_url}/clients/{internal_id}",
+                            headers={"Authorization": f"Bearer {token}"},
+                        )
+                        delete_response.raise_for_status()
+                        deleted_client_ids.append(client_id)
+                        logger.debug("Deleted client: %s", client_id)
+                    except httpx.HTTPError as e:
+                        logger.warning("Failed to delete client %s: %s", client_id, e)
+
+            duration = time.perf_counter() - start_time
+            logger.info(
+                "Deleted %d clients matching %r in %.3fs",
+                len(deleted_client_ids),
+                pattern,
+                duration
+            )
+            return deleted_client_ids
+
+        except httpx.HTTPError as e:
+            duration = time.perf_counter() - start_time
+            logger.error("Failed to cleanup clients: %s (%.3fs)", str(e), duration)
+            raise ExternalServiceException(
+                "cleanup clients",
+                str(e)
+            ) from e
