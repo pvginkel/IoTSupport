@@ -1,42 +1,6 @@
 {
   "components": {
     "schemas": {
-      "AssetUploadResponseSchema.765868d": {
-        "description": "Response schema for successful asset upload.",
-        "properties": {
-          "filename": {
-            "description": "Name of the uploaded file",
-            "examples": [
-              "firmware.bin"
-            ],
-            "title": "Filename",
-            "type": "string"
-          },
-          "size": {
-            "description": "File size in bytes",
-            "examples": [
-              1048576
-            ],
-            "title": "Size",
-            "type": "integer"
-          },
-          "uploaded_at": {
-            "description": "ISO 8601 timestamp when upload was processed",
-            "examples": [
-              "2026-01-09T14:30:05.123456+00:00"
-            ],
-            "title": "Uploaded At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "filename",
-          "size",
-          "uploaded_at"
-        ],
-        "title": "AssetUploadResponseSchema",
-        "type": "object"
-      },
       "DashboardResponseSchema.57872a8": {
         "description": "Response schema for devices dashboard.",
         "properties": {
@@ -877,6 +841,40 @@
         "title": "ErrorResponseSchema",
         "type": "object"
       },
+      "FirmwareVersionResponseSchema.107d2c5": {
+        "description": "Response schema for firmware version check.",
+        "properties": {
+          "code": {
+            "description": "Device model code",
+            "examples": [
+              "tempsensor"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "firmware_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current firmware version, or null if no firmware uploaded",
+            "examples": [
+              "1.2.3"
+            ],
+            "title": "Firmware Version"
+          }
+        },
+        "required": [
+          "code",
+          "firmware_version"
+        ],
+        "title": "FirmwareVersionResponseSchema",
+        "type": "object"
+      },
       "ForceErrorQuerySchema.355d24f": {
         "description": "Query parameters for force-error endpoint.",
         "properties": {
@@ -1289,67 +1287,6 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/api/assets": {
-      "post": {
-        "description": "Expects multipart/form-data with: - file: Binary file data - timestamp: ISO 8601 timestamp string - signature: Base64-encoded RSA signature of timestamp\n\nReturns:     200: Upload successful with file metadata     400: Validation error (missing fields, invalid filename, timestamp, or signature)     500: Server error (filesystem write failure)",
-        "operationId": "post__api_assets",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AssetUploadResponseSchema.765868d"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "Upload asset file with cryptographic signature verification.",
-        "tags": []
-      }
-    },
-    "/api/assets/{filename}": {
-      "get": {
-        "description": "This endpoint serves binary firmware files directly to devices. Validates filename to prevent path traversal attacks.",
-        "operationId": "get__api_assets_{filename}",
-        "parameters": [
-          {
-            "description": "",
-            "in": "path",
-            "name": "filename",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {},
-        "summary": "Serve raw asset file for ESP32 device consumption.",
-        "tags": []
-      }
-    },
     "/api/auth/callback": {
       "get": {
         "description": "Exchanges authorization code for tokens and sets access token cookie.\n\nQuery Parameters:     code: Authorization code from OIDC provider     state: CSRF token from OIDC provider\n\nReturns:     302: Redirect to original redirect URL with access token cookie set     400: Invalid or missing callback parameters     401: Token exchange failed",
@@ -2377,6 +2314,168 @@
         "tags": []
       }
     },
+    "/api/iot/config": {
+      "get": {
+        "description": "This endpoint is called by ESP32 devices to fetch their configuration. If the device is in PENDING rotation state and the token was issued after the rotation attempt, the rotation is marked as complete and the next queued device is triggered.\n\nReturns raw JSON content without wrapping.",
+        "operationId": "get__api_iot_config",
+        "parameters": [],
+        "responses": {},
+        "summary": "Get raw JSON configuration for the device.",
+        "tags": []
+      }
+    },
+    "/api/iot/firmware": {
+      "get": {
+        "description": "Returns raw binary firmware with appropriate content type.",
+        "operationId": "get__api_iot_firmware",
+        "parameters": [],
+        "responses": {},
+        "summary": "Download firmware binary for the device's model.",
+        "tags": []
+      }
+    },
+    "/api/iot/firmware-version": {
+      "get": {
+        "description": "This lightweight endpoint allows devices to check if new firmware is available without downloading the binary. Devices can poll this periodically and only download firmware when the version changes.\n\nReturns JSON with the firmware version string.",
+        "operationId": "get__api_iot_firmware-version",
+        "parameters": [],
+        "responses": {},
+        "summary": "Get the current firmware version for the device's model.",
+        "tags": []
+      }
+    },
+    "/api/iot/provisioning": {
+      "get": {
+        "description": "This endpoint is called by devices during the rotation process. It regenerates the client secret in Keycloak and returns the new provisioning package.\n\nThis is different from admin provisioning download - it generates a NEW secret rather than returning the current one.",
+        "operationId": "get__api_iot_provisioning",
+        "parameters": [],
+        "responses": {},
+        "summary": "Get new provisioning data during rotation.",
+        "tags": []
+      }
+    },
+    "/api/pipeline/models/{code}/firmware": {
+      "post": {
+        "description": "Expects raw binary content in request body or multipart file upload. The firmware must be a valid ESP32 binary with AppInfo header.\n\nArgs:     code: Device model code (e.g., 'tempsensor')",
+        "operationId": "post__api_pipeline_models_{code}_firmware",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceModelFirmwareResponseSchema.349be3d"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Upload firmware binary for a device model by code.",
+        "tags": []
+      }
+    },
+    "/api/pipeline/models/{code}/firmware-version": {
+      "get": {
+        "description": "Useful for CI/CD pipelines to check if firmware needs to be uploaded.\n\nArgs:     code: Device model code (e.g., 'tempsensor')",
+        "operationId": "get__api_pipeline_models_{code}_firmware-version",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FirmwareVersionResponseSchema.107d2c5"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Get the current firmware version for a device model.",
+        "tags": []
+      }
+    },
+    "/api/pipeline/upload.ps1": {
+      "get": {
+        "description": "The script is customized with the backend URL (inferred from request) and token endpoint (from server config). Users only need to provide CLIENT_ID and CLIENT_SECRET environment variables.\n\nUsage:     irm https://iotsupport/api/pipeline/upload.ps1 | iex; Upload-Firmware <model_code> <firmware.bin>\n\nEnvironment variables required by the script:     IOTSUPPORT_CLIENT_ID - OAuth2 client ID with pipeline role     IOTSUPPORT_CLIENT_SECRET - OAuth2 client secret",
+        "operationId": "get__api_pipeline_upload.ps1",
+        "parameters": [],
+        "responses": {},
+        "summary": "Serve a PowerShell script for uploading firmware from Windows CI/CD pipelines.",
+        "tags": []
+      }
+    },
+    "/api/pipeline/upload.sh": {
+      "get": {
+        "description": "The script is customized with the backend URL (inferred from request) and token endpoint (from server config). Users only need to provide CLIENT_ID and CLIENT_SECRET environment variables.\n\nUsage:     curl -fsSL https://iotsupport/api/pipeline/upload.sh | sh -s -- <model_code> <firmware.bin>\n\nEnvironment variables required by the script:     IOTSUPPORT_CLIENT_ID - OAuth2 client ID with pipeline role     IOTSUPPORT_CLIENT_SECRET - OAuth2 client secret",
+        "operationId": "get__api_pipeline_upload.sh",
+        "parameters": [],
+        "responses": {},
+        "summary": "Serve a shell script for uploading firmware from CI/CD pipelines.",
+        "tags": []
+      }
+    },
     "/api/rotation/dashboard": {
       "get": {
         "description": "Returns devices categorized as: - healthy: OK, QUEUED, or PENDING states - warning: TIMEOUT state, under critical threshold - critical: TIMEOUT state, at or over critical threshold",
@@ -2550,46 +2649,6 @@
           }
         },
         "summary": "Create an authenticated test session, bypassing the real OIDC flow.",
-        "tags": []
-      }
-    },
-    "/iot/config": {
-      "get": {
-        "description": "This endpoint is called by ESP32 devices to fetch their configuration. If the device is in PENDING rotation state and the token was issued after the rotation attempt, the rotation is marked as complete and the next queued device is triggered.\n\nReturns raw JSON content without wrapping.",
-        "operationId": "get__iot_config",
-        "parameters": [],
-        "responses": {},
-        "summary": "Get raw JSON configuration for the device.",
-        "tags": []
-      }
-    },
-    "/iot/firmware": {
-      "get": {
-        "description": "Returns raw binary firmware with appropriate content type.",
-        "operationId": "get__iot_firmware",
-        "parameters": [],
-        "responses": {},
-        "summary": "Download firmware binary for the device's model.",
-        "tags": []
-      }
-    },
-    "/iot/firmware-version": {
-      "get": {
-        "description": "This lightweight endpoint allows devices to check if new firmware is available without downloading the binary. Devices can poll this periodically and only download firmware when the version changes.\n\nReturns JSON with the firmware version string.",
-        "operationId": "get__iot_firmware-version",
-        "parameters": [],
-        "responses": {},
-        "summary": "Get the current firmware version for the device's model.",
-        "tags": []
-      }
-    },
-    "/iot/provisioning": {
-      "get": {
-        "description": "This endpoint is called by devices during the rotation process. It regenerates the client secret in Keycloak and returns the new provisioning package.\n\nThis is different from admin provisioning download - it generates a NEW secret rather than returning the current one.",
-        "operationId": "get__iot_provisioning",
-        "parameters": [],
-        "responses": {},
-        "summary": "Get new provisioning data during rotation.",
         "tags": []
       }
     },
