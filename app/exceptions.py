@@ -57,6 +57,16 @@ class ExternalServiceException(BusinessLogicException):
         super().__init__(message, error_code="EXTERNAL_SERVICE_ERROR")
 
 
+class ServiceUnavailableException(BusinessLogicException):
+    """Exception raised when a service is unavailable or unreachable."""
+
+    def __init__(self, service: str, cause: str) -> None:
+        self.service = service
+        self.cause = cause
+        message = f"{service} is currently unavailable: {cause}"
+        super().__init__(message, error_code="SERVICE_UNAVAILABLE")
+
+
 class ProcessingException(BusinessLogicException):
     """Exception raised when internal processing fails."""
 

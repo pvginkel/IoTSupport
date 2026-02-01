@@ -1,6 +1,7 @@
 """Tests for devices API endpoints."""
 
 import json
+from datetime import UTC
 from unittest.mock import MagicMock, patch
 
 from flask import Flask
@@ -797,3 +798,335 @@ class TestDevicesKeycloakSync:
         response = client.post("/api/devices/99999/keycloak-sync")
 
         assert response.status_code == 404
+
+
+class TestDevicesLogs:
+    """Tests for GET /api/devices/<id>/logs."""
+
+    def test_get_logs_success(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test getting device logs successfully."""
+        from datetime import datetime
+
+        from app.services.elasticsearch_service import LogEntry, LogQueryResult
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="logs1", name="Logs Test")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"deviceEntityId": "sensor.test"}',
+                )
+                device_id = device.id
+
+        mock_result = LogQueryResult(
+            logs=[
+                LogEntry(
+                    timestamp=datetime(2026, 2, 1, 14, 0, 0, tzinfo=UTC),
+                    message="Log message 1",
+                ),
+                LogEntry(
+                    timestamp=datetime(2026, 2, 1, 14, 1, 0, tzinfo=UTC),
+                    message="Log message 2",
+                ),
+            ],
+            has_more=False,
+            window_start=datetime(2026, 2, 1, 14, 0, 0, tzinfo=UTC),
+            window_end=datetime(2026, 2, 1, 14, 1, 0, tzinfo=UTC),
+        )
+
+        with patch.object(
+            container.elasticsearch_service(),
+            "query_logs",
+            return_value=mock_result,
+        ):
+            response = client.get(f"/api/devices/{device_id}/logs")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["logs"]) == 2
+        assert data["logs"][0]["message"] == "Log message 1"
+        assert data["has_more"] is False
+        assert data["window_start"] is not None
+        assert data["window_end"] is not None
+
+    def test_get_logs_with_time_range(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test getting logs with start and end parameters."""
+        from datetime import datetime
+
+        from app.services.elasticsearch_service import LogQueryResult
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="logs2", name="Logs Test 2")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"deviceEntityId": "sensor.test"}',
+                )
+                device_id = device.id
+
+        mock_result = LogQueryResult(
+            logs=[],
+            has_more=False,
+            window_start=None,
+            window_end=None,
+        )
+
+        with patch.object(
+            container.elasticsearch_service(),
+            "query_logs",
+            return_value=mock_result,
+        ) as mock_query:
+            response = client.get(
+                f"/api/devices/{device_id}/logs"
+                "?start=2026-02-01T14:00:00Z&end=2026-02-01T15:00:00Z"
+            )
+
+        assert response.status_code == 200
+
+        # Verify query was called with parsed timestamps
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args[1]
+        assert call_kwargs["start"] == datetime(2026, 2, 1, 14, 0, 0, tzinfo=UTC)
+        assert call_kwargs["end"] == datetime(2026, 2, 1, 15, 0, 0, tzinfo=UTC)
+
+    def test_get_logs_with_query_param(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test getting logs with wildcard query parameter."""
+        from app.services.elasticsearch_service import LogQueryResult
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="logs3", name="Logs Test 3")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"deviceEntityId": "sensor.test"}',
+                )
+                device_id = device.id
+
+        mock_result = LogQueryResult(
+            logs=[],
+            has_more=False,
+            window_start=None,
+            window_end=None,
+        )
+
+        with patch.object(
+            container.elasticsearch_service(),
+            "query_logs",
+            return_value=mock_result,
+        ) as mock_query:
+            response = client.get(f"/api/devices/{device_id}/logs?query=error*")
+
+        assert response.status_code == 200
+
+        # Verify query parameter was passed
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args[1]
+        assert call_kwargs["query"] == "error*"
+
+    def test_get_logs_device_without_entity_id(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test getting logs for device without entity_id returns empty array."""
+        from app.services.elasticsearch_service import LogQueryResult
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="logs4", name="Logs Test 4")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                # Config without deviceEntityId
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"deviceName": "Test"}',
+                )
+                device_id = device.id
+
+        # Service returns empty result for None entity_id
+        mock_result = LogQueryResult(
+            logs=[],
+            has_more=False,
+            window_start=None,
+            window_end=None,
+        )
+
+        with patch.object(
+            container.elasticsearch_service(),
+            "query_logs",
+            return_value=mock_result,
+        ):
+            response = client.get(f"/api/devices/{device_id}/logs")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["logs"] == []
+        assert data["has_more"] is False
+
+    def test_get_logs_device_not_found(self, client: FlaskClient) -> None:
+        """Test getting logs for nonexistent device returns 404."""
+        response = client.get("/api/devices/99999/logs")
+
+        assert response.status_code == 404
+
+    def test_get_logs_elasticsearch_unavailable_returns_503(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that Elasticsearch unavailability returns 503."""
+        from app.exceptions import ServiceUnavailableException
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="logs5", name="Logs Test 5")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"deviceEntityId": "sensor.test"}',
+                )
+                device_id = device.id
+
+        with patch.object(
+            container.elasticsearch_service(),
+            "query_logs",
+            side_effect=ServiceUnavailableException("Elasticsearch", "Connection failed"),
+        ):
+            response = client.get(f"/api/devices/{device_id}/logs")
+
+        assert response.status_code == 503
+
+    def test_get_logs_has_more_when_paginated(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test has_more is true when results are truncated."""
+        from datetime import datetime
+
+        from app.services.elasticsearch_service import LogEntry, LogQueryResult
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="logs6", name="Logs Test 6")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"deviceEntityId": "sensor.test"}',
+                )
+                device_id = device.id
+
+        mock_result = LogQueryResult(
+            logs=[
+                LogEntry(
+                    timestamp=datetime(2026, 2, 1, 14, 0, 0, tzinfo=UTC),
+                    message="Log message",
+                ),
+            ],
+            has_more=True,
+            window_start=datetime(2026, 2, 1, 14, 0, 0, tzinfo=UTC),
+            window_end=datetime(2026, 2, 1, 14, 0, 0, tzinfo=UTC),
+        )
+
+        with patch.object(
+            container.elasticsearch_service(),
+            "query_logs",
+            return_value=mock_result,
+        ):
+            response = client.get(f"/api/devices/{device_id}/logs")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["has_more"] is True
+        assert data["window_start"] is not None
+        assert data["window_end"] is not None
+
+    def test_get_logs_invalid_datetime_returns_400(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that invalid datetime in query params returns 400."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="logs7", name="Logs Test 7")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"deviceEntityId": "sensor.test"}',
+                )
+                device_id = device.id
+
+        response = client.get(f"/api/devices/{device_id}/logs?start=not-a-date")
+
+        assert response.status_code == 400
