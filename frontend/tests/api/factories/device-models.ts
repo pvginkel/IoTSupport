@@ -33,11 +33,12 @@ export class DeviceModelsFactory {
 
   /**
    * Generate a random model code for testing
-   * Format: lowercase alphanumeric with underscores (e.g., "sensor_abc123def456")
+   * Format: lowercase alphanumeric with underscores (e.g., "playwright_abc123def456")
    * Uses 16 characters from ULID to include both timestamp and random parts,
    * ensuring uniqueness across parallel test workers.
+   * Uses playwright_ prefix so Keycloak cleanup can target only test clients.
    */
-  randomModelCode(prefix = 'model'): string {
+  randomModelCode(prefix = 'playwright'): string {
     const suffix = ulid().toLowerCase().slice(0, 16);
     return `${prefix}_${suffix}`;
   }

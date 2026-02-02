@@ -2927,6 +2927,16 @@
         "tags": []
       }
     },
+    "/api/testing/keycloak-cleanup": {
+      "post": {
+        "description": "This endpoint is used by Playwright tests to clean up Keycloak clients created during test runs. The pattern is matched against client IDs.\n\nRequest Body:     pattern: Regular expression to match against client IDs (required, non-empty)\n\nReturns:     200: Cleanup completed with count and list of deleted client IDs",
+        "operationId": "post__api_testing_keycloak-cleanup",
+        "parameters": [],
+        "responses": {},
+        "summary": "Delete Keycloak clients matching a regex pattern.",
+        "tags": []
+      }
+    },
     "/metrics": {
       "get": {
         "description": "Returns:     Response with metrics data in Prometheus exposition format",

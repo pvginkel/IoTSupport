@@ -28,8 +28,15 @@ export async function startBackend(
     streamLogs?: boolean;
     port?: number;
     excludePorts?: number[];
+    sqliteDbPath?: string;
   } = {}
 ): Promise<BackendServerHandle> {
+  if (!options.sqliteDbPath) {
+    throw new Error(
+      `${formatPrefix(workerIndex, 'backend')} Missing sqliteDbPath for backend startup`
+    );
+  }
+
   const port =
     typeof options.port === 'number'
       ? options.port
@@ -38,7 +45,11 @@ export async function startBackend(
         });
 
   const scriptPath = resolve(getBackendRepoRoot(), './scripts/testing-server.sh');
-  const args = ['--host', HOSTNAME, '--port', String(port)];
+  const args = [
+    '--host', HOSTNAME,
+    '--port', String(port),
+    '--sqlite-db', options.sqliteDbPath,
+  ];
 
   return startService({
     workerIndex,

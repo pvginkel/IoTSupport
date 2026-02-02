@@ -29,7 +29,7 @@ test.describe('Smoke Tests', () => {
     await expect(page).toHaveURL(/\/devices$/);
 
     // Should show device list page (either table or empty state)
-    const heading = page.getByRole('heading', { name: 'Device Configs' });
+    const heading = page.getByRole('heading', { name: 'Devices' });
     await expect(heading).toBeVisible();
   });
 

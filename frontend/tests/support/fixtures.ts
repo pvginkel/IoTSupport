@@ -1,6 +1,9 @@
 /* eslint-disable react-hooks/rules-of-hooks, no-empty-pattern */
 import { test as base, expect } from '@playwright/test';
 import type { WorkerInfo } from '@playwright/test';
+import { copyFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import getPort from 'get-port';
 import { startBackend, startFrontend } from './process/servers';
 import { DevicesFactory } from '../api/factories/devices';
@@ -23,6 +26,40 @@ type TestFixtures = {
 type InternalFixtures = {
   _serviceManager: ServiceManager;
 };
+
+/**
+ * Call the Keycloak cleanup endpoint to delete Playwright test device clients.
+ * Uses a pattern to match only clients created by Playwright tests (iotdevice-playwright_*).
+ * This is called before each worker starts to ensure clean state.
+ * Has a 30s timeout to prevent hanging during teardown.
+ */
+async function cleanupKeycloakClients(backendUrl: string): Promise<void> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
+  try {
+    const response = await fetch(`${backendUrl}/api/testing/keycloak-cleanup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        pattern: 'iotdevice-playwright_.*',
+      }),
+      signal: controller.signal,
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data.deleted_count > 0) {
+        console.log(`[keycloak] Cleaned up ${data.deleted_count} device clients`);
+      }
+    }
+  } catch {
+    // Keycloak may not be configured in test environment, or request timed out - ignore errors
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 export const test = base.extend<TestFixtures, InternalFixtures>({
   frontendUrl: async ({ _serviceManager }, use) => {
@@ -101,6 +138,11 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
           return;
         }
 
+        // Allow 403 errors during auth tests (expected for forbidden resources)
+        if (text.includes('403') || text.includes('FORBIDDEN')) {
+          return;
+        }
+
         // Allow 500 errors during auth error tests
         if (text.includes('500') || text.includes('INTERNAL SERVER ERROR')) {
           return;
@@ -143,6 +185,39 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
 
       const previousFrontend = process.env.FRONTEND_URL;
 
+      // Get seeded database path from global setup
+      const seedDbPath = process.env.PLAYWRIGHT_SEEDED_SQLITE_DB;
+      if (!seedDbPath) {
+        throw new Error(
+          'PLAYWRIGHT_SEEDED_SQLITE_DB is not set. Ensure global setup initialized the test database.'
+        );
+      }
+
+      // Create per-worker database copy
+      let workerDbDir: string | undefined;
+      let workerDbPath: string | undefined;
+
+      const cleanupWorkerDb = async () => {
+        if (workerDbDir) {
+          try {
+            await rm(workerDbDir, { recursive: true, force: true });
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+      };
+
+      try {
+        workerDbDir = await mkdtemp(
+          join(tmpdir(), `iotsupport-worker-${workerInfo.workerIndex}-`)
+        );
+        workerDbPath = join(workerDbDir, 'database.sqlite');
+        await copyFile(seedDbPath, workerDbPath);
+      } catch (error) {
+        await cleanupWorkerDb();
+        throw error;
+      }
+
       const backendPort = await getPort();
       const frontendPort = await getPort({ exclude: [backendPort] });
 
@@ -150,11 +225,15 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
       let frontend: Awaited<ReturnType<typeof startFrontend>> | undefined;
 
       try {
-        // Start backend first
+        // Start backend first with SQLite database
         backend = await startBackend(workerInfo.workerIndex, {
           streamLogs: backendStreamLogs,
           port: backendPort,
+          sqliteDbPath: workerDbPath,
         });
+
+        // Clean up any leftover Keycloak clients from previous test runs
+        await cleanupKeycloakClients(backend.url);
 
         // Start frontend with backend URL for the Vite proxy
         frontend = await startFrontend({
@@ -172,6 +251,7 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
         if (backend) {
           await backend.dispose();
         }
+        await cleanupWorkerDb();
         throw error;
       }
 
@@ -188,6 +268,11 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
           return;
         }
         disposed = true;
+
+        // Clean up Keycloak clients before disposing services
+        if (backend) {
+          await cleanupKeycloakClients(backend.url);
+        }
 
         // Dispose in reverse order: frontend -> backend
         if (frontend) {
@@ -210,6 +295,9 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
             );
           }
         }
+
+        // Clean up worker database
+        await cleanupWorkerDb();
       };
 
       const serviceManager: ServiceManager = {
@@ -225,7 +313,7 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
         process.env.FRONTEND_URL = previousFrontend;
       }
     },
-    { scope: 'worker', timeout: 120_000 },
+    { scope: 'worker', timeout: 180_000 },
   ],
 });
 
