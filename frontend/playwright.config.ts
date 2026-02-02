@@ -8,7 +8,6 @@ export default defineConfig({
   workers: process.env.CI ? 1 : 2,
   reporter: 'html',
   globalSetup: './tests/support/global-setup.ts',
-  timeout: 90_000, // 90 seconds per test (includes fixture setup)
   use: {
     trace: 'on-first-retry',
   },

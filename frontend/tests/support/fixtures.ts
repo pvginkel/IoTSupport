@@ -6,6 +6,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import getPort from 'get-port';
 import { startBackend, startFrontend } from './process/servers';
+import {
+  createBackendLogCollector,
+  createFrontendLogCollector,
+  type BackendLogCollector,
+  type FrontendLogCollector,
+} from './process/backend-logs';
 import { DevicesFactory } from '../api/factories/devices';
 import { DeviceModelsFactory } from '../api/factories/device-models';
 import { AuthFactory } from '../api/factories/auth';
@@ -13,11 +19,15 @@ import { AuthFactory } from '../api/factories/auth';
 type ServiceManager = {
   frontendUrl: string;
   backendUrl: string;
+  backendLogs: BackendLogCollector;
+  frontendLogs: FrontendLogCollector;
   disposeServices(): Promise<void>;
 };
 
 type TestFixtures = {
   frontendUrl: string;
+  backendLogs: BackendLogCollector;
+  frontendLogs: FrontendLogCollector;
   devices: DevicesFactory;
   deviceModels: DeviceModelsFactory;
   auth: AuthFactory;
@@ -65,6 +75,30 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
   frontendUrl: async ({ _serviceManager }, use) => {
     await use(_serviceManager.frontendUrl);
   },
+
+  backendLogs: [
+    async ({ _serviceManager }, use, testInfo) => {
+      const attachment = await _serviceManager.backendLogs.attachToTest(testInfo);
+      try {
+        await use(_serviceManager.backendLogs);
+      } finally {
+        await attachment.stop();
+      }
+    },
+    { auto: true },
+  ],
+
+  frontendLogs: [
+    async ({ _serviceManager }, use, testInfo) => {
+      const attachment = await _serviceManager.frontendLogs.attachToTest(testInfo);
+      try {
+        await use(_serviceManager.frontendLogs);
+      } finally {
+        await attachment.stop();
+      }
+    },
+    { auto: true },
+  ],
 
   baseURL: async ({ frontendUrl }, use) => {
     await use(frontendUrl);
@@ -183,11 +217,23 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
       const backendStreamLogs = process.env.PLAYWRIGHT_BACKEND_LOG_STREAM === 'true';
       const frontendStreamLogs = process.env.PLAYWRIGHT_FRONTEND_LOG_STREAM === 'true';
 
+      // Create log collectors
+      const backendLogs = createBackendLogCollector({
+        workerIndex: workerInfo.workerIndex,
+        streamToConsole: backendStreamLogs,
+      });
+      const frontendLogs = createFrontendLogCollector({
+        workerIndex: workerInfo.workerIndex,
+        streamToConsole: frontendStreamLogs,
+      });
+
       const previousFrontend = process.env.FRONTEND_URL;
 
       // Get seeded database path from global setup
       const seedDbPath = process.env.PLAYWRIGHT_SEEDED_SQLITE_DB;
       if (!seedDbPath) {
+        backendLogs.dispose();
+        frontendLogs.dispose();
         throw new Error(
           'PLAYWRIGHT_SEEDED_SQLITE_DB is not set. Ensure global setup initialized the test database.'
         );
@@ -213,7 +259,10 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
         );
         workerDbPath = join(workerDbDir, 'database.sqlite');
         await copyFile(seedDbPath, workerDbPath);
+        backendLogs.log(`Using SQLite database copy at ${workerDbPath}`);
       } catch (error) {
+        backendLogs.dispose();
+        frontendLogs.dispose();
         await cleanupWorkerDb();
         throw error;
       }
@@ -232,6 +281,11 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
           sqliteDbPath: workerDbPath,
         });
 
+        // Attach backend process streams to log collector
+        backendLogs.attachStream(backend.process.stdout, 'stdout');
+        backendLogs.attachStream(backend.process.stderr, 'stderr');
+        backendLogs.log(`Backend listening on ${backend.url}`);
+
         // Clean up any leftover Keycloak clients from previous test runs
         await cleanupKeycloakClients(backend.url);
 
@@ -243,6 +297,11 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
           port: frontendPort,
           streamLogs: frontendStreamLogs,
         });
+
+        // Attach frontend process streams to log collector
+        frontendLogs.attachStream(frontend.process.stdout, 'stdout');
+        frontendLogs.attachStream(frontend.process.stderr, 'stderr');
+        frontendLogs.log(`Frontend listening on ${frontend.url}`);
       } catch (error) {
         // Clean up if startup failed
         if (frontend) {
@@ -251,6 +310,8 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
         if (backend) {
           await backend.dispose();
         }
+        backendLogs.dispose();
+        frontendLogs.dispose();
         await cleanupWorkerDb();
         throw error;
       }
@@ -303,6 +364,8 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
       const serviceManager: ServiceManager = {
         frontendUrl: frontend.url,
         backendUrl: backend.url,
+        backendLogs,
+        frontendLogs,
         disposeServices,
       };
 
@@ -311,9 +374,11 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
       } finally {
         await disposeServices();
         process.env.FRONTEND_URL = previousFrontend;
+        backendLogs.dispose();
+        frontendLogs.dispose();
       }
     },
-    { scope: 'worker', timeout: 180_000 },
+    { scope: 'worker', timeout: 120_000 },
   ],
 });
 
