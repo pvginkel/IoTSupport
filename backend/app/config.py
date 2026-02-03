@@ -192,13 +192,6 @@ class Environment(BaseSettings):
         description="WiFi password for device provisioning"
     )
 
-    # Logging Endpoint for Provisioning
-    LOGGING_URL: str = Field(
-        default="/api/iot/logging",
-        description="Logging service endpoint URL for device metrics and logs. "
-        "Relative paths are prefixed with DEVICE_BASEURL."
-    )
-
     # Rotation Settings
     ROTATION_CRON: str | None = Field(
         default=None,
@@ -298,9 +291,6 @@ class Settings(BaseModel):
     # WiFi Credentials for Provisioning
     wifi_ssid: str | None
     wifi_password: str | None
-
-    # Logging Endpoint for Provisioning
-    logging_url: str
 
     # Rotation Settings
     rotation_cron: str | None
@@ -458,11 +448,6 @@ class Settings(BaseModel):
         device_baseurl = strip_slashes(env.DEVICE_BASEURL) or baseurl
         device_mqtt_url = env.DEVICE_MQTT_URL or env.MQTT_URL
 
-        # Resolve logging_url: prefix relative paths with device_baseurl
-        logging_url = env.LOGGING_URL
-        if not logging_url.startswith(("http://", "https://")):
-            logging_url = f"{device_baseurl}{logging_url}"
-
         # Derive Fernet key from SECRET_KEY for encrypting cached secrets
         fernet_key = _derive_fernet_key(env.SECRET_KEY)
 
@@ -525,7 +510,6 @@ class Settings(BaseModel):
             keycloak_console_base_url=keycloak_console_base_url,
             wifi_ssid=env.WIFI_SSID,
             wifi_password=env.WIFI_PASSWORD,
-            logging_url=logging_url,
             rotation_cron=env.ROTATION_CRON,
             rotation_timeout_seconds=env.ROTATION_TIMEOUT_SECONDS,
             rotation_critical_threshold_days=env.ROTATION_CRITICAL_THRESHOLD_DAYS,

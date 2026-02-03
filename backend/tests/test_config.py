@@ -49,7 +49,6 @@ class TestEnvironment:
             "MQTT_URL": "mqtt://test:1883",
             "WIFI_SSID": "TestNet",
             "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com",
         }, clear=False):
             env = Environment(_env_file=None)  # type: ignore[call-arg]
 
@@ -70,7 +69,6 @@ class TestEnvironment:
             "MQTT_URL": "mqtt://test:1883",
             "WIFI_SSID": "TestNet",
             "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com",
         }, clear=False):
             env = Environment(_env_file=None)  # type: ignore[call-arg]
 
@@ -96,7 +94,6 @@ class TestSettingsLoad:
             "MQTT_URL": "mqtt://test:1883",
             "WIFI_SSID": "TestNet",
             "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com",
             "BASEURL": "https://iot.example.com/",  # With trailing slash
         }, clear=False):
             settings = Settings.load()
@@ -117,7 +114,6 @@ class TestSettingsLoad:
             "MQTT_URL": "mqtt://test:1883",
             "WIFI_SSID": "TestNet",
             "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com",
             "BASEURL": "https://iot.example.com",
         }, clear=False):
             # Ensure DEVICE_BASEURL is not set
@@ -136,7 +132,6 @@ class TestSettingsLoad:
             "MQTT_URL": "mqtt://test:1883",
             "WIFI_SSID": "TestNet",
             "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com",
             "BASEURL": "https://iot.example.com",
             "DEVICE_BASEURL": "https://devices.example.com",
         }, clear=False):
@@ -154,7 +149,6 @@ class TestSettingsLoad:
             "MQTT_URL": "mqtt://broker.example.com:1883",
             "WIFI_SSID": "TestNet",
             "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com",
             "BASEURL": "https://iot.example.com",
         }, clear=False):
             # Ensure DEVICE_MQTT_URL is not set
@@ -174,7 +168,6 @@ class TestSettingsLoad:
             "DEVICE_MQTT_URL": "mqtt://device-broker.example.com:1883",
             "WIFI_SSID": "TestNet",
             "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com",
             "BASEURL": "https://iot.example.com",
         }, clear=False):
             settings = Settings.load()
@@ -182,57 +175,6 @@ class TestSettingsLoad:
             assert settings.device_mqtt_url == "mqtt://device-broker.example.com:1883"
             # Original mqtt_url should still be the internal one
             assert settings.mqtt_url == "mqtt://internal-broker:1883"
-
-    def test_logging_url_relative_prefixed(self, tmp_path: Path):
-        """Relative LOGGING_URL is prefixed with DEVICE_BASEURL."""
-        assets_dir = tmp_path / "assets"
-        assets_dir.mkdir()
-
-        with patch.dict(os.environ, {
-            "ASSETS_DIR": str(assets_dir),
-            "MQTT_URL": "mqtt://test:1883",
-            "WIFI_SSID": "TestNet",
-            "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "/api/iot/logging",
-            "DEVICE_BASEURL": "https://devices.example.com",
-        }, clear=False):
-            settings = Settings.load()
-
-            assert settings.logging_url == "https://devices.example.com/api/iot/logging"
-
-    def test_logging_url_absolute_preserved(self, tmp_path: Path):
-        """Absolute LOGGING_URL is preserved as-is."""
-        assets_dir = tmp_path / "assets"
-        assets_dir.mkdir()
-
-        with patch.dict(os.environ, {
-            "ASSETS_DIR": str(assets_dir),
-            "MQTT_URL": "mqtt://test:1883",
-            "WIFI_SSID": "TestNet",
-            "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com/ingest",
-            "DEVICE_BASEURL": "https://devices.example.com",
-        }, clear=False):
-            settings = Settings.load()
-
-            assert settings.logging_url == "https://logs.example.com/ingest"
-
-    def test_logging_url_default(self, tmp_path: Path):
-        """Default LOGGING_URL is prefixed with DEVICE_BASEURL."""
-        assets_dir = tmp_path / "assets"
-        assets_dir.mkdir()
-
-        env = Environment(
-            _env_file=None,  # type: ignore[call-arg]
-            ASSETS_DIR=assets_dir,
-            MQTT_URL="mqtt://test:1883",
-            WIFI_SSID="TestNet",
-            WIFI_PASSWORD="TestPass",
-            DEVICE_BASEURL="https://devices.example.com",
-        )
-        settings = Settings.load(env)
-
-        assert settings.logging_url == "https://devices.example.com/api/iot/logging"
 
     def test_fernet_key_derived_from_secret(self, tmp_path: Path):
         """Fernet key is derived from SECRET_KEY if not explicit."""
@@ -245,7 +187,6 @@ class TestSettingsLoad:
             "MQTT_URL": "mqtt://test:1883",
             "WIFI_SSID": "TestNet",
             "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com",
         }, clear=False):
             # Ensure FERNET_KEY is not set
             os.environ.pop("FERNET_KEY", None)
@@ -264,7 +205,6 @@ class TestSettingsLoad:
             "MQTT_URL": "mqtt://test:1883",
             "WIFI_SSID": "TestNet",
             "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com",
             "OIDC_CLIENT_ID": "my-client-id",
         }, clear=False):
             # Ensure OIDC_AUDIENCE is not set
@@ -284,7 +224,6 @@ class TestSettingsLoad:
             "MQTT_URL": "mqtt://test:1883",
             "WIFI_SSID": "TestNet",
             "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com",
             "BASEURL": "https://iot.example.com",
         }, clear=False):
             os.environ.pop("OIDC_COOKIE_SECURE", None)
@@ -297,7 +236,6 @@ class TestSettingsLoad:
             "MQTT_URL": "mqtt://test:1883",
             "WIFI_SSID": "TestNet",
             "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com",
             "BASEURL": "http://localhost:3200",
         }, clear=False):
             os.environ.pop("OIDC_COOKIE_SECURE", None)
@@ -314,7 +252,6 @@ class TestSettingsLoad:
             "MQTT_URL": "mqtt://test:1883",
             "WIFI_SSID": "TestNet",
             "WIFI_PASSWORD": "TestPass",
-            "LOGGING_URL": "https://logs.example.com",
             "KEYCLOAK_BASE_URL": "https://auth.example.com",
             "KEYCLOAK_REALM": "iot",
         }, clear=False):
@@ -335,7 +272,6 @@ class TestSettingsLoad:
             MQTT_URL="mqtt://test:1883",
             WIFI_SSID="TestNet",
             WIFI_PASSWORD="TestPass",
-            LOGGING_URL="https://logs.example.com",
             KEYCLOAK_BASE_URL=None,
             KEYCLOAK_REALM=None,
         )
@@ -387,7 +323,6 @@ class TestSettingsDirectConstruction:
             keycloak_console_base_url=None,
             wifi_ssid="TestNet",
             wifi_password="TestPass",
-            logging_url="https://logs.example.com",
             rotation_cron=None,
             rotation_timeout_seconds=300,
             rotation_critical_threshold_days=None,
@@ -440,7 +375,6 @@ class TestSettingsDirectConstruction:
             "keycloak_console_base_url": None,
             "wifi_ssid": "Test",
             "wifi_password": "Test",
-            "logging_url": "https://logs.example.com",
             "rotation_cron": None,
             "rotation_timeout_seconds": 300,
             "rotation_critical_threshold_days": None,
@@ -507,7 +441,6 @@ class TestSettingsValidation:
             keycloak_console_base_url=None,
             wifi_ssid="Test",
             wifi_password="Test",
-            logging_url="https://logs.example.com",
             rotation_cron=None,
             rotation_timeout_seconds=300,
             rotation_critical_threshold_days=None,
@@ -561,7 +494,6 @@ class TestSettingsValidation:
             keycloak_console_base_url="https://auth.example.com/console",
             wifi_ssid="TestNet",
             wifi_password="TestPass",
-            logging_url="https://logs.example.com",
             rotation_cron="0 8 * * *",
             rotation_timeout_seconds=300,
             rotation_critical_threshold_days=7,
@@ -621,7 +553,6 @@ class TestSettingsProperties:
             keycloak_console_base_url=None,
             wifi_ssid="Test",
             wifi_password="Test",
-            logging_url="https://logs.example.com",
             rotation_cron=None,
             rotation_timeout_seconds=300,
             rotation_critical_threshold_days=None,

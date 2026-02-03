@@ -63,8 +63,6 @@ def _build_testing_settings(tmp_path: Path) -> Settings:
         # WiFi credentials for provisioning
         wifi_ssid="TestNetwork",
         wifi_password="test-wifi-password",
-        # Logging endpoint
-        logging_url="https://logs.example.com/ingest",
         # Rotation settings
         rotation_cron="0 8 1-7 * 6",
         rotation_timeout_seconds=300,

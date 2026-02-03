@@ -33,7 +33,6 @@ class TestNvsGeneratorBasic:
             "mqtt_url": "mqtt://mqtt.example.com:1883",
             "wifi_ssid": "TestNetwork",
             "wifi_password": "TestPassword123",
-            "logging_url": "https://logs.example.com/ingest",
         }
 
     def test_generate_nvs_blob_returns_correct_size(self) -> None:
@@ -85,7 +84,6 @@ class TestNvsGeneratorValidation:
             "mqtt_url": "mqtt://mqtt.example.com:1883",
             "wifi_ssid": "TestNetwork",
             "wifi_password": "TestPassword123",
-            "logging_url": "https://logs.example.com/ingest",
         }
 
     def test_key_too_long_raises_validation_error(self) -> None:
@@ -152,7 +150,7 @@ class TestNvsGeneratorValidation:
         """Test that all provisioning fields are validated as mandatory."""
         # Any field with None value should raise
         for field in ["device_key", "client_id", "client_secret", "token_url",
-                      "base_url", "mqtt_url", "wifi_ssid", "wifi_password", "logging_url"]:
+                      "base_url", "mqtt_url", "wifi_ssid", "wifi_password"]:
             data = self._make_valid_data()
             data[field] = None
 
@@ -195,17 +193,6 @@ class TestNvsGeneratorValidation:
         assert "wifi_password" in str(exc_info.value)
         assert "missing" in str(exc_info.value)
 
-    def test_logging_url_none_raises_validation_error(self) -> None:
-        """Test that logging_url with None value raises ValidationException."""
-        data = self._make_valid_data()
-        data["logging_url"] = None
-
-        with pytest.raises(ValidationException) as exc_info:
-            generate_nvs_blob(data, partition_size=TEST_PARTITION_SIZE)
-
-        assert "logging_url" in str(exc_info.value)
-        assert "missing" in str(exc_info.value)
-
     def test_partition_size_too_small_raises_validation_error(self) -> None:
         """Test that partition size below 12KB raises ValidationException."""
         data = self._make_valid_data()
@@ -241,7 +228,6 @@ class TestNvsGeneratorIntegration:
             "mqtt_url": "mqtts://mqtt.example.com:8883",
             "wifi_ssid": "HomeNetwork",
             "wifi_password": "SuperSecretPassword123!",
-            "logging_url": "https://logs.example.com/ingest",
         }
 
         blob = generate_nvs_blob(data, partition_size=TEST_PARTITION_SIZE)
@@ -265,7 +251,6 @@ class TestNvsGeneratorIntegration:
             "mqtt_url": "mqtt://mqtt.local:1883",
             "wifi_ssid": "LocalNetwork",
             "wifi_password": "LocalPassword",
-            "logging_url": "https://logs.local/ingest",
         }
 
         blob = generate_nvs_blob(data, partition_size=TEST_PARTITION_SIZE)
@@ -289,7 +274,6 @@ class TestNvsGeneratorIntegration:
             "mqtt_url": "mqtt://mqtt.example.com:1883",
             "wifi_ssid": "TestNetwork",
             "wifi_password": "TestPassword",
-            "logging_url": "https://logs.example.com/ingest",
         }
 
         blob1 = generate_nvs_blob(data, partition_size=TEST_PARTITION_SIZE)
@@ -308,7 +292,6 @@ class TestNvsGeneratorIntegration:
             "mqtt_url": "mqtt://mqtt.example.com:1883",
             "wifi_ssid": "Café",  # UTF-8 with accented character
             "wifi_password": "TestPassword",
-            "logging_url": "https://logs.example.com/ingest",
         }
 
         blob = generate_nvs_blob(data, partition_size=TEST_PARTITION_SIZE)
@@ -327,7 +310,6 @@ class TestNvsGeneratorIntegration:
             "mqtt_url": "mqtt://mqtt.example.com:1883",
             "wifi_ssid": "TestNetwork",
             "wifi_password": "TestPassword",
-            "logging_url": "https://logs.example.com/ingest",
         }
 
         # Test various valid sizes

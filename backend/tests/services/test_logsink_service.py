@@ -55,7 +55,6 @@ def _make_test_settings(
         keycloak_console_base_url=None,
         wifi_ssid=None,
         wifi_password=None,
-        logging_url="http://localhost:3200/api/iot/logging",
         rotation_cron=None,
         rotation_timeout_seconds=300,
         rotation_critical_threshold_days=None,
