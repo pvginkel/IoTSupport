@@ -231,6 +231,11 @@ class Environment(BaseSettings):
         description="Index pattern for device logs"
     )
 
+    # MQTT Client ID for persistent sessions
+    MQTT_CLIENT_ID: str = Field(
+        default="iotsupport-backend",
+        description="MQTT client ID for persistent sessions (shared by all MQTT operations)"
+    )
 
 
 class Settings(BaseModel):
@@ -307,6 +312,9 @@ class Settings(BaseModel):
     elasticsearch_username: str | None
     elasticsearch_password: str | None
     elasticsearch_index_pattern: str
+
+    # MQTT Client ID
+    mqtt_client_id: str
 
     # Secret Encryption Key (derived from secret_key)
     fernet_key: str
@@ -525,6 +533,7 @@ class Settings(BaseModel):
             elasticsearch_username=env.ELASTICSEARCH_USERNAME,
             elasticsearch_password=env.ELASTICSEARCH_PASSWORD,
             elasticsearch_index_pattern=env.ELASTICSEARCH_INDEX_PATTERN,
+            mqtt_client_id=env.MQTT_CLIENT_ID,
             fernet_key=fernet_key,
             sqlalchemy_engine_options=sqlalchemy_engine_options,
         )
