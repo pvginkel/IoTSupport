@@ -326,7 +326,6 @@ def get_provisioning_for_rotation(
             "mqtt_url": app_config.device_mqtt_url,
             "wifi_ssid": app_config.wifi_ssid,
             "wifi_password": app_config.wifi_password,
-            "logging_url": app_config.logging_url,
         }
 
         logger.info("Generated rotation provisioning for device %s", device.key)

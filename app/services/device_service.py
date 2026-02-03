@@ -441,7 +441,6 @@ class DeviceService:
             "mqtt_url": self.config.device_mqtt_url,
             "wifi_ssid": self.config.wifi_ssid,
             "wifi_password": self.config.wifi_password,
-            "logging_url": self.config.logging_url,
         }
 
         # Generate NVS binary blob with specified partition size

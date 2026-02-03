@@ -325,4 +325,3 @@ class TestIotProvisioning:
                 assert "mqtt_url" in data
                 assert "wifi_ssid" in data
                 assert "wifi_password" in data
-                assert "logging_url" in data
