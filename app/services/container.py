@@ -11,6 +11,7 @@ from app.services.elasticsearch_service import ElasticsearchService
 from app.services.firmware_service import FirmwareService
 from app.services.image_proxy_service import ImageProxyService
 from app.services.keycloak_admin_service import KeycloakAdminService
+from app.services.logsink_service import LogSinkService
 from app.services.metrics_service import MetricsService
 from app.services.mqtt_service import MqttService
 from app.services.oidc_client_service import OidcClientService
@@ -38,9 +39,7 @@ class ServiceContainer(containers.DeclarativeContainer):
     # MqttService - Singleton to maintain persistent MQTT connection
     mqtt_service = providers.Singleton(
         MqttService,
-        mqtt_url=config.provided.mqtt_url,
-        mqtt_username=config.provided.mqtt_username,
-        mqtt_password=config.provided.mqtt_password,
+        config=config,
     )
 
     # TestDataService - Factory creates new instance per request with database session
@@ -90,6 +89,13 @@ class ServiceContainer(containers.DeclarativeContainer):
         ElasticsearchService,
         config=config,
         metrics_service=metrics_service,
+    )
+
+    # LogSinkService - Singleton for MQTT log ingestion to Elasticsearch
+    logsink_service = providers.Singleton(
+        LogSinkService,
+        config=config,
+        mqtt_service=mqtt_service,
     )
 
     # FirmwareService - Singleton for firmware file management

@@ -1,10 +1,63 @@
 """Tests for MqttService."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import ANY, MagicMock, Mock, patch
 
-import pytest
-
+from app.config import Settings
 from app.services.mqtt_service import MqttService
+
+
+def _make_test_settings(
+    mqtt_url: str | None = "mqtt://localhost:1883",
+    mqtt_username: str | None = None,
+    mqtt_password: str | None = None,
+    mqtt_client_id: str = "iotsupport-backend",
+) -> Settings:
+    """Create test settings with configurable MQTT settings."""
+    return Settings(
+        secret_key="test-secret",
+        flask_env="testing",
+        debug=True,
+        database_url="sqlite://",
+        assets_dir=None,
+        cors_origins=["http://localhost:3000"],
+        mqtt_url=mqtt_url,
+        device_mqtt_url=mqtt_url,
+        mqtt_username=mqtt_username,
+        mqtt_password=mqtt_password,
+        baseurl="http://localhost:3200",
+        device_baseurl="http://localhost:3200",
+        oidc_enabled=False,
+        oidc_issuer_url=None,
+        oidc_client_id=None,
+        oidc_client_secret=None,
+        oidc_scopes="openid profile email",
+        oidc_audience=None,
+        oidc_clock_skew_seconds=30,
+        oidc_cookie_name="access_token",
+        oidc_cookie_secure=False,
+        oidc_cookie_samesite="Lax",
+        oidc_refresh_cookie_name="refresh_token",
+        oidc_token_url=None,
+        keycloak_base_url=None,
+        keycloak_realm=None,
+        keycloak_admin_client_id=None,
+        keycloak_admin_client_secret=None,
+        keycloak_device_scope_name="iot-device-audience",
+        keycloak_admin_url=None,
+        keycloak_console_base_url=None,
+        wifi_ssid=None,
+        wifi_password=None,
+        logging_url="http://localhost:3200/api/iot/logging",
+        rotation_cron=None,
+        rotation_timeout_seconds=300,
+        rotation_critical_threshold_days=None,
+        elasticsearch_url=None,
+        elasticsearch_username=None,
+        elasticsearch_password=None,
+        elasticsearch_index_pattern="logstash-http-*",
+        mqtt_client_id=mqtt_client_id,
+        fernet_key="test-fernet-key-padded-to-32-bytes=",
+    )
 
 
 class TestMqttServiceInitialization:
@@ -19,20 +72,25 @@ class TestMqttServiceInitialization:
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
-        service = MqttService(
+        settings = _make_test_settings(
             mqtt_url="mqtt://localhost:1883",
             mqtt_username="test_user",
             mqtt_password="test_pass",
         )
+        service = MqttService(config=settings)
 
-        # Verify client was created
+        # Verify client was created with client_id
         mock_mqtt_client_class.assert_called_once()
+        call_kwargs = mock_mqtt_client_class.call_args[1]
+        assert call_kwargs["client_id"] == "iotsupport-backend"
 
         # Verify credentials were set
         mock_client.username_pw_set.assert_called_once_with("test_user", "test_pass")
 
-        # Verify connection was started
-        mock_client.connect_async.assert_called_once_with("localhost", 1883)
+        # Verify connection was started with persistent session
+        mock_client.connect_async.assert_called_once_with(
+            "localhost", 1883, clean_start=False, properties=ANY
+        )
         mock_client.loop_start.assert_called_once()
 
         # Service is NOT enabled until connection confirmed via _on_connect callback
@@ -56,13 +114,16 @@ class TestMqttServiceInitialization:
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
-        MqttService(mqtt_url="mqtts://broker.example.com:8883")
+        settings = _make_test_settings(mqtt_url="mqtts://broker.example.com:8883")
+        MqttService(config=settings)
 
         # Verify TLS was configured
         mock_client.tls_set.assert_called_once()
 
-        # Verify connection to correct port
-        mock_client.connect_async.assert_called_once_with("broker.example.com", 8883)
+        # Verify connection to correct port with persistent session
+        mock_client.connect_async.assert_called_once_with(
+            "broker.example.com", 8883, clean_start=False, properties=ANY
+        )
 
     @patch("app.services.mqtt_service.MqttClient")
     def test_init_with_mqtt_url_no_port_uses_default(
@@ -72,9 +133,12 @@ class TestMqttServiceInitialization:
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
-        MqttService(mqtt_url="mqtt://broker.local")
+        settings = _make_test_settings(mqtt_url="mqtt://broker.local")
+        MqttService(config=settings)
 
-        mock_client.connect_async.assert_called_once_with("broker.local", 1883)
+        mock_client.connect_async.assert_called_once_with(
+            "broker.local", 1883, clean_start=False, properties=ANY
+        )
 
     @patch("app.services.mqtt_service.MqttClient")
     def test_init_with_mqtts_url_no_port_uses_default(
@@ -84,21 +148,26 @@ class TestMqttServiceInitialization:
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
-        MqttService(mqtt_url="mqtts://broker.secure")
+        settings = _make_test_settings(mqtt_url="mqtts://broker.secure")
+        MqttService(config=settings)
 
         mock_client.tls_set.assert_called_once()
-        mock_client.connect_async.assert_called_once_with("broker.secure", 8883)
+        mock_client.connect_async.assert_called_once_with(
+            "broker.secure", 8883, clean_start=False, properties=ANY
+        )
 
     def test_init_without_mqtt_url_disables_service(self):
         """Service is disabled when MQTT_URL is None."""
-        service = MqttService(mqtt_url=None)
+        settings = _make_test_settings(mqtt_url=None)
+        service = MqttService(config=settings)
 
         assert service.enabled is False
         assert service.client is None
 
     def test_init_with_empty_mqtt_url_disables_service(self):
         """Service is disabled when MQTT_URL is empty string."""
-        service = MqttService(mqtt_url="")
+        settings = _make_test_settings(mqtt_url="")
+        service = MqttService(config=settings)
 
         assert service.enabled is False
         assert service.client is None
@@ -109,7 +178,8 @@ class TestMqttServiceInitialization:
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
-        MqttService(mqtt_url="mqtt://localhost:1883")
+        settings = _make_test_settings(mqtt_url="mqtt://localhost:1883")
+        MqttService(config=settings)
 
         # Verify credentials were not set
         mock_client.username_pw_set.assert_not_called()
@@ -119,7 +189,8 @@ class TestMqttServiceInitialization:
         self, mock_mqtt_client_class: Mock
     ):
         """Service is disabled when URL format is invalid."""
-        service = MqttService(mqtt_url="http://invalid:1883")
+        settings = _make_test_settings(mqtt_url="http://invalid:1883")
+        service = MqttService(config=settings)
 
         assert service.enabled is False
         assert service.client is None
@@ -134,9 +205,25 @@ class TestMqttServiceInitialization:
         """Service is disabled when MQTT client creation raises exception."""
         mock_mqtt_client_class.side_effect = Exception("Connection failed")
 
-        service = MqttService(mqtt_url="mqtt://localhost:1883")
+        settings = _make_test_settings(mqtt_url="mqtt://localhost:1883")
+        service = MqttService(config=settings)
 
         assert service.enabled is False
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_init_with_custom_client_id(self, mock_mqtt_client_class: Mock):
+        """Custom client ID is used when configured."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+
+        settings = _make_test_settings(
+            mqtt_url="mqtt://localhost:1883",
+            mqtt_client_id="my-custom-client",
+        )
+        MqttService(config=settings)
+
+        call_kwargs = mock_mqtt_client_class.call_args[1]
+        assert call_kwargs["client_id"] == "my-custom-client"
 
 
 def _simulate_successful_connection(service: MqttService, mock_client: MagicMock) -> None:
@@ -145,6 +232,144 @@ def _simulate_successful_connection(service: MqttService, mock_client: MagicMock
     mock_reason_code.is_failure = False
     mock_connect_flags = MagicMock()
     service._on_connect(mock_client, None, mock_connect_flags, mock_reason_code, None)
+
+
+class TestMqttServiceSubscribe:
+    """Tests for MQTT subscribe method."""
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_subscribe_when_connected(self, mock_mqtt_client_class: Mock):
+        """Subscribe is called immediately when already connected."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
+        _simulate_successful_connection(service, mock_client)
+
+        callback = MagicMock()
+        service.subscribe("test/topic", qos=1, callback=callback)
+
+        mock_client.subscribe.assert_called_with("test/topic", qos=1)
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_subscribe_queued_when_not_connected(self, mock_mqtt_client_class: Mock):
+        """Subscribe is queued when not yet connected."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
+        # Don't call _simulate_successful_connection - service.enabled is False
+
+        callback = MagicMock()
+        service.subscribe("test/topic", qos=1, callback=callback)
+
+        # Subscribe should NOT be called on client yet
+        mock_client.subscribe.assert_not_called()
+
+        # Now connect
+        _simulate_successful_connection(service, mock_client)
+
+        # Subscribe should be called after connection
+        mock_client.subscribe.assert_called_with("test/topic", qos=1)
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_on_connect_resubscribes_all_topics(self, mock_mqtt_client_class: Mock):
+        """All subscriptions are re-established on reconnect."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
+
+        # Subscribe to multiple topics while disconnected
+        callback1 = MagicMock()
+        callback2 = MagicMock()
+        service.subscribe("topic/a", qos=1, callback=callback1)
+        service.subscribe("topic/b", qos=0, callback=callback2)
+
+        # Connect
+        _simulate_successful_connection(service, mock_client)
+
+        # Both subscriptions should be established
+        assert mock_client.subscribe.call_count == 2
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_on_message_routes_to_callback(self, mock_mqtt_client_class: Mock):
+        """Messages are routed to the correct callback."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
+        _simulate_successful_connection(service, mock_client)
+
+        callback = MagicMock()
+        service.subscribe("test/topic", qos=1, callback=callback)
+
+        # Simulate message
+        mock_message = MagicMock()
+        mock_message.topic = "test/topic"
+        mock_message.payload = b"test payload"
+
+        service._on_message(mock_client, None, mock_message)
+
+        callback.assert_called_once_with(b"test payload")
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_on_message_buffers_when_no_callback(self, mock_mqtt_client_class: Mock):
+        """Messages on unregistered topics are buffered for later delivery."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
+        _simulate_successful_connection(service, mock_client)
+
+        # Simulate message arriving BEFORE callback is registered
+        mock_message = MagicMock()
+        mock_message.topic = "test/topic"
+        mock_message.payload = b"buffered payload"
+
+        service._on_message(mock_client, None, mock_message)
+
+        # Message should be buffered
+        assert "test/topic" in service._pending_messages
+        assert service._pending_messages["test/topic"] == [b"buffered payload"]
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_subscribe_delivers_buffered_messages(self, mock_mqtt_client_class: Mock):
+        """Buffered messages are delivered when callback is registered."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
+        _simulate_successful_connection(service, mock_client)
+
+        # Simulate messages arriving BEFORE callback is registered
+        mock_message1 = MagicMock()
+        mock_message1.topic = "test/topic"
+        mock_message1.payload = b"message 1"
+        mock_message2 = MagicMock()
+        mock_message2.topic = "test/topic"
+        mock_message2.payload = b"message 2"
+
+        service._on_message(mock_client, None, mock_message1)
+        service._on_message(mock_client, None, mock_message2)
+
+        # Now register callback
+        callback = MagicMock()
+        service.subscribe("test/topic", qos=1, callback=callback)
+
+        # Buffered messages should have been delivered
+        assert callback.call_count == 2
+        callback.assert_any_call(b"message 1")
+        callback.assert_any_call(b"message 2")
+
+        # Buffer should be cleared
+        assert "test/topic" not in service._pending_messages
 
 
 class TestMqttServicePublish:
@@ -161,8 +386,8 @@ class TestMqttServicePublish:
         mock_result.rc = 0
         mock_client.publish.return_value = mock_result
 
-        service = MqttService(mqtt_url="mqtt://localhost:1883")
-        # Simulate successful connection
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
         _simulate_successful_connection(service, mock_client)
         service.publish("iotsupport/updates/configs", "abc12345")
 
@@ -182,8 +407,8 @@ class TestMqttServicePublish:
         mock_result.rc = 0
         mock_client.publish.return_value = mock_result
 
-        service = MqttService(mqtt_url="mqtt://localhost:1883")
-        # Simulate successful connection
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
         _simulate_successful_connection(service, mock_client)
         service.publish("iotsupport/updates/assets", "firmware-v1.2.3.bin")
 
@@ -194,7 +419,8 @@ class TestMqttServicePublish:
 
     def test_publish_when_disabled_silent_skip(self):
         """Publish is skipped silently when service is disabled."""
-        service = MqttService(mqtt_url=None)
+        settings = _make_test_settings(mqtt_url=None)
+        service = MqttService(config=settings)
 
         # Should not raise exception
         service.publish("any/topic", "any-payload")
@@ -210,8 +436,8 @@ class TestMqttServicePublish:
         mock_result.rc = 0
         mock_client.publish.return_value = mock_result
 
-        service = MqttService(mqtt_url="mqtt://localhost:1883")
-        # Simulate successful connection
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
         _simulate_successful_connection(service, mock_client)
         service.publish("test/topic", "test-payload")
 
@@ -231,8 +457,8 @@ class TestMqttServicePublish:
         # Mock publish raising exception
         mock_client.publish.side_effect = Exception("Network error")
 
-        service = MqttService(mqtt_url="mqtt://localhost:1883")
-        # Simulate successful connection
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
         _simulate_successful_connection(service, mock_client)
 
         # Should not raise exception (fire-and-forget)
@@ -249,8 +475,8 @@ class TestMqttServicePublish:
         mock_result.rc = 1  # MQTT_ERR_NOMEM or similar
         mock_client.publish.return_value = mock_result
 
-        service = MqttService(mqtt_url="mqtt://localhost:1883")
-        # Simulate successful connection
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
         _simulate_successful_connection(service, mock_client)
 
         # Should not raise exception
@@ -268,7 +494,8 @@ class TestMqttServiceConnectionCallbacks:
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
-        service = MqttService(mqtt_url="mqtt://localhost:1883")
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
 
         # Create mock reason code for success
         mock_reason_code = MagicMock()
@@ -278,9 +505,7 @@ class TestMqttServiceConnectionCallbacks:
         # Simulate successful connection callback
         service._on_connect(mock_client, None, mock_connect_flags, mock_reason_code, None)
 
-        # Connection state should be 1
-        # We can't easily verify gauge value without accessing prometheus internals,
-        # but we can verify the method executed without error
+        assert service.enabled is True
 
     @patch("app.services.mqtt_service.MqttClient")
     def test_on_connect_failure_disables_service(self, mock_mqtt_client_class: Mock):
@@ -288,7 +513,8 @@ class TestMqttServiceConnectionCallbacks:
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
-        service = MqttService(mqtt_url="mqtt://localhost:1883")
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
         # Service starts disabled (enabled only set on successful connection)
         assert service.enabled is False
 
@@ -311,17 +537,15 @@ class TestMqttServiceConnectionCallbacks:
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
-        service = MqttService(mqtt_url="mqtt://localhost:1883")
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
 
         # Create mock disconnect flags and reason code
         mock_disconnect_flags = MagicMock()
         mock_reason_code = MagicMock()
 
-        # Simulate disconnect callback
+        # Simulate disconnect callback - should not raise
         service._on_disconnect(mock_client, None, mock_disconnect_flags, mock_reason_code, None)
-
-        # Connection state should be 0
-        # Method should execute without error
 
 
 class TestMqttServiceShutdown:
@@ -333,7 +557,8 @@ class TestMqttServiceShutdown:
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
-        service = MqttService(mqtt_url="mqtt://localhost:1883")
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
         service.shutdown()
 
         # Verify shutdown sequence
@@ -342,7 +567,8 @@ class TestMqttServiceShutdown:
 
     def test_shutdown_when_disabled_is_noop(self):
         """Shutdown does nothing when service is disabled."""
-        service = MqttService(mqtt_url=None)
+        settings = _make_test_settings(mqtt_url=None)
+        service = MqttService(config=settings)
 
         # Should not raise exception
         service.shutdown()
@@ -353,7 +579,8 @@ class TestMqttServiceShutdown:
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
-        service = MqttService(mqtt_url="mqtt://localhost:1883")
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
 
         # Call shutdown multiple times
         service.shutdown()
@@ -375,7 +602,8 @@ class TestMqttServiceShutdown:
         # Mock disconnect raising exception
         mock_client.disconnect.side_effect = Exception("Already disconnected")
 
-        service = MqttService(mqtt_url="mqtt://localhost:1883")
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
 
         # Should not raise exception
         service.shutdown()
@@ -390,73 +618,23 @@ class TestMqttServiceMetrics:
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
 
-        service = MqttService(mqtt_url="mqtt://localhost:1883")
+        settings = _make_test_settings()
+        service = MqttService(config=settings)
 
         # Verify metrics objects exist
         assert hasattr(service, "mqtt_publish_total")
         assert hasattr(service, "mqtt_connection_state")
         assert hasattr(service, "mqtt_publish_duration_seconds")
         assert hasattr(service, "mqtt_enabled_gauge")
+        assert hasattr(service, "mqtt_subscriptions_total")
 
     def test_metrics_initialized_when_disabled(self):
         """Prometheus metrics are initialized even when MQTT is disabled."""
-        service = MqttService(mqtt_url=None)
+        settings = _make_test_settings(mqtt_url=None)
+        service = MqttService(config=settings)
 
         # Verify metrics objects exist
         assert hasattr(service, "mqtt_publish_total")
         assert hasattr(service, "mqtt_connection_state")
         assert hasattr(service, "mqtt_publish_duration_seconds")
         assert hasattr(service, "mqtt_enabled_gauge")
-
-
-class TestMqttServiceUrlParsing:
-    """Tests for MQTT URL parsing."""
-
-    def test_parse_mqtt_url_basic(self):
-        """Basic mqtt:// URL is parsed correctly."""
-        service = MqttService()
-        host, port, use_tls = service._parse_mqtt_url("mqtt://broker.local:1883")
-
-        assert host == "broker.local"
-        assert port == 1883
-        assert use_tls is False
-
-    def test_parse_mqtts_url(self):
-        """mqtts:// URL is parsed with TLS enabled."""
-        service = MqttService()
-        host, port, use_tls = service._parse_mqtt_url("mqtts://broker.secure:8883")
-
-        assert host == "broker.secure"
-        assert port == 8883
-        assert use_tls is True
-
-    def test_parse_url_without_port_mqtt(self):
-        """mqtt:// URL without port uses default 1883."""
-        service = MqttService()
-        host, port, use_tls = service._parse_mqtt_url("mqtt://broker.local")
-
-        assert host == "broker.local"
-        assert port == 1883
-
-    def test_parse_url_without_port_mqtts(self):
-        """mqtts:// URL without port uses default 8883."""
-        service = MqttService()
-        host, port, use_tls = service._parse_mqtt_url("mqtts://broker.secure")
-
-        assert host == "broker.secure"
-        assert port == 8883
-
-    def test_parse_url_with_path_components(self):
-        """URL with path components extracts host/port correctly."""
-        service = MqttService()
-        host, port, use_tls = service._parse_mqtt_url("mqtt://broker.local:1883/some/path")
-
-        assert host == "broker.local"
-        assert port == 1883
-
-    def test_parse_url_invalid_scheme(self):
-        """Invalid URL scheme raises ValueError."""
-        service = MqttService()
-
-        with pytest.raises(ValueError, match="Invalid MQTT URL scheme"):
-            service._parse_mqtt_url("http://broker.local:1883")

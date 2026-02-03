@@ -395,6 +395,7 @@ class TestSettingsDirectConstruction:
             elasticsearch_username=None,
             elasticsearch_password=None,
             elasticsearch_index_pattern="logstash-http-*",
+            mqtt_client_id="iotsupport-backend",
             fernet_key="test-fernet-key-base64-encoded-32-bytes-here==",
         )
 
@@ -447,6 +448,7 @@ class TestSettingsDirectConstruction:
             "elasticsearch_username": None,
             "elasticsearch_password": None,
             "elasticsearch_index_pattern": "logstash-http-*",
+            "mqtt_client_id": "iotsupport-backend",
             "fernet_key": "test-fernet-key-base64-encoded-32-bytes-here==",
         }
 
@@ -513,6 +515,7 @@ class TestSettingsValidation:
             elasticsearch_username=None,
             elasticsearch_password=None,
             elasticsearch_index_pattern="logstash-http-*",
+            mqtt_client_id="iotsupport-backend",
             fernet_key="test-key",
         )
 
@@ -566,6 +569,7 @@ class TestSettingsValidation:
             elasticsearch_username=None,
             elasticsearch_password=None,
             elasticsearch_index_pattern="logstash-http-*",
+            mqtt_client_id="iotsupport-backend",
             fernet_key="explicit-fernet-key",
         )
 
@@ -625,6 +629,7 @@ class TestSettingsProperties:
             elasticsearch_username=None,
             elasticsearch_password=None,
             elasticsearch_index_pattern="logstash-http-*",
+            mqtt_client_id="iotsupport-backend",
             fernet_key="test-fernet-key",
             sqlalchemy_engine_options={"pool_size": 10},
         )

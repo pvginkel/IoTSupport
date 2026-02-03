@@ -74,6 +74,8 @@ def _build_testing_settings(tmp_path: Path) -> Settings:
         elasticsearch_username=None,
         elasticsearch_password=None,
         elasticsearch_index_pattern="logstash-http-*",
+        # MQTT client ID
+        mqtt_client_id="iotsupport-backend",
         # Fernet key (derived from "test-secret-key" using SHA256 + base64)
         fernet_key="LOrG82NjxiRqZMyoBc1DynoBsU6y_MUyzuw_YPL33xw=",
     )

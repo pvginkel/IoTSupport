@@ -98,6 +98,12 @@ def create_app(settings: "Settings | None" = None, skip_background_services: boo
 
     app.register_blueprint(metrics_bp)
 
+    # Initialize background services (singletons that need explicit startup)
+    if not skip_background_services:
+        # Start log sink if both MQTT and ES are configured
+        logsink = container.logsink_service()
+        if logsink.enabled:
+            logger.info("LogSinkService started - subscribed to MQTT log topic")
 
     # Request teardown handler for database session management
     @app.teardown_request

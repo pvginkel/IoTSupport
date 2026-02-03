@@ -1,28 +1,48 @@
-"""MQTT notification service for publishing device update notifications."""
+"""MQTT service for publishing and subscribing to MQTT messages.
+
+This is a singleton service that maintains a single persistent MQTT v5 connection
+to a broker. It supports both publishing (fire-and-forget notifications) and
+subscribing (with message callbacks).
+"""
 
 import atexit
 import logging
+import os
 import time
-from typing import Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from paho.mqtt.client import Client as MqttClient
-from paho.mqtt.client import ConnectFlags, DisconnectFlags
+from paho.mqtt.client import ConnectFlags, DisconnectFlags, MQTTMessage
 from paho.mqtt.enums import CallbackAPIVersion, MQTTProtocolVersion
+from paho.mqtt.packettypes import PacketTypes
+from paho.mqtt.properties import Properties
 from paho.mqtt.reasoncodes import ReasonCode
 from prometheus_client import Counter, Gauge, Histogram
 
+from app.utils.mqtt import parse_mqtt_url
+
+if TYPE_CHECKING:
+    from app.config import Settings
+
 logger = logging.getLogger(__name__)
+
+# Type alias for subscription callbacks
+MessageCallback = Callable[[bytes], None]
 
 
 class MqttService:
-    """Service for publishing MQTT notifications about config and asset updates.
+    """Singleton MQTT service for publish and subscribe operations.
 
-    This is a singleton service that maintains a persistent MQTT v5 connection
-    to a broker. It publishes fire-and-forget notifications when configs are saved
-    or assets are uploaded, allowing IoT devices to subscribe and receive immediate
-    update notifications instead of polling.
+    This service maintains a single persistent MQTT v5 connection to a broker.
+    It supports:
+    - Publishing fire-and-forget notifications
+    - Subscribing to topics with message callbacks
 
-    The service is optional - if MQTT_URL is not configured, all publish operations
+    The service uses persistent sessions (clean_start=False) so the broker
+    queues messages while the client is disconnected.
+
+    The service is optional - if MQTT_URL is not configured, all operations
     silently skip without errors.
     """
 
@@ -31,49 +51,72 @@ class MqttService:
 
     def __init__(
         self,
-        mqtt_url: str | None = None,
-        mqtt_username: str | None = None,
-        mqtt_password: str | None = None,
+        config: "Settings",
     ) -> None:
         """Initialize MQTT service with optional broker connection.
 
         Args:
-            mqtt_url: MQTT broker URL (e.g., mqtt://localhost:1883, mqtts://broker:8883)
-            mqtt_username: MQTT broker username (optional)
-            mqtt_password: MQTT broker password (optional)
+            config: Application settings with MQTT configuration
         """
+        self.config = config
+
         # Track whether MQTT is enabled
         self.enabled = False
         self.client: MqttClient | None = None
         self._shutdown_called = False
 
+        # Subscription callbacks: topic -> (qos, callback function)
+        self._subscriptions: dict[str, tuple[int, MessageCallback]] = {}
+
+        # Buffer for messages that arrive before callbacks are registered.
+        # This handles the race condition with persistent sessions where Mosquitto
+        # delivers queued messages immediately on reconnect, before other services
+        # have registered their subscription callbacks.
+        self._pending_messages: dict[str, list[bytes]] = {}
+
         # Initialize Prometheus metrics
         self._initialize_metrics()
 
         # Skip connection if MQTT_URL not configured
-        if not mqtt_url:
+        if not config.mqtt_url:
             logger.info("MQTT not configured (MQTT_URL is None), skipping connection")
+            self.mqtt_enabled_gauge.set(0)
+            return
+
+        # Skip connection in Flask reloader parent process.
+        # Werkzeug's reloader runs the app twice: once in the parent (watching for changes)
+        # and once in the child (actually serving). Only connect in the child to avoid
+        # duplicate MQTT connections with the same client_id.
+        # The child process has WERKZEUG_RUN_MAIN='true'; parent doesn't have it set.
+        # We check flask_env='development' (not 'testing' or 'production') to avoid
+        # affecting tests or production deployments.
+        if (
+            config.flask_env == "development"
+            and os.environ.get("WERKZEUG_RUN_MAIN") != "true"
+        ):
+            logger.info("MQTT skipped in reloader parent process (development mode)")
             self.mqtt_enabled_gauge.set(0)
             return
 
         # Parse broker URL to extract host and port
         try:
-            host, port, use_tls = self._parse_mqtt_url(mqtt_url)
+            host, port, use_tls = parse_mqtt_url(config.mqtt_url)
         except Exception as e:
-            logger.error("Failed to parse MQTT_URL '%s': %s", mqtt_url, e)
+            logger.error("Failed to parse MQTT_URL '%s': %s", config.mqtt_url, e)
             self.mqtt_enabled_gauge.set(0)
             return
 
-        # Create MQTT client with v5 protocol
+        # Create MQTT client with v5 protocol and persistent session
         try:
             self.client = MqttClient(
                 callback_api_version=CallbackAPIVersion.VERSION2,
                 protocol=MQTTProtocolVersion.MQTTv5,
+                client_id=config.mqtt_client_id,
             )
 
             # Set credentials if provided
-            if mqtt_username and mqtt_password:
-                self.client.username_pw_set(mqtt_username, mqtt_password)
+            if config.mqtt_username and config.mqtt_password:
+                self.client.username_pw_set(config.mqtt_username, config.mqtt_password)
 
             # Configure TLS if using mqtts://
             if use_tls:
@@ -82,10 +125,26 @@ class MqttService:
             # Register callbacks for connection events
             self.client.on_connect = self._on_connect
             self.client.on_disconnect = self._on_disconnect
+            self.client.on_message = self._on_message
 
-            # Start asynchronous connection
-            logger.info("Connecting to MQTT broker at %s:%d", host, port)
-            self.client.connect_async(host, port)
+            # Start asynchronous connection with clean_start=False for persistent session
+            logger.info(
+                "Connecting to MQTT broker at %s:%d with client_id=%s",
+                host,
+                port,
+                config.mqtt_client_id,
+            )
+
+            # Set session expiry interval for persistent sessions (MQTT v5).
+            # This tells the broker to keep the session alive for this many seconds
+            # after disconnect, queuing messages for QoS > 0 subscriptions.
+            # 1 hour = 3600 seconds - long enough to survive restarts/deployments.
+            connect_properties = Properties(PacketTypes.CONNECT)
+            connect_properties.SessionExpiryInterval = 3600
+
+            self.client.connect_async(
+                host, port, clean_start=False, properties=connect_properties
+            )
             self.client.loop_start()
 
             # Note: enabled will be set to True in _on_connect callback when
@@ -93,7 +152,7 @@ class MqttService:
             # the async connection establishment window.
             self.mqtt_enabled_gauge.set(1)
 
-            # Register shutdown handler
+            # Register shutdown handlers for clean disconnect
             atexit.register(self.shutdown)
 
         except Exception as e:
@@ -129,47 +188,15 @@ class MqttService:
             "MQTT service enabled state (0=disabled, 1=enabled)",
         )
 
-        # Initialize connection state to disconnected
+        self.mqtt_subscriptions_total = Gauge(
+            "iot_mqtt_subscriptions_total",
+            "Number of active MQTT subscriptions",
+        )
+
+        # Initialize gauges
         self.mqtt_connection_state.set(0)
         self.mqtt_enabled_gauge.set(0)
-
-    def _parse_mqtt_url(self, url: str) -> tuple[str, int, bool]:
-        """Parse MQTT URL to extract host, port, and TLS settings.
-
-        Args:
-            url: MQTT URL (e.g., mqtt://localhost:1883, mqtts://broker:8883)
-
-        Returns:
-            Tuple of (host, port, use_tls)
-
-        Raises:
-            ValueError: If URL format is invalid
-        """
-        if url.startswith("mqtts://"):
-            use_tls = True
-            url_without_scheme = url[8:]
-            default_port = 8883
-        elif url.startswith("mqtt://"):
-            use_tls = False
-            url_without_scheme = url[7:]
-            default_port = 1883
-        else:
-            raise ValueError(
-                f"Invalid MQTT URL scheme. Expected mqtt:// or mqtts://, got: {url}"
-            )
-
-        # Split host and port
-        if ":" in url_without_scheme:
-            host, port_str = url_without_scheme.split(":", 1)
-            # Remove any trailing path components
-            port_str = port_str.split("/")[0]
-            port = int(port_str)
-        else:
-            # Remove any trailing path components
-            host = url_without_scheme.split("/")[0]
-            port = default_port
-
-        return (host, port, use_tls)
+        self.mqtt_subscriptions_total.set(0)
 
     def _on_connect(
         self,
@@ -181,17 +208,10 @@ class MqttService:
     ) -> None:
         """Callback when MQTT client connects to broker.
 
-        Args:
-            client: MQTT client instance
-            userdata: User data (unused)
-            connect_flags: Connection flags
-            reason_code: Connection result code
-            properties: MQTT v5 properties
+        Re-subscribes to all registered topics on reconnect.
         """
         if reason_code.is_failure:
-            logger.error(
-                "Failed to connect to MQTT broker: %s", reason_code
-            )
+            logger.error("Failed to connect to MQTT broker: %s", reason_code)
             self.mqtt_connection_state.set(0)
             # Disable publishing on connection failure
             self.enabled = False
@@ -201,6 +221,11 @@ class MqttService:
             # Enable publishing now that connection is confirmed
             self.enabled = True
 
+            # Re-subscribe to all registered topics
+            for topic, (qos, _callback) in self._subscriptions.items():
+                client.subscribe(topic, qos=qos)
+                logger.info("Subscribed to MQTT topic: %s (QoS %d)", topic, qos)
+
     def _on_disconnect(
         self,
         client: MqttClient,
@@ -209,18 +234,93 @@ class MqttService:
         reason_code: ReasonCode,
         properties: Any,
     ) -> None:
-        """Callback when MQTT client disconnects from broker.
-
-        Args:
-            client: MQTT client instance
-            userdata: User data (unused)
-            disconnect_flags: Disconnect flags
-            reason_code: Disconnection reason code
-            properties: MQTT v5 properties
-        """
+        """Callback when MQTT client disconnects from broker."""
         logger.warning("Disconnected from MQTT broker: %s", reason_code)
         self.mqtt_connection_state.set(0)
         # paho-mqtt will automatically reconnect
+
+    def _on_message(
+        self,
+        client: MqttClient,
+        userdata: Any,
+        message: MQTTMessage,
+    ) -> None:
+        """Callback when a message is received on a subscribed topic.
+
+        Routes the message to the registered callback for the topic.
+        If no callback is registered yet (race condition with persistent sessions),
+        buffers the message for delivery when the callback is registered.
+        """
+        topic = message.topic
+        callback_info = self._subscriptions.get(topic)
+
+        if callback_info is None:
+            # Buffer the message - this handles the race condition where persistent
+            # session messages arrive before the subscribing service registers its callback
+            if topic not in self._pending_messages:
+                self._pending_messages[topic] = []
+            self._pending_messages[topic].append(message.payload)
+            logger.debug(
+                "Buffered message on topic %s (no callback registered yet, %d pending)",
+                topic,
+                len(self._pending_messages[topic]),
+            )
+            return
+
+        _qos, callback = callback_info
+        try:
+            callback(message.payload)
+        except Exception as e:
+            logger.error("Error in message callback for topic %s: %s", topic, e)
+
+    def subscribe(
+        self,
+        topic: str,
+        qos: int,
+        callback: MessageCallback,
+    ) -> None:
+        """Subscribe to an MQTT topic with a message callback.
+
+        The callback will be invoked with the raw payload bytes whenever a
+        message is received on the topic. If already connected, the subscription
+        happens immediately; otherwise it will be established on connect.
+
+        Any messages that were buffered (due to arriving before this callback
+        was registered) will be delivered immediately.
+
+        Args:
+            topic: MQTT topic to subscribe to
+            qos: Quality of Service level (0, 1, or 2)
+            callback: Function to call with message payload bytes
+        """
+        # Store subscription for reconnect
+        self._subscriptions[topic] = (qos, callback)
+        self.mqtt_subscriptions_total.set(len(self._subscriptions))
+
+        # Deliver any buffered messages that arrived before this callback was registered
+        pending = self._pending_messages.pop(topic, [])
+        if pending:
+            logger.info(
+                "Delivering %d buffered messages for topic %s", len(pending), topic
+            )
+            for payload in pending:
+                try:
+                    callback(payload)
+                except Exception as e:
+                    logger.error(
+                        "Error delivering buffered message for topic %s: %s", topic, e
+                    )
+
+        # Subscribe immediately if connected
+        if self.enabled and self.client is not None:
+            self.client.subscribe(topic, qos=qos)
+            logger.info("Subscribed to MQTT topic: %s (QoS %d)", topic, qos)
+        else:
+            logger.info(
+                "Queued subscription for MQTT topic: %s (QoS %d) - will subscribe on connect",
+                topic,
+                qos,
+            )
 
     def publish(self, topic: str, payload: str) -> None:
         """Publish an MQTT message.
@@ -282,8 +382,13 @@ class MqttService:
         if self.client is not None:
             try:
                 logger.info("Shutting down MQTT service")
-                self.client.loop_stop()
+                # Disconnect first to send DISCONNECT packet to broker
                 self.client.disconnect()
+                # Small delay to allow the disconnect packet to be sent
+                time.sleep(0.1)
+                # Then stop the network loop
+                self.client.loop_stop()
                 self.mqtt_connection_state.set(0)
+                logger.info("MQTT service shutdown complete")
             except Exception as e:
                 logger.error("Error during MQTT shutdown: %s", e)
