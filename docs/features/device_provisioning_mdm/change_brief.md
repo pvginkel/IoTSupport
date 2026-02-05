@@ -138,7 +138,7 @@ Parse ESP32 firmware binary to extract version using ESP-IDF AppInfo structure:
 | `KEYCLOAK_ADMIN_CLIENT_SECRET` | Service account secret | Required |
 | `WIFI_SSID` | WiFi network name for provisioning | Required |
 | `WIFI_PASSWORD` | WiFi password for provisioning | Required |
-| `ROTATION_CRON` | Rotation schedule | `0 8 1-7 * 6` (first Sat 8am) |
+| `ROTATION_CRON` | Rotation schedule | `0 8 * * 6#1` (first Sat 8am) |
 | `ROTATION_TIMEOUT_SECONDS` | Per-device rotation timeout | `300` |
 | `ROTATION_RETRY_INTERVAL_SECONDS` | Retry job interval | `3600` |
 

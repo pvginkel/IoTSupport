@@ -195,7 +195,7 @@ class Environment(BaseSettings):
     # Rotation Settings
     ROTATION_CRON: str | None = Field(
         default=None,
-        description="CRON schedule for credential rotation (e.g., '0 8 1-7 * 6' for first Saturday of month at 8am)"
+        description="CRON schedule for credential rotation (e.g., '0 8 * * 6#1' for first Saturday of month at 8am)"
     )
     ROTATION_TIMEOUT_SECONDS: int = Field(
         default=300,

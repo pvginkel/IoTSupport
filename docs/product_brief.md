@@ -138,7 +138,7 @@ Management endpoints for administrators:
 | `MQTT_URL` | MQTT broker URL | `mqtt://mqtt.local:1883` |
 | `WIFI_SSID` | WiFi network SSID for provisioning | `MyNetwork` |
 | `WIFI_PASSWORD` | WiFi password for provisioning | (secret) |
-| `ROTATION_CRON` | Rotation schedule | `0 8 1-7 * 6` (first Sat 8am) |
+| `ROTATION_CRON` | Rotation schedule | `0 8 * * 6#1` (first Sat 8am) |
 | `ROTATION_TIMEOUT_SECONDS` | Rotation timeout | `300` |
 | `BASEURL` | Backend base URL for provisioning | `https://iot.local` |
 | `ASSETS_DIR` | Firmware storage directory | `/data/firmware` |

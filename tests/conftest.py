@@ -100,7 +100,7 @@ def _build_test_settings(tmp_path: Path) -> Settings:
         wifi_ssid="TestNetwork",
         wifi_password="test-wifi-password",
         # Rotation settings
-        rotation_cron="0 8 1-7 * 6",
+        rotation_cron="0 8 * * 6#1",
         rotation_timeout_seconds=300,
         rotation_critical_threshold_days=7,
         # Elasticsearch settings
