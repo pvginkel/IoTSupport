@@ -365,14 +365,26 @@ export function DeviceEditor({
   const isValid = (mode === 'edit' || !!selectedModelId) && !jsonError && !isPending
 
   // Title based on mode
+  // For edit mode: show name if set, otherwise entity ID (mono), otherwise key (mono)
   const getTitle = () => {
     if (mode === 'new') {
-      return duplicateFrom ? `Duplicate Device: ${duplicateFrom}` : 'New Device'
+      return duplicateFrom ? (
+        <>Duplicate Device: <span className="font-mono">{duplicateFrom}</span></>
+      ) : 'New Device'
     }
     if (mode === 'edit') {
-      return `Edit Device: ${initialKey}`
+      const deviceName = initialConfig?.deviceName as string | undefined
+      const deviceEntityId = initialConfig?.deviceEntityId as string | undefined
+
+      if (deviceName && deviceName.trim()) {
+        return `Edit Device: ${deviceName}`
+      }
+      if (deviceEntityId && deviceEntityId.trim()) {
+        return <>Edit Device: <span className="font-mono">{deviceEntityId}</span></>
+      }
+      return <>Edit Device: <span className="font-mono">{initialKey}</span></>
     }
-    return `Duplicate Device: ${initialKey}`
+    return <>Duplicate Device: <span className="font-mono">{initialKey}</span></>
   }
 
   // Get selected model name for display
