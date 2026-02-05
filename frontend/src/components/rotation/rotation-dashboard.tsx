@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { useRotationDashboard, useRotationStatus, useTriggerRotation, type RotationDashboardDevice } from '@/hooks/use-rotation'
 import { useDeviceModels } from '@/hooks/use-device-models'
 import { Button } from '@/components/ui/button'
@@ -101,6 +101,8 @@ interface DeviceTableProps {
 }
 
 function DeviceTable({ devices, textColor, modelNameMap }: DeviceTableProps) {
+  const navigate = useNavigate()
+
   if (devices.length === 0) {
     return (
       <div className={`text-center py-6 ${textColor} opacity-70`}>
@@ -127,11 +129,12 @@ function DeviceTable({ devices, textColor, modelNameMap }: DeviceTableProps) {
           return (
             <tr
               key={device.id}
-              className="border-b border-border/50 hover:bg-secondary/30"
+              className="border-b border-border/50 hover:bg-secondary/30 cursor-pointer"
               data-testid="rotation.dashboard.row"
               data-device-id={device.id}
               data-rotation-state={device.rotationState}
               data-category={device.category}
+              onClick={() => navigate({ to: '/devices/$deviceId', params: { deviceId: String(device.id) } })}
             >
               <td className={`px-4 py-2 text-sm font-mono ${textColor} whitespace-nowrap`}>{device.key}</td>
               <td className={`px-4 py-2 text-sm ${textColor} opacity-90 truncate max-w-0`}>
