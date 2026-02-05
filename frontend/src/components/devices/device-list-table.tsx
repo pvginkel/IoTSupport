@@ -115,8 +115,8 @@ export function DeviceListTable({
         <thead className="border-b border-border">
           <tr>
             {renderSortHeader('key', 'Device Key')}
-            {renderSortHeader('modelName', 'Model')}
             {renderSortHeader('deviceName', 'Device Name')}
+            {renderSortHeader('modelName', 'Model')}
             {renderSortHeader('deviceEntityId', 'Entity ID')}
             {renderSortHeader('rotationState', 'Rotation State')}
             {renderSortHeader('enableOta', 'OTA Status')}
@@ -136,10 +136,10 @@ export function DeviceListTable({
                 data-rotation-state={device.rotationState}
               >
                 <td className="px-4 py-3 text-sm text-foreground font-mono">{device.key}</td>
+                <td className="px-4 py-3 text-sm text-muted-foreground">{device.deviceName || '—'}</td>
                 <td className="px-4 py-3 text-sm text-muted-foreground" data-testid="devices.list.row.model">
                   {device.modelName}
                 </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">{device.deviceName || '—'}</td>
                 <td className="px-4 py-3 text-sm text-muted-foreground font-mono">{device.deviceEntityId || '—'}</td>
                 <td className="px-4 py-3 text-sm" data-testid="devices.list.row.rotation-state">
                   <span className={`px-2 py-1 rounded-md text-xs ${rotationBadge.bgColor} ${rotationBadge.textColor}`}>
