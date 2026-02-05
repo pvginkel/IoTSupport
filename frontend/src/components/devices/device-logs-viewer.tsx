@@ -129,6 +129,7 @@ export function DeviceLogsViewer({ deviceId, deviceEntityId }: DeviceLogsViewerP
               key={`${log.timestamp}-${index}`}
               className="whitespace-pre-wrap break-all leading-relaxed"
               data-testid="devices.logs.entry"
+              title={new Date(log.timestamp).toLocaleString()}
             >
               {log.message}
             </div>
