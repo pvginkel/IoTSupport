@@ -25,7 +25,7 @@ const DEFAULT_SCHEMA = {
     deviceEntityId: { type: 'string', description: 'Entity identifier' },
     enableOTA: { type: 'boolean', description: 'Enable OTA updates' }
   },
-  required: ['deviceName']
+  required: ['deviceName', 'deviceEntityId']
 }
 
 export function DeviceModelEditor({
