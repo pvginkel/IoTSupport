@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { Link } from '@tanstack/react-router'
-import { Pencil, Trash2 } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
+import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { DeviceModelSummary } from '@/hooks/use-device-models'
@@ -26,6 +26,8 @@ export function DeviceModelListTable({
   onSortChange,
   onDelete
 }: DeviceModelListTableProps) {
+  const navigate = useNavigate()
+
   const sortedModels = useMemo(() => {
     const sorted = [...deviceModels]
     sorted.sort((a, b) => {
@@ -91,10 +93,11 @@ export function DeviceModelListTable({
           {sortedModels.map((model) => (
             <tr
               key={model.id}
-              className="border-b border-border hover:bg-secondary/50"
+              className="border-b border-border hover:bg-secondary/50 cursor-pointer"
               data-testid="device-models.list.row"
               data-model-id={model.id}
               data-model-code={model.code}
+              onClick={() => navigate({ to: '/device-models/$modelId', params: { modelId: String(model.id) } })}
             >
               <td className="px-4 py-3 text-sm text-foreground font-mono">{model.code}</td>
               <td className="px-4 py-3 text-sm text-muted-foreground">{model.name}</td>
@@ -110,27 +113,18 @@ export function DeviceModelListTable({
                 {model.firmwareVersion || <span className="text-muted-foreground/50">—</span>}
               </td>
               <td className="px-4 py-3 text-right">
-                <div className="flex items-center justify-end gap-2">
-                  <Link to="/device-models/$modelId" params={{ modelId: String(model.id) }}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      data-testid="device-models.list.row.edit-button"
-                      title="Edit model"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </Link>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => onDelete(model)}
-                    data-testid="device-models.list.row.delete-button"
-                    title={model.deviceCount > 0 ? 'Cannot delete: model has devices' : 'Delete model'}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDelete(model)
+                  }}
+                  data-testid="device-models.list.row.delete-button"
+                  title={model.deviceCount > 0 ? 'Cannot delete: model has devices' : 'Delete model'}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </td>
             </tr>
           ))}

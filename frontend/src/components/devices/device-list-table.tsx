@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { Link } from '@tanstack/react-router'
-import { Pencil, Trash2 } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
+import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { DeviceSummary } from '@/hooks/use-devices'
@@ -45,6 +45,8 @@ export function DeviceListTable({
   onSortChange,
   onDelete
 }: DeviceListTableProps) {
+  const navigate = useNavigate()
+
   // Create a map of model ID to model name for efficient lookup
   const modelNameMap = useMemo(() => {
     const map = new Map<number, string>()
@@ -129,11 +131,12 @@ export function DeviceListTable({
             return (
               <tr
                 key={device.id}
-                className="border-b border-border hover:bg-secondary/50"
+                className="border-b border-border hover:bg-secondary/50 cursor-pointer"
                 data-testid="devices.list.row"
                 data-device-id={device.id}
                 data-device-key={device.key}
                 data-rotation-state={device.rotationState}
+                onClick={() => navigate({ to: '/devices/$deviceId', params: { deviceId: String(device.id) } })}
               >
                 <td className="px-4 py-3 text-sm text-foreground font-mono">{device.key}</td>
                 <td className="px-4 py-3 text-sm text-muted-foreground">{device.deviceName || '—'}</td>
@@ -152,27 +155,18 @@ export function DeviceListTable({
                   {device.enableOta === null && <span className="text-muted-foreground/50">—</span>}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Link to="/devices/$deviceId" params={{ deviceId: String(device.id) }}>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        data-testid="devices.list.row.edit-button"
-                        title="Edit device"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </Link>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => onDelete(device)}
-                      data-testid="devices.list.row.delete-button"
-                      title="Delete device"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onDelete(device)
+                    }}
+                    data-testid="devices.list.row.delete-button"
+                    title="Delete device"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </td>
               </tr>
             )
