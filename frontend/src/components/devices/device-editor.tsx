@@ -267,7 +267,9 @@ export function DeviceEditor({
 
   const handleEditorChange = useCallback((value: string | undefined) => {
     if (value !== undefined) {
-      setJsonConfig(value)
+      // Use functional update to only change state if value actually differs.
+      // Monaco can fire onChange on focus/click even when content is unchanged.
+      setJsonConfig(prev => prev === value ? prev : value)
       validateJson(value)
     }
   }, [validateJson])
