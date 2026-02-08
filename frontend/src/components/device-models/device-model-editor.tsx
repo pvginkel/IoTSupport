@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import { useNavigate, useBlocker } from '@tanstack/react-router'
 import Editor from '@monaco-editor/react'
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,7 @@ interface DeviceModelEditorProps {
   modelId?: number
   initialCode?: string
   initialName?: string
-  initialConfigSchema?: Record<string, unknown> | null
+  initialConfigSchema?: string | null
   onSave?: () => void
   onCancel?: () => void
 }
@@ -49,14 +49,12 @@ export function DeviceModelEditor({
   // Code is editable only for new models
   const [code, setCode] = useState(initialCode)
   const [name, setName] = useState(initialName)
-  const [jsonSchema, setJsonSchema] = useState(
-    initialConfigSchema ? JSON.stringify(initialConfigSchema, null, 2) : ''
-  )
+  const [jsonSchema, setJsonSchema] = useState(initialConfigSchema ?? '')
   const [jsonError, setJsonError] = useState<string | null>(null)
 
   const originalCode = initialCode
   const originalName = initialName
-  const originalSchema = initialConfigSchema ? JSON.stringify(initialConfigSchema, null, 2) : ''
+  const originalSchema = initialConfigSchema ?? ''
 
   // Track dirty state
   const isDirty = useMemo(() => {
@@ -70,26 +68,13 @@ export function DeviceModelEditor({
   // Use ref to track if we're intentionally navigating
   const isNavigatingRef = useRef(false)
 
-  // Navigation blocker for unsaved changes
+  // Navigation blocker for unsaved changes (handles back/forward, link clicks,
+  // and page refresh/close via enableBeforeUnload)
   const { proceed, reset, status } = useBlocker({
     shouldBlockFn: () => isDirty && !isNavigatingRef.current,
+    enableBeforeUnload: isDirty,
     withResolver: true,
   })
-
-  // Beforeunload warning
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isDirty && !isNavigatingRef.current) {
-        e.preventDefault()
-        e.returnValue = ''
-      }
-    }
-
-    if (isDirty) {
-      window.addEventListener('beforeunload', handleBeforeUnload)
-      return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-    }
-  }, [isDirty])
 
   // Validate JSON schema
   const validateSchema = useCallback((value: string): boolean => {
@@ -135,7 +120,7 @@ export function DeviceModelEditor({
       return
     }
 
-    const configSchema = jsonSchema.trim() ? JSON.parse(jsonSchema) : null
+    const configSchema = jsonSchema.trim() || null
     isNavigatingRef.current = true
     trackSubmit({ modelId, mode })
 

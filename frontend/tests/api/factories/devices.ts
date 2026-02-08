@@ -15,7 +15,7 @@ export interface CreatedDevice {
   id: number;
   key: string;
   deviceModelId: number;
-  config: Record<string, unknown>;
+  config: string;
   deviceName: string | null;
   deviceEntityId: string | null;
   enableOta: boolean | null;

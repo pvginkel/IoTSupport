@@ -27,7 +27,7 @@ export interface DeviceModel {
   code: string
   name: string
   hasConfigSchema: boolean
-  configSchema: Record<string, unknown> | null
+  configSchema: string | null
   deviceCount: number
   firmwareVersion: string | null
   createdAt: string
@@ -59,7 +59,7 @@ function transformDeviceModelResponse(apiModel: {
   code: string
   name: string
   has_config_schema: boolean
-  config_schema?: Record<string, unknown> | null
+  config_schema?: string | null
   device_count: number
   firmware_version: string | null
   created_at: string
@@ -129,21 +129,21 @@ export function useCreateDeviceModel() {
   return {
     ...mutation,
     mutate: (
-      variables: { code: string; name: string; configSchema?: Record<string, unknown> | null },
+      variables: { code: string; name: string; configSchema?: string | null },
       options?: { onSuccess?: () => void; onError?: (error: Error) => void }
     ) => {
       const body: DeviceModelCreateSchema_349be3d = {
         code: variables.code,
         name: variables.name,
-        config_schema: variables.configSchema ? JSON.stringify(variables.configSchema) : null
+        config_schema: variables.configSchema || null
       }
       mutation.mutate({ body }, options)
     },
-    mutateAsync: async (variables: { code: string; name: string; configSchema?: Record<string, unknown> | null }) => {
+    mutateAsync: async (variables: { code: string; name: string; configSchema?: string | null }) => {
       const body: DeviceModelCreateSchema_349be3d = {
         code: variables.code,
         name: variables.name,
-        config_schema: variables.configSchema ? JSON.stringify(variables.configSchema) : null
+        config_schema: variables.configSchema || null
       }
       return mutation.mutateAsync({ body })
     }
@@ -169,23 +169,23 @@ export function useUpdateDeviceModel() {
   return {
     ...mutation,
     mutate: (
-      variables: { id: number; name?: string | null; configSchema?: Record<string, unknown> | null },
+      variables: { id: number; name?: string | null; configSchema?: string | null },
       options?: { onSuccess?: () => void; onError?: (error: Error) => void }
     ) => {
       // API schema requires both fields (can be null for no change)
       const body: DeviceModelUpdateSchema_349be3d = {
         name: variables.name ?? null,
         config_schema: variables.configSchema !== undefined
-          ? (variables.configSchema ? JSON.stringify(variables.configSchema) : null)
+          ? (variables.configSchema || null)
           : null
       }
       mutation.mutate({ path: { model_id: variables.id }, body }, options)
     },
-    mutateAsync: async (variables: { id: number; name?: string | null; configSchema?: Record<string, unknown> | null }) => {
+    mutateAsync: async (variables: { id: number; name?: string | null; configSchema?: string | null }) => {
       const body: DeviceModelUpdateSchema_349be3d = {
         name: variables.name ?? null,
         config_schema: variables.configSchema !== undefined
-          ? (variables.configSchema ? JSON.stringify(variables.configSchema) : null)
+          ? (variables.configSchema || null)
           : null
       }
       return mutation.mutateAsync({ path: { model_id: variables.id }, body })

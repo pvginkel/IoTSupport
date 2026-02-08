@@ -606,8 +606,7 @@
           "config_schema": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -719,10 +718,9 @@
             "type": "string"
           },
           "config": {
-            "additionalProperties": true,
-            "description": "Device configuration",
+            "description": "Device configuration as JSON string",
             "title": "Config",
-            "type": "object"
+            "type": "string"
           },
           "created_at": {
             "description": "Creation timestamp",

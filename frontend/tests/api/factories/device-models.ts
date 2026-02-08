@@ -13,7 +13,7 @@ export interface CreatedDeviceModel {
   code: string;
   name: string;
   hasConfigSchema: boolean;
-  configSchema: Record<string, unknown> | null;
+  configSchema: string | null;
   deviceCount: number;
   firmwareVersion: string | null;
   createdAt: string;

@@ -36,7 +36,7 @@ export interface Device {
     name: string
     firmwareVersion: string | null
   }
-  config: Record<string, unknown>
+  config: string
   deviceName: string
   deviceEntityId: string
   enableOta: boolean | null
@@ -83,7 +83,7 @@ function transformDeviceResponse(apiDevice: {
     name: string
     firmware_version?: string | null
   }
-  config: Record<string, unknown>
+  config: string
   device_name: string | null
   device_entity_id: string | null
   enable_ota: boolean | null
@@ -146,13 +146,9 @@ export function useDevice(deviceId: number | undefined) {
     return transformDeviceResponse(query.data)
   }, [query.data])
 
-  // Alias for backward compatibility - returns just the config
-  const config = device?.config ?? null
-
   return {
     ...query,
-    device,
-    config
+    device
   }
 }
 
@@ -174,20 +170,19 @@ export function useCreateDevice() {
   return {
     ...mutation,
     mutate: (
-      variables: { deviceModelId: number; config: Record<string, unknown> },
+      variables: { deviceModelId: number; config: string },
       options?: { onSuccess?: () => void; onError?: (error: Error) => void }
     ) => {
-      // API expects config as a JSON string
       const body: DeviceCreateSchema_d48fbce = {
         device_model_id: variables.deviceModelId,
-        config: JSON.stringify(variables.config)
+        config: variables.config
       }
       mutation.mutate({ body }, options)
     },
-    mutateAsync: async (variables: { deviceModelId: number; config: Record<string, unknown> }) => {
+    mutateAsync: async (variables: { deviceModelId: number; config: string }) => {
       const body: DeviceCreateSchema_d48fbce = {
         device_model_id: variables.deviceModelId,
-        config: JSON.stringify(variables.config)
+        config: variables.config
       }
       return mutation.mutateAsync({ body })
     }
@@ -213,18 +208,17 @@ export function useUpdateDevice() {
   return {
     ...mutation,
     mutate: (
-      variables: { id: number; config: Record<string, unknown> },
+      variables: { id: number; config: string },
       options?: { onSuccess?: () => void; onError?: (error: Error) => void }
     ) => {
-      // API expects config as a JSON string
       const body: DeviceUpdateSchema_d48fbce = {
-        config: JSON.stringify(variables.config)
+        config: variables.config
       }
       mutation.mutate({ path: { device_id: variables.id }, body }, options)
     },
-    mutateAsync: async (variables: { id: number; config: Record<string, unknown> }) => {
+    mutateAsync: async (variables: { id: number; config: string }) => {
       const body: DeviceUpdateSchema_d48fbce = {
-        config: JSON.stringify(variables.config)
+        config: variables.config
       }
       return mutation.mutateAsync({ path: { device_id: variables.id }, body })
     }

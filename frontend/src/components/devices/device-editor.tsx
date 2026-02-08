@@ -23,17 +23,20 @@ interface DeviceEditorProps {
   initialDeviceModelId?: number
   // Device model info for display in edit mode
   initialDeviceModel?: { code: string; name: string }
-  initialConfig?: Record<string, unknown>
+  initialConfig?: string
+  // Device name and entity ID for title display and logs (edit/duplicate mode)
+  initialDeviceName?: string
+  initialDeviceEntityId?: string
   duplicateFrom?: string  // Source device key for duplicate mode
   onSave?: () => void
   onCancel?: () => void
 }
 
-const DEFAULT_TEMPLATE = {
+const DEFAULT_TEMPLATE = JSON.stringify({
   deviceName: '',
   deviceEntityId: '',
   enableOTA: false
-}
+}, null, 2)
 
 // Component to display Keycloak client status with ability to recreate/sync
 interface KeycloakClientStatusProps {
@@ -175,6 +178,8 @@ export function DeviceEditor({
   initialDeviceModelId,
   initialDeviceModel,
   initialConfig = DEFAULT_TEMPLATE,
+  initialDeviceName,
+  initialDeviceEntityId,
   duplicateFrom,
   onSave: onSaveCallback,
   onCancel: onCancelCallback
@@ -202,11 +207,11 @@ export function DeviceEditor({
   // In edit mode, model is fixed; in new/duplicate mode, use the currently selected model
   const modelIdForSchema = mode === 'edit' ? initialDeviceModelId : selectedModelId
   const { deviceModel: fullDeviceModel } = useDeviceModel(modelIdForSchema)
-  const [jsonConfig, setJsonConfig] = useState(JSON.stringify(initialConfig, null, 2))
+  const [jsonConfig, setJsonConfig] = useState(initialConfig)
   const [jsonError, setJsonError] = useState<string | null>(null)
 
   const originalModelId = mode === 'duplicate' ? initialDeviceModelId : initialDeviceModelId
-  const originalJson = JSON.stringify(initialConfig, null, 2)
+  const originalJson = initialConfig
 
   // Track dirty state - computed from state
   const isDirty = useMemo(() => {
@@ -222,34 +227,26 @@ export function DeviceEditor({
   // Use ref to track if we're intentionally navigating (bypassing blocker)
   const isNavigatingRef = useRef(false)
 
-  // Navigation blocker for unsaved changes (handles back/forward and link clicks)
+  // Navigation blocker for unsaved changes (handles back/forward, link clicks,
+  // and page refresh/close via enableBeforeUnload)
   const { proceed, reset, status } = useBlocker({
     shouldBlockFn: () => isDirty && !isNavigatingRef.current,
+    enableBeforeUnload: isDirty,
     withResolver: true,
   })
-
-  // Beforeunload warning for page refresh/close
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isDirty && !isNavigatingRef.current) {
-        e.preventDefault()
-        e.returnValue = ''
-      }
-    }
-
-    if (isDirty) {
-      window.addEventListener('beforeunload', handleBeforeUnload)
-      return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-    }
-  }, [isDirty])
 
   // Configure Monaco schema validation when device model has a config schema
   useEffect(() => {
     if (fullDeviceModel?.configSchema) {
-      configureMonacoSchemaValidation(
-        fullDeviceModel.configSchema,
-        'device-config.json'  // Must match the `path` prop on the Editor component
-      )
+      try {
+        const schema = JSON.parse(fullDeviceModel.configSchema)
+        configureMonacoSchemaValidation(
+          schema,
+          'device-config.json'  // Must match the `path` prop on the Editor component
+        )
+      } catch {
+        // Invalid schema JSON, skip validation
+      }
     }
   }, [fullDeviceModel?.configSchema])
 
@@ -285,7 +282,6 @@ export function DeviceEditor({
       return
     }
 
-    const configContent = JSON.parse(jsonConfig)
     isNavigatingRef.current = true
     trackSubmit({ deviceId, mode })
 
@@ -299,7 +295,7 @@ export function DeviceEditor({
       }
 
       updateDevice.mutate(
-        { id: deviceId, config: configContent },
+        { id: deviceId, config: jsonConfig },
         {
           onSuccess: () => {
             trackSuccess({ deviceId })
@@ -315,7 +311,7 @@ export function DeviceEditor({
     } else {
       // Create new device (new or duplicate mode)
       createDevice.mutate(
-        { deviceModelId: selectedModelId!, config: configContent },
+        { deviceModelId: selectedModelId!, config: jsonConfig },
         {
           onSuccess: () => {
             trackSuccess({ mode })
@@ -375,14 +371,11 @@ export function DeviceEditor({
       ) : 'New Device'
     }
     if (mode === 'edit') {
-      const deviceName = initialConfig?.deviceName as string | undefined
-      const deviceEntityId = initialConfig?.deviceEntityId as string | undefined
-
-      if (deviceName && deviceName.trim()) {
-        return `Edit Device: ${deviceName}`
+      if (initialDeviceName && initialDeviceName.trim()) {
+        return `Edit Device: ${initialDeviceName}`
       }
-      if (deviceEntityId && deviceEntityId.trim()) {
-        return <>Edit Device: <span className="font-mono">{deviceEntityId}</span></>
+      if (initialDeviceEntityId && initialDeviceEntityId.trim()) {
+        return <>Edit Device: <span className="font-mono">{initialDeviceEntityId}</span></>
       }
       return <>Edit Device: <span className="font-mono">{initialKey}</span></>
     }
@@ -566,7 +559,7 @@ export function DeviceEditor({
           {mode === 'edit' && deviceId && (
             <DeviceLogsViewer
               deviceId={deviceId}
-              deviceEntityId={initialConfig?.deviceEntityId as string | undefined}
+              deviceEntityId={initialDeviceEntityId}
             />
           )}
         </div>

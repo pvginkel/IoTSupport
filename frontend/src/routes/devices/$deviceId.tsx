@@ -10,7 +10,7 @@ export const Route = createFileRoute('/devices/$deviceId')({
 function EditDeviceRoute() {
   const { deviceId } = Route.useParams()
   const numericId = parseInt(deviceId, 10)
-  const { device, config, isLoading, error } = useDevice(isNaN(numericId) ? undefined : numericId)
+  const { device, isLoading, error } = useDevice(isNaN(numericId) ? undefined : numericId)
 
   if (isNaN(numericId)) {
     return (
@@ -31,7 +31,7 @@ function EditDeviceRoute() {
     )
   }
 
-  if (error || !device || !config) {
+  if (error || !device) {
     const errorMessage = error?.message || 'Device not found'
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
@@ -51,7 +51,9 @@ function EditDeviceRoute() {
         initialKey={device.key}
         initialDeviceModelId={device.deviceModelId}
         initialDeviceModel={device.deviceModel}
-        initialConfig={config}
+        initialConfig={device.config}
+        initialDeviceName={device.deviceName}
+        initialDeviceEntityId={device.deviceEntityId}
       />
     </div>
   )

@@ -19,16 +19,6 @@ export const Route = createFileRoute('/devices/new')({
 function NewDeviceRoute() {
   const { config, modelId, from } = Route.useSearch()
 
-  // Parse config from search params if present (for duplicate flow)
-  let initialConfig: Record<string, unknown> | undefined
-  if (config) {
-    try {
-      initialConfig = JSON.parse(config)
-    } catch {
-      // Invalid JSON, ignore
-    }
-  }
-
   // Parse modelId from search params if present (for duplicate flow)
   const initialModelId = modelId ? parseInt(modelId, 10) : undefined
 
@@ -36,7 +26,7 @@ function NewDeviceRoute() {
     <div className="flex h-full flex-col">
       <DeviceEditor
         mode="new"
-        initialConfig={initialConfig}
+        initialConfig={config}
         initialDeviceModelId={isNaN(initialModelId!) ? undefined : initialModelId}
         duplicateFrom={from}
       />

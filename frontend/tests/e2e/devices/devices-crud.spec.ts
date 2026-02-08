@@ -436,19 +436,19 @@ test.describe('Error Handling', () => {
 });
 
 test.describe('UI Elements', () => {
-  test('edit and delete buttons show icons', async ({ page, devices }) => {
+  test('rows are clickable and delete button shows icon', async ({ page, devices }) => {
     const device = await devices.create();
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.goto();
     await devicesPage.waitForListLoaded();
 
-    // Edit button should have pencil icon (svg)
-    const editButton = devicesPage.rowByKey(device.key).locator('[data-testid="devices.list.row.edit-button"]');
-    await expect(editButton.locator('svg')).toBeVisible();
+    // Rows should be clickable (cursor-pointer)
+    const row = devicesPage.rowByKey(device.key);
+    await expect(row).toHaveCSS('cursor', 'pointer');
 
     // Delete button should have trash icon (svg)
-    const deleteButton = devicesPage.rowByKey(device.key).locator('[data-testid="devices.list.row.delete-button"]');
+    const deleteButton = row.locator('[data-testid="devices.list.row.delete-button"]');
     await expect(deleteButton.locator('svg')).toBeVisible();
   });
 

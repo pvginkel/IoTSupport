@@ -178,11 +178,11 @@ export class DevicesPage {
   }
 
   async editDeviceByKey(key: string) {
-    await this.rowByKey(key).locator('[data-testid="devices.list.row.edit-button"]').click();
+    await this.rowByKey(key).click();
   }
 
   async editDeviceById(id: number) {
-    await this.rowById(id).locator('[data-testid="devices.list.row.edit-button"]').click();
+    await this.rowById(id).click();
   }
 
   async deleteDeviceByKey(key: string) {
