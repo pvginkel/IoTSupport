@@ -29,6 +29,7 @@ from app.services.container import ServiceContainer
 from app.services.device_service import DeviceService
 from app.services.elasticsearch_service import ElasticsearchService
 from app.services.metrics_service import MetricsService
+from app.services.rotation_service import RotationService
 from app.utils.error_handling import handle_api_errors
 from app.utils.spectree_config import api
 
@@ -263,18 +264,25 @@ def get_provisioning(
 def trigger_device_rotation(
     device_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
+    rotation_service: RotationService = Provide[ServiceContainer.rotation_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
 ) -> Any:
     """Trigger rotation for a single device.
 
-    Queues the device for credential rotation. If already pending, returns
-    the current status without changing state.
+    Queues the device for credential rotation and immediately starts the
+    rotation process. If already pending, returns the current status
+    without changing state.
     """
     start_time = time.perf_counter()
     status = "success"
 
     try:
         result = device_service.trigger_rotation(device_id)
+
+        # Start rotating immediately instead of waiting for CRON job
+        if result == "queued":
+            rotation_service.rotate_next_queued_device()
+
         return DeviceRotateResponseSchema(status=result).model_dump()
 
     except Exception:
