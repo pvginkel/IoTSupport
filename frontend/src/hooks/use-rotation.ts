@@ -4,6 +4,7 @@ import {
   useGetRotationDashboard,
   useGetRotationStatus,
   usePostRotationTrigger,
+  usePostDevicesRotateByDeviceId,
   type DashboardResponseSchema_57872a8
 } from '@/lib/api/generated/hooks'
 import { useToast } from '@/contexts/toast-context'
@@ -164,5 +165,24 @@ export function useTriggerRotation() {
     }
   })
 
+  return mutation
+}
+
+// Hook to trigger rotation for a single device
+export function useRotateDevice() {
+  const { showSuccess, showError } = useToast()
+  const queryClient = useQueryClient()
+  const mutation = usePostDevicesRotateByDeviceId({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['getRotationDashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['getRotationStatus'] })
+      queryClient.invalidateQueries({ queryKey: ['getDevices'] })
+      showSuccess('Device rotation initiated')
+    },
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Failed to rotate device'
+      showError(message)
+    }
+  })
   return mutation
 }

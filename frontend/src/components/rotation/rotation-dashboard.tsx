@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { useRotationDashboard, useRotationStatus, useTriggerRotation, type RotationDashboardDevice } from '@/hooks/use-rotation'
+import { useRotationDashboard, useRotationStatus, useTriggerRotation, useRotateDevice, type RotationDashboardDevice } from '@/hooks/use-rotation'
 import { useDeviceModels } from '@/hooks/use-device-models'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -98,9 +98,11 @@ interface DeviceTableProps {
   devices: RotationDashboardDevice[]
   textColor: string
   modelNameMap: Map<string, string>
+  onRotateDevice: (deviceId: number) => void
+  rotatingDeviceId: number | null
 }
 
-function DeviceTable({ devices, textColor, modelNameMap }: DeviceTableProps) {
+function DeviceTable({ devices, textColor, modelNameMap, onRotateDevice, rotatingDeviceId }: DeviceTableProps) {
   const navigate = useNavigate()
 
   if (devices.length === 0) {
@@ -121,6 +123,7 @@ function DeviceTable({ devices, textColor, modelNameMap }: DeviceTableProps) {
           <th className={`px-4 py-2 text-left text-sm font-semibold ${textColor} whitespace-nowrap`}>State</th>
           <th className={`px-4 py-2 text-left text-sm font-semibold ${textColor} whitespace-nowrap`}>Secret Age</th>
           <th className={`px-4 py-2 text-left text-sm font-semibold ${textColor} whitespace-nowrap`}>Last Rotation</th>
+          <th className={`px-4 py-2 text-right text-sm font-semibold ${textColor} w-12`}></th>
         </tr>
       </thead>
       <tbody>
@@ -155,6 +158,23 @@ function DeviceTable({ devices, textColor, modelNameMap }: DeviceTableProps) {
               <td className={`px-4 py-2 text-sm ${textColor} opacity-90 whitespace-nowrap`}>
                 {formatDate(device.lastRotationCompletedAt)}
               </td>
+              <td className="px-4 py-2 text-right">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={textColor}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onRotateDevice(device.id)
+                  }}
+                  disabled={rotatingDeviceId === device.id}
+                  loading={rotatingDeviceId === device.id}
+                  data-testid="rotation.dashboard.row.rotate-button"
+                  title="Rotate device"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </td>
             </tr>
           )
         })}
@@ -170,9 +190,11 @@ interface CategoryPanelProps {
   isExpanded: boolean
   onToggle: () => void
   modelNameMap: Map<string, string>
+  onRotateDevice: (deviceId: number) => void
+  rotatingDeviceId: number | null
 }
 
-function CategoryPanel({ category, devices, isExpanded, onToggle, modelNameMap }: CategoryPanelProps) {
+function CategoryPanel({ category, devices, isExpanded, onToggle, modelNameMap, onRotateDevice, rotatingDeviceId }: CategoryPanelProps) {
   const style = categoryStyles[category]
   const count = devices.length
 
@@ -203,7 +225,7 @@ function CategoryPanel({ category, devices, isExpanded, onToggle, modelNameMap }
       {/* Dark inner content panel */}
       {isExpanded && (
         <div className={`rounded-md ${style.innerBg} p-3 m-1`}>
-          <DeviceTable devices={devices} textColor={style.innerText} modelNameMap={modelNameMap} />
+          <DeviceTable devices={devices} textColor={style.innerText} modelNameMap={modelNameMap} onRotateDevice={onRotateDevice} rotatingDeviceId={rotatingDeviceId} />
         </div>
       )}
     </div>
@@ -273,6 +295,7 @@ export function RotationDashboard() {
   const { status, isLoading: statusLoading, error: statusError } = useRotationStatus()
   const { deviceModels } = useDeviceModels()
   const triggerRotation = useTriggerRotation()
+  const rotateDevice = useRotateDevice()
   const { confirm, confirmProps } = useConfirm()
 
   // Map device model code to name for display
@@ -338,6 +361,24 @@ export function RotationDashboard() {
       triggerRotation.mutate()
     }
   }, [confirm, stateOkCount, triggerRotation])
+
+  const handleRotateDevice = useCallback(async (deviceId: number) => {
+    const confirmed = await confirm({
+      title: 'Rotate Device',
+      description: 'This will initiate credential rotation for this device. Continue?',
+      confirmText: 'Rotate',
+      destructive: false
+    })
+
+    if (confirmed) {
+      rotateDevice.mutate({ path: { device_id: deviceId } })
+    }
+  }, [confirm, rotateDevice])
+
+  // Track which device is currently rotating via mutation variables
+  const rotatingDeviceId = rotateDevice.isPending
+    ? (rotateDevice.variables?.path.device_id ?? null)
+    : null
 
   const isLoading = devicesLoading || statusLoading
   const error = devicesError || statusError
@@ -429,6 +470,8 @@ export function RotationDashboard() {
             isExpanded={panelState.healthy}
             onToggle={() => togglePanel('healthy')}
             modelNameMap={modelNameMap}
+            onRotateDevice={handleRotateDevice}
+            rotatingDeviceId={rotatingDeviceId}
           />
           <CategoryPanel
             category="warning"
@@ -436,6 +479,8 @@ export function RotationDashboard() {
             isExpanded={panelState.warning}
             onToggle={() => togglePanel('warning')}
             modelNameMap={modelNameMap}
+            onRotateDevice={handleRotateDevice}
+            rotatingDeviceId={rotatingDeviceId}
           />
           <CategoryPanel
             category="critical"
@@ -443,6 +488,8 @@ export function RotationDashboard() {
             isExpanded={panelState.critical}
             onToggle={() => togglePanel('critical')}
             modelNameMap={modelNameMap}
+            onRotateDevice={handleRotateDevice}
+            rotatingDeviceId={rotatingDeviceId}
           />
         </div>
       )}
