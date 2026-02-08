@@ -3,7 +3,6 @@
 import json
 import re
 from datetime import datetime
-from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -105,21 +104,12 @@ class DeviceModelResponseSchema(BaseModel):
     code: str = Field(..., description="Unique model code")
     name: str = Field(..., description="Human-readable model name")
     firmware_version: str | None = Field(None, description="Firmware version if uploaded")
-    config_schema: dict[str, Any] | None = Field(None, description="JSON schema for config validation")
+    config_schema: str | None = Field(None, description="JSON schema for config validation")
     has_config_schema: bool = Field(..., description="Whether model has a config schema")
     device_count: int = Field(..., description="Number of devices using this model")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
-    @field_validator("config_schema", mode="before")
-    @classmethod
-    def parse_config_schema_from_string(cls, v: Any) -> dict[str, Any] | None:
-        """Parse config_schema from JSON string if stored as text."""
-        if v is None:
-            return None
-        if isinstance(v, str):
-            return cast(dict[str, Any], json.loads(v))
-        return cast(dict[str, Any], v)
 
 
 class DeviceModelListResponseSchema(BaseModel):

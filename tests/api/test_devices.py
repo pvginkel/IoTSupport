@@ -111,8 +111,8 @@ class TestDevicesCreate:
         data = response.get_json()
         assert data["device_model_id"] == model_id
         assert len(data["key"]) == 8
-        # Config is returned as parsed dict in response schema
-        assert data["config"] == {"setting": "value"}
+        # Config is returned as an opaque JSON string
+        assert data["config"] == '{"setting": "value"}'
 
     def test_create_device_invalid_model_id(self, client: FlaskClient) -> None:
         """Test creating device with invalid model ID returns 404."""
@@ -218,8 +218,8 @@ class TestDevicesUpdate:
 
         assert response.status_code == 200
         data = response.get_json()
-        # Config is returned as parsed dict in response schema
-        assert data["config"] == {"new": "value"}
+        # Config is returned as an opaque JSON string
+        assert data["config"] == '{"new": "value"}'
 
     def test_update_device_not_found(self, client: FlaskClient) -> None:
         """Test updating a nonexistent device returns 404."""
