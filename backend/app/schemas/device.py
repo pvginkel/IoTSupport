@@ -2,7 +2,6 @@
 
 import json
 from datetime import datetime
-from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -84,7 +83,7 @@ class DeviceResponseSchema(BaseModel):
     key: str = Field(..., description="Unique 8-character device key")
     device_model_id: int = Field(..., description="Device model ID")
     device_model: DeviceModelInfoSchema = Field(..., description="Device model details")
-    config: dict[str, Any] = Field(..., description="Device configuration")
+    config: str = Field(..., description="Device configuration as JSON string")
     device_name: str | None = Field(None, description="Device name from config")
     device_entity_id: str | None = Field(None, description="Device entity ID from config")
     enable_ota: bool | None = Field(None, description="OTA enabled flag from config")
@@ -96,14 +95,6 @@ class DeviceResponseSchema(BaseModel):
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
-    @field_validator("config", mode="before")
-    @classmethod
-    def parse_config_from_string(cls, v: Any) -> dict[str, Any]:
-        """Parse config from JSON string if stored as text."""
-        if isinstance(v, str):
-            return cast(dict[str, Any], json.loads(v))
-        # Already a dict from ORM
-        return cast(dict[str, Any], v)
 
 
 class DeviceListResponseSchema(BaseModel):
