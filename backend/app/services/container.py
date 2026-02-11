@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.config import Settings
 from app.services.auth_service import AuthService
+from app.services.coredump_service import CoredumpService
 from app.services.device_model_service import DeviceModelService
 from app.services.device_service import DeviceService
 from app.services.elasticsearch_service import ElasticsearchService
@@ -96,6 +97,12 @@ class ServiceContainer(containers.DeclarativeContainer):
         LogSinkService,
         config=config,
         mqtt_service=mqtt_service,
+    )
+
+    # CoredumpService - Singleton for coredump file management
+    coredump_service = providers.Singleton(
+        CoredumpService,
+        coredumps_dir=config.provided.coredumps_dir,
     )
 
     # FirmwareService - Singleton for firmware file management

@@ -78,6 +78,12 @@ class Environment(BaseSettings):
         description="Path to firmware storage directory"
     )
 
+    # Coredump storage directory
+    COREDUMPS_DIR: Path | None = Field(
+        default=None,
+        description="Path to coredump storage directory"
+    )
+
     # CORS settings
     CORS_ORIGINS: list[str] = Field(
         default=["http://localhost:3000"],
@@ -253,6 +259,9 @@ class Settings(BaseModel):
 
     # Firmware storage directory
     assets_dir: Path | None
+
+    # Coredump storage directory
+    coredumps_dir: Path | None = None
 
     # CORS settings
     cors_origins: list[str]
@@ -482,6 +491,7 @@ class Settings(BaseModel):
             debug=env.DEBUG,
             database_url=env.DATABASE_URL,
             assets_dir=env.ASSETS_DIR,
+            coredumps_dir=env.COREDUMPS_DIR,
             cors_origins=env.CORS_ORIGINS,
             mqtt_url=env.MQTT_URL,
             device_mqtt_url=device_mqtt_url,

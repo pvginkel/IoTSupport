@@ -1,7 +1,8 @@
 """Tests for pipeline API endpoints."""
 
 import json
-import struct
+import zipfile
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 from flask import Flask
@@ -9,39 +10,11 @@ from flask.testing import FlaskClient
 
 from app.config import Settings
 from app.services.container import ServiceContainer
+from tests.conftest import create_test_firmware
 
 
 class TestPipelineFirmwareUpload:
     """Tests for POST /api/pipeline/models/<code>/firmware."""
-
-    @staticmethod
-    def _create_test_firmware(version: bytes) -> bytes:
-        """Create a test firmware binary with valid ESP32 AppInfo header."""
-        # ESP32 image header (24 bytes)
-        image_header = bytes(24)
-
-        # Segment header (8 bytes)
-        segment_header = bytes(8)
-
-        # AppInfo structure (256 bytes)
-        magic = struct.pack("<I", 0xABCD5432)  # Magic word
-        secure_version = struct.pack("<I", 0)
-        reserved1 = bytes(8)
-        version_field = version.ljust(32, b"\x00")[:32]
-        project_name = b"test_project".ljust(32, b"\x00")
-        compile_time = b"12:00:00".ljust(16, b"\x00")
-        compile_date = b"Jan 01 2024".ljust(16, b"\x00")
-        idf_version = b"v5.0".ljust(32, b"\x00")
-        app_elf_sha256 = bytes(32)
-        reserved_rest = bytes(256 - 4 - 4 - 8 - 32 - 32 - 16 - 16 - 32 - 32)
-
-        app_info = (
-            magic + secure_version + reserved1 + version_field +
-            project_name + compile_time + compile_date + idf_version +
-            app_elf_sha256 + reserved_rest
-        )
-
-        return image_header + segment_header + app_info
 
     def test_upload_firmware_by_code_success(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
@@ -52,7 +25,7 @@ class TestPipelineFirmwareUpload:
             model_service.create_device_model(code="pipetest", name="Pipeline Test")
             container.db_session().commit()
 
-        firmware_content = self._create_test_firmware(b"1.0.0")
+        firmware_content = create_test_firmware(b"1.0.0")
 
         response = client.post(
             "/api/pipeline/models/pipetest/firmware",
@@ -69,7 +42,7 @@ class TestPipelineFirmwareUpload:
         self, client: FlaskClient
     ) -> None:
         """Test uploading firmware for non-existent model returns 404."""
-        firmware_content = self._create_test_firmware(b"1.0.0")
+        firmware_content = create_test_firmware(b"1.0.0")
 
         response = client.post(
             "/api/pipeline/models/nonexistent/firmware",
@@ -107,7 +80,7 @@ class TestPipelineFirmwareUpload:
 
             container.db_session().commit()
 
-        firmware_content = self._create_test_firmware(b"2.0.0")
+        firmware_content = create_test_firmware(b"2.0.0")
         mqtt_service = app.container.mqtt_service()
 
         with patch.object(mqtt_service, "publish") as mock_publish:
@@ -146,6 +119,127 @@ class TestPipelineFirmwareUpload:
         )
 
         assert response.status_code == 400
+
+
+class TestPipelineFirmwareZipUpload:
+    """Tests for ZIP firmware upload via POST /api/pipeline/models/<code>/firmware."""
+
+    def _create_test_zip(self, model_code: str, version: bytes) -> bytes:
+        """Create a valid firmware ZIP for testing."""
+        bin_content = create_test_firmware(version)
+        version_json = json.dumps({
+            "git_commit": "a1b2c3d4e5f6",
+            "idf_version": "v5.2.1",
+            "firmware_version": version.decode("utf-8"),
+        }).encode("utf-8")
+
+        buf = BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(f"{model_code}.bin", bin_content)
+            zf.writestr(f"{model_code}.elf", b"\x7fELF" + b"\x00" * 100)
+            zf.writestr(f"{model_code}.map", b"Memory Map\n")
+            zf.writestr("sdkconfig", b"CONFIG_IDF_TARGET=\"esp32s3\"\n")
+            zf.writestr("version.json", version_json)
+        return buf.getvalue()
+
+    def test_upload_firmware_zip_success(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test uploading firmware as a ZIP bundle via pipeline."""
+        model_code = "ziptest"
+        with app.app_context():
+            model_service = container.device_model_service()
+            model_service.create_device_model(code=model_code, name="ZIP Test")
+            container.db_session().commit()
+
+        zip_content = self._create_test_zip(model_code, b"3.0.0")
+
+        response = client.post(
+            f"/api/pipeline/models/{model_code}/firmware",
+            data=zip_content,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["firmware_version"] == "3.0.0"
+        assert data["code"] == model_code
+
+    def test_upload_firmware_zip_invalid_structure(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test uploading ZIP with wrong structure returns 400."""
+        model_code = "zipbad"
+        with app.app_context():
+            model_service = container.device_model_service()
+            model_service.create_device_model(code=model_code, name="Bad ZIP Test")
+            container.db_session().commit()
+
+        # Create a ZIP missing required files
+        buf = BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("random.txt", b"not firmware")
+        bad_zip = buf.getvalue()
+
+        response = client.post(
+            f"/api/pipeline/models/{model_code}/firmware",
+            data=bad_zip,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 400
+
+    def test_upload_firmware_zip_creates_versioned_file(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer, test_settings: Settings
+    ) -> None:
+        """Test that ZIP upload creates versioned ZIP on disk."""
+        model_code = "zipfile"
+        with app.app_context():
+            model_service = container.device_model_service()
+            model_service.create_device_model(code=model_code, name="ZIP File Test")
+            container.db_session().commit()
+
+        zip_content = self._create_test_zip(model_code, b"4.1.0")
+
+        response = client.post(
+            f"/api/pipeline/models/{model_code}/firmware",
+            data=zip_content,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 200
+
+        # Verify versioned ZIP exists on disk
+        assets_dir = test_settings.assets_dir
+        assert assets_dir is not None
+        zip_path = assets_dir / model_code / "firmware-4.1.0.zip"
+        assert zip_path.exists()
+
+        # Verify legacy .bin also exists
+        legacy_path = assets_dir / f"firmware-{model_code}.bin"
+        assert legacy_path.exists()
+
+    def test_upload_plain_bin_still_works(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that plain .bin upload still works alongside ZIP support."""
+        model_code = "bincompat"
+        with app.app_context():
+            model_service = container.device_model_service()
+            model_service.create_device_model(code=model_code, name="Binary Compat Test")
+            container.db_session().commit()
+
+        firmware_content = create_test_firmware(b"1.0.0")
+
+        response = client.post(
+            f"/api/pipeline/models/{model_code}/firmware",
+            data=firmware_content,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["firmware_version"] == "1.0.0"
 
 
 class TestPipelineFirmwareVersion:
@@ -282,6 +376,19 @@ class TestPipelineUploadScript:
         assert "project_name" in script
         assert "Auto-detected" in script
 
+    def test_get_upload_script_contains_zip_packaging(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that the shell script contains ZIP packaging logic."""
+        response = client.get("/api/pipeline/upload.sh")
+
+        script = response.data.decode("utf-8")
+        assert "version.json" in script
+        assert "zip" in script.lower()
+        assert "sdkconfig" in script
+        assert ".elf" in script
+        assert ".map" in script
+
 
 class TestPipelineUploadScriptPowerShell:
     """Tests for GET /api/pipeline/upload.ps1."""
@@ -365,3 +472,16 @@ class TestPipelineUploadScriptPowerShell:
         assert "project_description.json" in script
         assert "project_name" in script
         assert "Auto-detected" in script
+
+    def test_get_upload_script_contains_zip_packaging(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that the PowerShell script contains ZIP packaging logic."""
+        response = client.get("/api/pipeline/upload.ps1")
+
+        script = response.data.decode("utf-8")
+        assert "version.json" in script
+        assert "Compress-Archive" in script
+        assert "sdkconfig" in script
+        assert ".elf" in script
+        assert ".map" in script

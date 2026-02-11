@@ -205,12 +205,13 @@ class DeviceModelService:
     def upload_firmware(self, model_id: int, content: bytes) -> DeviceModel:
         """Upload firmware for a device model.
 
-        Extracts version from ESP32 binary, saves to filesystem, and notifies
-        all devices using this model via MQTT.
+        Accepts either a raw .bin or a ZIP bundle. Detects content type by
+        inspecting the first 4 bytes for ZIP magic. Extracts version, saves to
+        filesystem, and notifies all devices using this model via MQTT.
 
         Args:
             model_id: Device model ID
-            content: Firmware binary content
+            content: Firmware binary content (raw .bin or ZIP)
 
         Returns:
             Updated DeviceModel with firmware_version set
@@ -219,12 +220,16 @@ class DeviceModelService:
             RecordNotFoundException: If model doesn't exist
             ValidationException: If firmware format is invalid
         """
+        from app.services.firmware_service import is_zip_content
         from app.services.mqtt_service import MqttService
 
         model = self.get_device_model(model_id)
 
-        # Save firmware and extract version
-        version = self.firmware_service.save_firmware(model.code, content)
+        # Route to ZIP or .bin save based on content type
+        if is_zip_content(content):
+            version = self.firmware_service.save_firmware_zip(model.code, content)
+        else:
+            version = self.firmware_service.save_firmware(model.code, content)
 
         # Update model with version
         model.firmware_version = version
@@ -252,7 +257,9 @@ class DeviceModelService:
     def get_firmware_stream(self, model_id: int) -> tuple["BytesIO", str]:
         """Get firmware stream for a device model.
 
-        Returns a BytesIO for use with Flask's send_file.
+        Returns a BytesIO for use with Flask's send_file. Passes the model's
+        firmware_version to FirmwareService so it can try the versioned ZIP
+        before falling back to the legacy flat .bin.
 
         Args:
             model_id: Device model ID
@@ -264,7 +271,9 @@ class DeviceModelService:
             RecordNotFoundException: If model or firmware doesn't exist
         """
         model = self.get_device_model(model_id)
-        stream = self.firmware_service.get_firmware_stream(model.code)
+        stream = self.firmware_service.get_firmware_stream(
+            model.code, firmware_version=model.firmware_version
+        )
         return stream, model.code
 
     def has_firmware(self, model_id: int) -> bool:

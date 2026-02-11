@@ -71,16 +71,65 @@ function Upload-Firmware {
         throw "Failed to obtain access token"
     }
 
-    # Upload firmware
-    Write-Host "Uploading $(Split-Path $FirmwareFile -Leaf) to model $ModelCode..."
+    # Derive paths for companion build artifacts
+    $BuildDir = Split-Path $FirmwareFile -Parent
+    $BinBasename = [System.IO.Path]::GetFileNameWithoutExtension($FirmwareFile)
+    $ElfFile = Join-Path $BuildDir "$BinBasename.elf"
+    $MapFile = Join-Path $BuildDir "$BinBasename.map"
+    $SdkConfigFile = "sdkconfig"
+
+    # Verify all ZIP artifacts are present
+    $missingFiles = @()
+    foreach ($f in @($ElfFile, $MapFile, $SdkConfigFile)) {
+        if (-not (Test-Path $f)) { $missingFiles += $f }
+    }
+    if ($missingFiles.Count -gt 0) {
+        throw "Missing required build artifacts: $($missingFiles -join ', '). Ensure the project has been built and all artifacts (.elf, .map, sdkconfig) are present."
+    }
+
     $uploadUrl = "$BackendUrl/api/pipeline/models/$ModelCode/firmware"
 
-    # Read file as bytes and upload
-    $fileBytes = [System.IO.File]::ReadAllBytes((Resolve-Path $FirmwareFile))
-    $response = Invoke-RestMethod -Uri $uploadUrl -Method Post `
-        -Headers @{ Authorization = "Bearer $accessToken" } `
-        -ContentType "application/octet-stream" `
-        -Body $fileBytes
+    # Package as ZIP with all build artifacts
+    Write-Host "Packaging firmware ZIP for model $ModelCode..."
+
+    # Get git commit hash
+    try { $gitCommit = (git rev-parse HEAD 2>$null) } catch { $gitCommit = "unknown" }
+    if (-not $gitCommit) { $gitCommit = "unknown" }
+
+    # Get IDF version
+    $idfVersion = if ($env:IDF_VERSION) { $env:IDF_VERSION } else { "unknown" }
+
+    # Extract firmware version (best-effort from filename or "unknown")
+    $fwVersion = "unknown"
+
+    # Generate version.json
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+
+    try {
+        $versionJson = @{
+            git_commit       = $gitCommit
+            idf_version      = $idfVersion
+            firmware_version = $fwVersion
+        } | ConvertTo-Json -Compress
+
+        $versionJsonPath = Join-Path $tempDir "version.json"
+        Set-Content -Path $versionJsonPath -Value $versionJson -Encoding UTF8
+
+        # Create ZIP with required files
+        $zipPath = Join-Path $tempDir "firmware.zip"
+        Compress-Archive -Path $FirmwareFile, $ElfFile, $MapFile, $SdkConfigFile, $versionJsonPath -DestinationPath $zipPath -Force
+
+        Write-Host "Uploading firmware ZIP to model $ModelCode..."
+        $fileBytes = [System.IO.File]::ReadAllBytes($zipPath)
+        $response = Invoke-RestMethod -Uri $uploadUrl -Method Post `
+            -Headers @{ Authorization = "Bearer $accessToken" } `
+            -ContentType "application/octet-stream" `
+            -Body $fileBytes
+    }
+    finally {
+        Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
+    }
 
     if ($response.firmware_version) {
         Write-Host "Success: Uploaded firmware version $($response.firmware_version)"

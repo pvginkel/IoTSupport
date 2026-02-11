@@ -17,10 +17,11 @@ from dependency_injector.wiring import Provide, inject
 from flask import Blueprint, Response, send_file
 
 from app.config import Settings
-from app.exceptions import AuthenticationException
+from app.exceptions import AuthenticationException, ValidationException
 from app.models.device import RotationState
 from app.services.auth_service import AuthService
 from app.services.container import ServiceContainer
+from app.services.coredump_service import CoredumpService
 from app.services.device_service import DeviceService
 from app.services.firmware_service import FirmwareService
 from app.services.keycloak_admin_service import KeycloakAdminService
@@ -196,11 +197,15 @@ def get_firmware(
                 raise AuthenticationException("Device authentication required")
             device = device_service.get_device_by_key(device_key)
             model_code = device.device_model.code
+            firmware_version = device.device_model.firmware_version
         else:
+            # Look up device to get firmware_version from the model
+            device = device_service.get_device_by_key(device_ctx.device_key)
             model_code = device_ctx.model_code
+            firmware_version = device.device_model.firmware_version
 
-        # Get firmware stream
-        stream = firmware_service.get_firmware_stream(model_code)
+        # Get firmware stream (tries versioned ZIP first, falls back to legacy .bin)
+        stream = firmware_service.get_firmware_stream(model_code, firmware_version)
 
         # Use send_file with BytesIO stream
         return send_file(  # type: ignore[call-arg]
@@ -343,3 +348,72 @@ def get_provisioning_for_rotation(
     finally:
         duration = time.perf_counter() - start_time
         metrics_service.record_operation("iot_get_provisioning", status, duration)
+
+
+@iot_bp.route("/coredump", methods=["POST"])
+@public
+@handle_api_errors
+@inject
+def upload_coredump(
+    device_service: DeviceService = Provide[ServiceContainer.device_service],
+    coredump_service: CoredumpService = Provide[ServiceContainer.coredump_service],
+    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+) -> Any:
+    """Upload a coredump from a device.
+
+    Accepts raw binary body containing the ESP32 coredump data.
+    Requires chip and firmware_version query parameters.
+
+    The coredump is stored in COREDUMPS_DIR/{device_key}/ with a JSON
+    sidecar file containing metadata.
+    """
+    start_time = time.perf_counter()
+    status = "success"
+
+    try:
+        from flask import request
+
+        # Validate required query parameters before reading body
+        chip = request.args.get("chip")
+        if not chip:
+            raise ValidationException("Missing required query parameter: chip")
+
+        firmware_version = request.args.get("firmware_version")
+        if not firmware_version:
+            raise ValidationException("Missing required query parameter: firmware_version")
+
+        # Resolve device identity from auth context or query param
+        device_ctx = get_device_auth_context()
+
+        if device_ctx is None:
+            device_key = request.args.get("device_key")
+            if not device_key:
+                raise AuthenticationException("Device authentication required")
+            device = device_service.get_device_by_key(device_key)
+            device_key = device.key
+            model_code = device.device_model.code
+        else:
+            device_key = device_ctx.device_key
+            model_code = device_ctx.model_code
+
+        # Read raw binary body
+        content = request.get_data()
+
+        # Delegate to service (validates size constraints)
+        filename = coredump_service.save_coredump(
+            device_key=device_key,
+            model_code=model_code,
+            chip=chip,
+            firmware_version=firmware_version,
+            content=content,
+        )
+
+        return {"status": "ok", "filename": filename}, 201
+
+    except Exception:
+        status = "error"
+        raise
+
+    finally:
+        duration = time.perf_counter() - start_time
+        metrics_service.record_operation("iot_upload_coredump", status, duration)
