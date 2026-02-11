@@ -1,6 +1,7 @@
 """Pytest configuration and fixtures."""
 
 import sqlite3
+import struct
 from collections.abc import Generator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -57,6 +58,10 @@ def _build_test_settings(tmp_path: Path) -> Settings:
     assets_dir = tmp_path / "assets"
     assets_dir.mkdir(exist_ok=True)
 
+    # Create temporary coredumps directory
+    coredumps_dir = tmp_path / "coredumps"
+    coredumps_dir.mkdir(exist_ok=True)
+
     return Settings(
         # Flask settings
         secret_key="test-secret-key",
@@ -66,6 +71,8 @@ def _build_test_settings(tmp_path: Path) -> Settings:
         database_url="sqlite:///:memory:",
         # Firmware storage
         assets_dir=assets_dir,
+        # Coredump storage
+        coredumps_dir=coredumps_dir,
         # CORS settings
         cors_origins=["http://localhost:3000"],
         # MQTT settings
@@ -411,3 +418,40 @@ def generate_test_jwt(test_settings: Settings) -> Any:
     _generate.private_key = private_key  # type: ignore
 
     return _generate
+
+
+def create_test_firmware(version: bytes) -> bytes:
+    """Create a test firmware binary with valid ESP32 AppInfo header.
+
+    Shared helper used across firmware-related test files to build a
+    minimal but valid ESP32 binary with the given version string.
+
+    Args:
+        version: Version bytes (e.g. b"1.0.0")
+
+    Returns:
+        Bytes representing a valid ESP32 firmware binary
+    """
+    # ESP32 image header (24 bytes) + segment header (8 bytes)
+    image_header = bytes(24)
+    segment_header = bytes(8)
+
+    # AppInfo structure (256 bytes)
+    magic = struct.pack("<I", 0xABCD5432)
+    secure_version = struct.pack("<I", 0)
+    reserved1 = bytes(8)
+    version_field = version.ljust(32, b"\x00")[:32]
+    project_name = b"test_project".ljust(32, b"\x00")
+    compile_time = b"12:00:00".ljust(16, b"\x00")
+    compile_date = b"Jan 01 2024".ljust(16, b"\x00")
+    idf_version = b"v5.0".ljust(32, b"\x00")
+    app_elf_sha256 = bytes(32)
+    reserved_rest = bytes(256 - 4 - 4 - 8 - 32 - 32 - 16 - 16 - 32 - 32)
+
+    app_info = (
+        magic + secure_version + reserved1 + version_field
+        + project_name + compile_time + compile_date + idf_version
+        + app_elf_sha256 + reserved_rest
+    )
+
+    return image_header + segment_header + app_info

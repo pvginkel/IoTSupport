@@ -1,10 +1,12 @@
 """Tests for IoT device API endpoints."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 from flask import Flask
 from flask.testing import FlaskClient
 
+from app.config import Settings
 from app.models.device import RotationState
 from app.services.container import ServiceContainer
 
@@ -325,3 +327,132 @@ class TestIotProvisioning:
                 assert "mqtt_url" in data
                 assert "wifi_ssid" in data
                 assert "wifi_password" in data
+
+
+class TestIotCoredump:
+    """Tests for POST /api/iot/coredump."""
+
+    def test_upload_coredump_success(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer, test_settings: Settings
+    ) -> None:
+        """Test successful coredump upload creates files on disk."""
+        _, device_key, model_code = create_test_device(app, container, model_code="cd1")
+
+        content = b"\xDE\xAD\xBE\xEF" * 64
+
+        response = client.post(
+            f"/api/iot/coredump?device_key={device_key}&chip=esp32s3&firmware_version=1.0.0",
+            data=content,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data["status"] == "ok"
+        assert data["filename"].startswith("coredump_")
+        assert data["filename"].endswith(".dmp")
+
+        # Verify files were actually written
+        coredumps_dir = test_settings.coredumps_dir
+        assert coredumps_dir is not None
+        device_dir = coredumps_dir / device_key
+        assert device_dir.exists()
+
+        dmp_files = list(device_dir.glob("*.dmp"))
+        assert len(dmp_files) == 1
+        assert dmp_files[0].read_bytes() == content
+
+        json_files = list(device_dir.glob("*.json"))
+        assert len(json_files) == 1
+        sidecar = json.loads(json_files[0].read_text())
+        assert sidecar["chip"] == "esp32s3"
+        assert sidecar["firmware_version"] == "1.0.0"
+        assert sidecar["device_key"] == device_key
+        assert sidecar["model_code"] == model_code
+
+    def test_upload_coredump_missing_chip(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that missing chip query param returns 400."""
+        _, device_key, _ = create_test_device(app, container, model_code="cd2")
+
+        response = client.post(
+            f"/api/iot/coredump?device_key={device_key}&firmware_version=1.0.0",
+            data=b"\x00" * 10,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "chip" in data["error"]
+
+    def test_upload_coredump_missing_firmware_version(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that missing firmware_version query param returns 400."""
+        _, device_key, _ = create_test_device(app, container, model_code="cd3")
+
+        response = client.post(
+            f"/api/iot/coredump?device_key={device_key}&chip=esp32",
+            data=b"\x00" * 10,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "firmware_version" in data["error"]
+
+    def test_upload_coredump_empty_body(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that empty body returns 400."""
+        _, device_key, _ = create_test_device(app, container, model_code="cd4")
+
+        response = client.post(
+            f"/api/iot/coredump?device_key={device_key}&chip=esp32&firmware_version=1.0.0",
+            data=b"",
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "No coredump content" in data["error"]
+
+    def test_upload_coredump_exceeds_max_size(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that body exceeding 1MB returns 400."""
+        _, device_key, _ = create_test_device(app, container, model_code="cd5")
+
+        # 1MB + 1 byte
+        content = b"\x00" * (1_048_576 + 1)
+
+        response = client.post(
+            f"/api/iot/coredump?device_key={device_key}&chip=esp32&firmware_version=1.0.0",
+            data=content,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert "exceeds maximum size" in data["error"]
+
+    def test_upload_coredump_no_auth(self, client: FlaskClient) -> None:
+        """Test that missing device authentication returns 401."""
+        response = client.post(
+            "/api/iot/coredump?chip=esp32&firmware_version=1.0.0",
+            data=b"\x00" * 10,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 401
+
+    def test_upload_coredump_invalid_device_key(self, client: FlaskClient) -> None:
+        """Test that invalid device key returns 404."""
+        response = client.post(
+            "/api/iot/coredump?device_key=invalid1&chip=esp32&firmware_version=1.0.0",
+            data=b"\x00" * 10,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 404
