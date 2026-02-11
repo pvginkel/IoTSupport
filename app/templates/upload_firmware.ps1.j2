@@ -92,15 +92,14 @@ function Upload-Firmware {
     # Package as ZIP with all build artifacts
     Write-Host "Packaging firmware ZIP for model $ModelCode..."
 
+    # Extract build metadata from project_description.json
+    $projInfo = Get-Content $ProjectDesc | ConvertFrom-Json
+    $fwVersion = if ($projInfo.project_version) { $projInfo.project_version } else { "unknown" }
+    $idfVersion = if ($projInfo.git_revision) { $projInfo.git_revision } else { "unknown" }
+
     # Get git commit hash
     try { $gitCommit = (git rev-parse HEAD 2>$null) } catch { $gitCommit = "unknown" }
     if (-not $gitCommit) { $gitCommit = "unknown" }
-
-    # Get IDF version
-    $idfVersion = if ($env:IDF_VERSION) { $env:IDF_VERSION } else { "unknown" }
-
-    # Extract firmware version (best-effort from filename or "unknown")
-    $fwVersion = "unknown"
 
     # Generate version.json
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
