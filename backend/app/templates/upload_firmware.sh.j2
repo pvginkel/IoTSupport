@@ -119,16 +119,19 @@ fi
 # Package as ZIP with all build artifacts
 echo "Packaging firmware ZIP for model $MODEL_CODE..."
 
-# Extract firmware version from the binary for version.json
-# The version string is at offset 48 in the binary (after 24-byte image header,
-# 8-byte segment header, and 16 bytes into AppInfo)
-FW_VERSION=$(strings -t d "$FIRMWARE_FILE" 2>/dev/null | awk '$1 >= 48 && $1 < 80 {print $2; exit}' || echo "unknown")
+# Extract build metadata from project_description.json
+if command -v jq >/dev/null 2>&1; then
+    FW_VERSION=$(jq -r '.project_version // "unknown"' "$PROJECT_DESC")
+    IDF_VERSION=$(jq -r '.git_revision // "unknown"' "$PROJECT_DESC")
+else
+    FW_VERSION=$(grep -o '"project_version"[[:space:]]*:[[:space:]]*"[^"]*"' "$PROJECT_DESC" | sed 's/.*"project_version"[[:space:]]*:[[:space:]]*"//;s/"$//')
+    IDF_VERSION=$(grep -o '"git_revision"[[:space:]]*:[[:space:]]*"[^"]*"' "$PROJECT_DESC" | sed 's/.*"git_revision"[[:space:]]*:[[:space:]]*"//;s/"$//')
+fi
+FW_VERSION="${FW_VERSION:-unknown}"
+IDF_VERSION="${IDF_VERSION:-unknown}"
 
 # Get git commit hash
 GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
-
-# Get IDF version from build metadata or environment
-IDF_VERSION="${IDF_VERSION:-$(idf.py --version 2>/dev/null || echo "unknown")}"
 
 # Generate version.json
 TEMP_DIR=$(mktemp -d)
