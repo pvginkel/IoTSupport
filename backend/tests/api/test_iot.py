@@ -1,12 +1,13 @@
 """Tests for IoT device API endpoints."""
 
-import json
 from unittest.mock import MagicMock, patch
 
 from flask import Flask
 from flask.testing import FlaskClient
+from sqlalchemy import select
 
 from app.config import Settings
+from app.models.coredump import CoreDump, ParseStatus
 from app.models.device import RotationState
 from app.services.container import ServiceContainer
 
@@ -335,7 +336,7 @@ class TestIotCoredump:
     def test_upload_coredump_success(
         self, app: Flask, client: FlaskClient, container: ServiceContainer, test_settings: Settings
     ) -> None:
-        """Test successful coredump upload creates files on disk."""
+        """Test successful coredump upload creates .dmp file and DB record."""
         _, device_key, model_code = create_test_device(app, container, model_code="cd1")
 
         content = b"\xDE\xAD\xBE\xEF" * 64
@@ -352,7 +353,7 @@ class TestIotCoredump:
         assert data["filename"].startswith("coredump_")
         assert data["filename"].endswith(".dmp")
 
-        # Verify files were actually written
+        # Verify .dmp file was written
         coredumps_dir = test_settings.coredumps_dir
         assert coredumps_dir is not None
         device_dir = coredumps_dir / device_key
@@ -362,13 +363,22 @@ class TestIotCoredump:
         assert len(dmp_files) == 1
         assert dmp_files[0].read_bytes() == content
 
+        # Verify no JSON sidecar file was created (old behavior removed)
         json_files = list(device_dir.glob("*.json"))
-        assert len(json_files) == 1
-        sidecar = json.loads(json_files[0].read_text())
-        assert sidecar["chip"] == "esp32s3"
-        assert sidecar["firmware_version"] == "1.0.0"
-        assert sidecar["device_key"] == device_key
-        assert sidecar["model_code"] == model_code
+        assert len(json_files) == 0
+
+        # Verify DB record was created with correct metadata
+        with app.app_context():
+            session = container.db_session()
+            stmt = select(CoreDump).where(CoreDump.filename == data["filename"])
+            coredump = session.execute(stmt).scalar_one_or_none()
+            assert coredump is not None
+            assert coredump.chip == "esp32s3"
+            assert coredump.firmware_version == "1.0.0"
+            assert coredump.size == len(content)
+            assert coredump.parse_status == ParseStatus.PENDING.value
+            assert coredump.parsed_output is None
+            assert coredump.uploaded_at is not None
 
     def test_upload_coredump_missing_chip(
         self, app: Flask, client: FlaskClient, container: ServiceContainer

@@ -61,6 +61,7 @@ class DeviceSummarySchema(BaseModel):
     enable_ota: bool | None = Field(None, description="OTA enabled flag from config")
     rotation_state: str = Field(..., description="Current rotation state")
     secret_created_at: datetime | None = Field(None, description="When current secret was created")
+    last_coredump_at: datetime | None = Field(None, description="Timestamp of the most recent coredump")
 
 
 class DeviceModelInfoSchema(BaseModel):

@@ -84,6 +84,20 @@ class Environment(BaseSettings):
         description="Path to coredump storage directory"
     )
 
+    # Coredump parsing sidecar settings
+    PARSE_SIDECAR_XFER_DIR: Path | None = Field(
+        default=None,
+        description="Path to shared volume for file transfer to parse sidecar"
+    )
+    PARSE_SIDECAR_URL: str | None = Field(
+        default=None,
+        description="Base URL of the coredump parse sidecar (e.g., http://sidecar:8080)"
+    )
+    MAX_COREDUMPS: int = Field(
+        default=20,
+        description="Maximum number of coredumps to retain per device"
+    )
+
     # CORS settings
     CORS_ORIGINS: list[str] = Field(
         default=["http://localhost:3000"],
@@ -262,6 +276,11 @@ class Settings(BaseModel):
 
     # Coredump storage directory
     coredumps_dir: Path | None = None
+
+    # Coredump parsing sidecar settings
+    parse_sidecar_xfer_dir: Path | None = None
+    parse_sidecar_url: str | None = None
+    max_coredumps: int = 20
 
     # CORS settings
     cors_origins: list[str]
@@ -492,6 +511,9 @@ class Settings(BaseModel):
             database_url=env.DATABASE_URL,
             assets_dir=env.ASSETS_DIR,
             coredumps_dir=env.COREDUMPS_DIR,
+            parse_sidecar_xfer_dir=env.PARSE_SIDECAR_XFER_DIR,
+            parse_sidecar_url=strip_slashes(env.PARSE_SIDECAR_URL),
+            max_coredumps=env.MAX_COREDUMPS,
             cors_origins=env.CORS_ORIGINS,
             mqtt_url=env.MQTT_URL,
             device_mqtt_url=device_mqtt_url,

@@ -180,6 +180,7 @@ def after_request_set_cookies(
 # Import and register all resource blueprints
 # Note: Imports are done after api_bp creation to avoid circular imports
 from app.api.auth import auth_bp  # noqa: E402
+from app.api.coredumps import coredumps_bp  # noqa: E402
 from app.api.device_models import device_models_bp  # noqa: E402
 from app.api.devices import devices_bp  # noqa: E402
 from app.api.health import health_bp  # noqa: E402
@@ -190,6 +191,7 @@ from app.api.rotation import rotation_bp  # noqa: E402
 from app.api.testing import testing_bp  # noqa: E402
 
 api_bp.register_blueprint(auth_bp)  # type: ignore[attr-defined]
+api_bp.register_blueprint(coredumps_bp)  # type: ignore[attr-defined]
 api_bp.register_blueprint(device_models_bp)  # type: ignore[attr-defined]
 api_bp.register_blueprint(devices_bp)  # type: ignore[attr-defined]
 api_bp.register_blueprint(health_bp)  # type: ignore[attr-defined]
