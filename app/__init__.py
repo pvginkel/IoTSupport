@@ -16,7 +16,7 @@ from app.services.container import ServiceContainer
 logger = logging.getLogger(__name__)
 
 
-def create_app(settings: "Settings | None" = None, skip_background_services: bool = False) -> App:
+def create_app(settings: "Settings | None" = None) -> App:
     """Create and configure Flask application."""
     logger.info("create_app() called", stack_info=True)
 
@@ -63,6 +63,7 @@ def create_app(settings: "Settings | None" = None, skip_background_services: boo
     wire_modules = [
         "app.api",
         "app.api.auth",
+        "app.api.coredumps",
         "app.api.device_models",
         "app.api.devices",
         "app.api.health",
@@ -77,6 +78,14 @@ def create_app(settings: "Settings | None" = None, skip_background_services: boo
     container.wire(modules=wire_modules)
 
     app.container = container
+
+    # Set container reference on singleton services that need DB access.
+    # This cannot be done via constructor injection because providers.Self()
+    # resolves to None during Singleton construction.
+    container.coredump_service().container = container
+
+    # Initialize lifecycle coordinator signal handlers
+    container.lifecycle_coordinator().initialize()
 
     # Configure CORS
     CORS(app, origins=settings.cors_origins)
@@ -98,12 +107,13 @@ def create_app(settings: "Settings | None" = None, skip_background_services: boo
 
     app.register_blueprint(metrics_bp)
 
-    # Initialize background services (singletons that need explicit startup)
-    if not skip_background_services:
-        # Start log sink if both MQTT and ES are configured
-        logsink = container.logsink_service()
-        if logsink.enabled:
-            logger.info("LogSinkService started - subscribed to MQTT log topic")
+    # Initialize singletons that register with the lifecycle coordinator.
+    # LogSinkService subscribes to MQTT and starts its background writer thread
+    # upon receiving the STARTUP lifecycle event.
+    container.logsink_service()
+
+    # Fire STARTUP lifecycle event to all registered services
+    container.lifecycle_coordinator().fire_startup()
 
     # Request teardown handler for database session management
     @app.teardown_request

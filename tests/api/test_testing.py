@@ -100,7 +100,7 @@ def testing_template_connection(tmp_path_factory) -> Generator[sqlite3.Connectio
 
     settings = _override_settings_for_sqlite(_build_testing_settings(tmp_path), conn)
 
-    template_app = create_app(settings, skip_background_services=True)
+    template_app = create_app(settings)
     with template_app.app_context():
         upgrade_database(recreate=True)
 
@@ -122,7 +122,7 @@ def testing_app(testing_settings: Settings, testing_template_connection: sqlite3
 
     settings = _override_settings_for_sqlite(testing_settings, clone_conn)
 
-    app = create_app(settings, skip_background_services=True)
+    app = create_app(settings)
 
     try:
         yield app

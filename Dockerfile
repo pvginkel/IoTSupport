@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS build
+FROM python:3.13-slim AS build
 
 ENV POETRY_VIRTUALENVS_IN_PROJECT=1 \
     POETRY_VIRTUALENVS_CREATE=1 \
@@ -17,7 +17,7 @@ COPY app ./app
 COPY alembic ./alembic
 
 # Runtime image
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 # netcat-openbsd is used by the setup job to find whether the database has started up.
 

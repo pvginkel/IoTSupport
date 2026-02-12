@@ -50,7 +50,7 @@ class TestAuthEndpoints:
             mock_response.raise_for_status = MagicMock()
             mock_get.return_value = mock_response
 
-            app = create_app(auth_enabled_settings, skip_background_services=True)
+            app = create_app(auth_enabled_settings)
 
             # Create database tables for this fresh app
             with app.app_context():
@@ -75,7 +75,7 @@ class TestAuthEndpoints:
             mock_response.raise_for_status = MagicMock()
             mock_get.return_value = mock_response
 
-            app = create_app(auth_enabled_settings, skip_background_services=True)
+            app = create_app(auth_enabled_settings)
 
             # Create database tables for this fresh app
             with app.app_context():
@@ -102,7 +102,7 @@ class TestAuthEndpoints:
             mock_response.raise_for_status = MagicMock()
             mock_get.return_value = mock_response
 
-            app = create_app(auth_enabled_settings, skip_background_services=True)
+            app = create_app(auth_enabled_settings)
 
             # Create database tables for this fresh app
             with app.app_context():
