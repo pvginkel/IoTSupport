@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import jsonschema  # type: ignore[import-untyped]
 from cryptography.fernet import Fernet
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.exceptions import (
     ExternalServiceException,
@@ -18,6 +18,7 @@ from app.exceptions import (
     RecordNotFoundException,
     ValidationException,
 )
+from app.models.coredump import CoreDump
 from app.models.device import Device, RotationState
 
 if TYPE_CHECKING:
@@ -186,7 +187,13 @@ class DeviceService:
         Returns:
             List of Device instances
         """
-        stmt = select(Device).order_by(Device.key)
+        # Eagerly load only uploaded_at from coredumps to support
+        # the last_coredump_at property without N+1 queries.
+        stmt = (
+            select(Device)
+            .options(selectinload(Device.coredumps).load_only(CoreDump.uploaded_at))
+            .order_by(Device.key)
+        )
 
         if model_id is not None:
             stmt = stmt.where(Device.device_model_id == model_id)

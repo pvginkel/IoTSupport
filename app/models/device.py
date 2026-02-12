@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.extensions import db
 
 if False:  # TYPE_CHECKING
+    from app.models.coredump import CoreDump
     from app.models.device_model import DeviceModel
 
 
@@ -88,6 +89,19 @@ class Device(db.Model):  # type: ignore[name-defined]
     device_model: Mapped["DeviceModel"] = relationship(
         "DeviceModel", back_populates="devices", lazy="selectin"
     )
+    coredumps: Mapped[list["CoreDump"]] = relationship(
+        "CoreDump",
+        back_populates="device",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+
+    @property
+    def last_coredump_at(self) -> datetime | None:
+        """Timestamp of the most recent coredump, or None."""
+        if not self.coredumps:
+            return None
+        return max(c.uploaded_at for c in self.coredumps)
 
     @property
     def client_id(self) -> str:

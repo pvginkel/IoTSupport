@@ -1,12 +1,13 @@
 """Tests for devices API endpoints."""
 
 import json
-from datetime import UTC
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 from flask import Flask
 from flask.testing import FlaskClient
 
+from app.models.coredump import CoreDump
 from app.models.device import RotationState
 from app.services.container import ServiceContainer
 
@@ -48,6 +49,85 @@ class TestDevicesList:
         assert response.status_code == 200
         data = response.get_json()
         assert len(data["devices"]) == 2
+
+    def test_list_devices_includes_last_coredump_at_null(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that last_coredump_at is null when device has no coredumps."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="lcd1", name="LCD Test")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device_service.create_device(device_model_id=model.id, config="{}")
+
+        response = client.get("/api/devices")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["devices"]) == 1
+        assert data["devices"][0]["last_coredump_at"] is None
+
+    def test_list_devices_includes_last_coredump_at_with_coredumps(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that last_coredump_at returns the most recent coredump timestamp."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="lcd2", name="LCD Test 2")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id, config="{}"
+                )
+
+                # Add two coredumps with different timestamps
+                session = container.db_session()
+                older = CoreDump(
+                    device_id=device.id,
+                    filename="old.dmp",
+                    chip="esp32s3",
+                    firmware_version="1.0.0",
+                    size=1024,
+                    uploaded_at=datetime(2026, 1, 1, 12, 0, 0),
+                )
+                newer = CoreDump(
+                    device_id=device.id,
+                    filename="new.dmp",
+                    chip="esp32s3",
+                    firmware_version="1.0.1",
+                    size=2048,
+                    uploaded_at=datetime(2026, 2, 10, 8, 30, 0),
+                )
+                session.add_all([older, newer])
+                session.flush()
+
+        response = client.get("/api/devices")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["devices"]) == 1
+        # Should return the newer timestamp
+        assert data["devices"][0]["last_coredump_at"] is not None
+        assert "10 Feb 2026" in data["devices"][0]["last_coredump_at"]
 
     def test_list_devices_filter_by_model(
         self, app: Flask, client: FlaskClient, container: ServiceContainer

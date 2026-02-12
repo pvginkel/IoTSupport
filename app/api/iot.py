@@ -364,8 +364,9 @@ def upload_coredump(
     Accepts raw binary body containing the ESP32 coredump data.
     Requires chip and firmware_version query parameters.
 
-    The coredump is stored in COREDUMPS_DIR/{device_key}/ with a JSON
-    sidecar file containing metadata.
+    The coredump is stored in COREDUMPS_DIR/{device_key}/ with a DB record
+    tracking metadata and parse status. Background parsing is triggered
+    if the sidecar is configured.
     """
     start_time = time.perf_counter()
     status = "success"
@@ -390,22 +391,38 @@ def upload_coredump(
             if not device_key:
                 raise AuthenticationException("Device authentication required")
             device = device_service.get_device_by_key(device_key)
+            device_id = device.id
             device_key = device.key
             model_code = device.device_model.code
         else:
             device_key = device_ctx.device_key
             model_code = device_ctx.model_code
+            device = device_service.get_device_by_key(device_key)
+            device_id = device.id
 
         # Read raw binary body
         content = request.get_data()
 
-        # Delegate to service (validates size constraints)
-        filename = coredump_service.save_coredump(
+        # Delegate to service: saves file, creates DB record, enforces retention
+        filename, coredump_id = coredump_service.save_coredump(
+            device_id=device_id,
             device_key=device_key,
             model_code=model_code,
             chip=chip,
             firmware_version=firmware_version,
             content=content,
+        )
+
+        # Spawn background parsing thread (no-op if sidecar not configured).
+        # All data is passed as arguments so the thread does not need to read
+        # the DB record and is not affected by transaction timing.
+        coredump_service.maybe_start_parsing(
+            coredump_id=coredump_id,
+            device_key=device_key,
+            model_code=model_code,
+            chip=chip,
+            firmware_version=firmware_version,
+            filename=filename,
         )
 
         return {"status": "ok", "filename": filename}, 201
