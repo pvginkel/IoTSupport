@@ -250,6 +250,12 @@ class Environment(BaseSettings):
         description="MQTT client ID for persistent sessions (shared by all MQTT operations)"
     )
 
+    # Graceful shutdown timeout
+    GRACEFUL_SHUTDOWN_TIMEOUT: int = Field(
+        default=30,
+        description="Maximum seconds to wait for graceful shutdown of background services"
+    )
+
 
 class Settings(BaseModel):
     """Application settings with lowercase fields and derived values.
@@ -333,6 +339,9 @@ class Settings(BaseModel):
 
     # MQTT Client ID
     mqtt_client_id: str
+
+    # Graceful shutdown timeout
+    graceful_shutdown_timeout: int = 30
 
     # Secret Encryption Key (derived from secret_key)
     fernet_key: str
@@ -550,6 +559,7 @@ class Settings(BaseModel):
             elasticsearch_password=env.ELASTICSEARCH_PASSWORD,
             elasticsearch_index_pattern=env.ELASTICSEARCH_INDEX_PATTERN,
             mqtt_client_id=env.MQTT_CLIENT_ID,
+            graceful_shutdown_timeout=env.GRACEFUL_SHUTDOWN_TIMEOUT,
             fernet_key=fernet_key,
             sqlalchemy_engine_options=sqlalchemy_engine_options,
         )

@@ -73,7 +73,7 @@ ignore = [
 "app/utils/lvgl/LVGLImage.py" = ["I001", "UP035", "B904", "UP006", "C416", "B905", "E741"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 check_untyped_defs = true
 disallow_any_generics = true
 disallow_incomplete_defs = true

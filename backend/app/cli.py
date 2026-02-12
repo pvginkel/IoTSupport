@@ -41,7 +41,7 @@ def upgrade_db(recreate: bool, yes_i_am_sure: bool) -> None:
         )
         sys.exit(1)
 
-    app = create_app(skip_background_services=True)
+    app = create_app()
 
     with app.app_context():
         # Check database connection first
@@ -105,7 +105,7 @@ def load_test_data(yes_i_am_sure: bool) -> None:
         )
         sys.exit(1)
 
-    app = create_app(skip_background_services=True)
+    app = create_app()
 
     with app.app_context():
         # Check database connection first
@@ -153,7 +153,7 @@ def db_status() -> None:
 
     Displays current database revision and any pending migrations.
     """
-    app = create_app(skip_background_services=True)
+    app = create_app()
 
     with app.app_context():
         # Check database connection first
@@ -207,7 +207,7 @@ def rotation_job(run_once: bool) -> None:
     """
     from datetime import datetime
 
-    app = create_app(skip_background_services=True)
+    app = create_app()
 
     with app.app_context():
         # Check database connection first

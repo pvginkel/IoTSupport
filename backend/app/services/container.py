@@ -20,6 +20,7 @@ from app.services.rotation_service import RotationService
 from app.services.settings_service import SettingsService
 from app.services.test_data_service import TestDataService
 from app.services.testing_service import TestingService
+from app.utils.lifecycle_coordinator import LifecycleCoordinator
 
 
 class ServiceContainer(containers.DeclarativeContainer):
@@ -32,6 +33,12 @@ class ServiceContainer(containers.DeclarativeContainer):
     session_maker = providers.Dependency(instance_of=sessionmaker)
     db_session = providers.ContextLocalSingleton(
         session_maker.provided.call()
+    )
+
+    # LifecycleCoordinator - Singleton for graceful shutdown
+    lifecycle_coordinator = providers.Singleton(
+        LifecycleCoordinator,
+        graceful_shutdown_timeout=config.provided.graceful_shutdown_timeout,
     )
 
     # MetricsService - Singleton for app lifetime
@@ -97,18 +104,25 @@ class ServiceContainer(containers.DeclarativeContainer):
         LogSinkService,
         config=config,
         mqtt_service=mqtt_service,
-    )
-
-    # CoredumpService - Singleton for coredump file management
-    coredump_service = providers.Singleton(
-        CoredumpService,
-        coredumps_dir=config.provided.coredumps_dir,
+        lifecycle_coordinator=lifecycle_coordinator,
     )
 
     # FirmwareService - Singleton for firmware file management
     firmware_service = providers.Singleton(
         FirmwareService,
         assets_dir=config.provided.assets_dir,
+    )
+
+    # CoredumpService - Singleton for coredump file management + DB tracking + parsing
+    # Note: container is not injected via constructor because providers.Self()
+    # resolves to None during Singleton construction. Instead, the container
+    # reference is set post-init in create_app() via coredump_service().container = container.
+    coredump_service = providers.Singleton(
+        CoredumpService,
+        coredumps_dir=config.provided.coredumps_dir,
+        config=config,
+        firmware_service=firmware_service,
+        metrics_service=metrics_service,
     )
 
     # DeviceModelService - Factory creates new instance per request with database session

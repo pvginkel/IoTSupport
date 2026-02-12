@@ -73,6 +73,10 @@ def _build_test_settings(tmp_path: Path) -> Settings:
         assets_dir=assets_dir,
         # Coredump storage
         coredumps_dir=coredumps_dir,
+        # Coredump parsing sidecar (not configured by default in tests)
+        parse_sidecar_xfer_dir=None,
+        parse_sidecar_url=None,
+        max_coredumps=20,
         # CORS settings
         cors_origins=["http://localhost:3000"],
         # MQTT settings
@@ -117,6 +121,8 @@ def _build_test_settings(tmp_path: Path) -> Settings:
         elasticsearch_index_pattern="logstash-http-*",
         # MQTT client ID
         mqtt_client_id="iotsupport-backend",
+        # Graceful shutdown timeout
+        graceful_shutdown_timeout=30,
         # Fernet key (derived from "test-secret-key" using SHA256 + base64)
         fernet_key="LOrG82NjxiRqZMyoBc1DynoBsU6y_MUyzuw_YPL33xw=",
     )
@@ -149,7 +155,7 @@ def template_connection(session_tmp_path: Path) -> Generator[sqlite3.Connection,
 
     settings = _override_settings_for_sqlite(_build_test_settings(session_tmp_path), conn)
 
-    template_app = create_app(settings, skip_background_services=True)
+    template_app = create_app(settings)
     with template_app.app_context():
         upgrade_database(recreate=True)
 
@@ -172,7 +178,7 @@ def app(test_settings: Settings, template_connection: sqlite3.Connection) -> Gen
 
     settings = _override_settings_for_sqlite(test_settings, clone_conn)
 
-    app = create_app(settings, skip_background_services=True)
+    app = create_app(settings)
 
     try:
         yield app

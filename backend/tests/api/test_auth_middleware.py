@@ -56,7 +56,7 @@ class TestAuthenticationMiddleware:
                 mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
                 mock_jwk_client_class.return_value = mock_jwk_client
 
-                app = create_app(auth_enabled_settings, skip_background_services=True)
+                app = create_app(auth_enabled_settings)
 
                 # Create database tables for tests
                 with app.app_context():
@@ -247,7 +247,7 @@ class TestAuthenticationMiddleware:
             "oidc_enabled": False,
         })
 
-        app = create_app(settings, skip_background_services=True)
+        app = create_app(settings)
 
         # Create database tables for this fresh app
         with app.app_context():
@@ -352,7 +352,7 @@ class TestTokenRefreshMiddleware:
                 mock_jwk_client.get_signing_key_from_jwt.return_value = mock_signing_key
                 mock_jwk_client_class.return_value = mock_jwk_client
 
-                app = create_app(auth_enabled_settings, skip_background_services=True)
+                app = create_app(auth_enabled_settings)
 
                 with app.app_context():
                     from app.extensions import db
