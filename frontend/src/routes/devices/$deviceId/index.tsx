@@ -1,60 +1,22 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { DeviceEditor } from '@/components/devices/device-editor'
+import { createFileRoute } from '@tanstack/react-router'
+import { DeviceConfigurationTab } from '@/components/devices/device-configuration-tab'
 import { useDevice } from '@/hooks/use-devices'
-import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('/devices/$deviceId/')({
-  component: EditDeviceRoute,
+  component: ConfigurationTabRoute,
 })
 
-function EditDeviceRoute() {
+// Configuration tab: layout handles loading/error, so we just pull device from cache
+function ConfigurationTabRoute() {
   const { deviceId } = Route.useParams()
   const numericId = parseInt(deviceId, 10)
-  const { device, isLoading, error } = useDevice(isNaN(numericId) ? undefined : numericId)
+  const { device } = useDevice(isNaN(numericId) ? undefined : numericId)
 
-  if (isNaN(numericId)) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4">
-        <p className="text-destructive">Invalid device ID</p>
-        <Link to="/devices">
-          <Button variant="outline">Back to Device List</Button>
-        </Link>
-      </div>
-    )
+  // Device may be null briefly while cache populates — the layout
+  // already handles loading/error, so we can return null to avoid flicker
+  if (!device) {
+    return null
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-muted-foreground">Loading device configuration...</p>
-      </div>
-    )
-  }
-
-  if (error || !device) {
-    const errorMessage = error?.message || 'Device not found'
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4">
-        <p className="text-destructive">{errorMessage}</p>
-        <Link to="/devices">
-          <Button variant="outline">Back to Device List</Button>
-        </Link>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex h-full flex-col">
-      <DeviceEditor
-        mode="edit"
-        deviceId={device.id}
-        initialKey={device.key}
-        initialDeviceModelId={device.deviceModelId}
-        initialDeviceModel={device.deviceModel}
-        initialConfig={device.config}
-        initialDeviceName={device.deviceName}
-        initialDeviceEntityId={device.deviceEntityId}
-      />
-    </div>
-  )
+  return <DeviceConfigurationTab device={device} />
 }

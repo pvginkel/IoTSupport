@@ -1,61 +1,25 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { useCoredump } from '@/hooks/use-coredumps'
-import { CoredumpDetail } from '@/components/devices/coredump-detail'
-import { Button } from '@/components/ui/button'
+import { createFileRoute } from '@tanstack/react-router'
+import { CoredumpAccordionTable } from '@/components/devices/coredump-accordion-table'
+import { useDevice } from '@/hooks/use-devices'
 
 export const Route = createFileRoute('/devices/$deviceId/coredumps/$coredumpId')({
-  component: CoredumpDetailRoute,
+  component: CoredumpExpandedRoute,
 })
 
-function CoredumpDetailRoute() {
+function CoredumpExpandedRoute() {
   const { deviceId, coredumpId } = Route.useParams()
   const numericDeviceId = parseInt(deviceId, 10)
   const numericCoredumpId = parseInt(coredumpId, 10)
+  const { device } = useDevice(isNaN(numericDeviceId) ? undefined : numericDeviceId)
 
-  const validIds = !isNaN(numericDeviceId) && !isNaN(numericCoredumpId)
-  const { coredump, isLoading, error } = useCoredump(
-    validIds ? numericDeviceId : undefined,
-    validIds ? numericCoredumpId : undefined
-  )
-
-  // Invalid IDs
-  if (!validIds) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4">
-        <p className="text-destructive">Invalid device or core dump ID</p>
-        <Link to="/devices">
-          <Button variant="outline">Back to Device List</Button>
-        </Link>
-      </div>
-    )
-  }
-
-  // Loading state
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-muted-foreground">Loading core dump...</p>
-      </div>
-    )
-  }
-
-  // Error or not found
-  if (error || !coredump) {
-    const errorMessage = error?.message || 'Core dump not found'
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4" data-testid="coredumps.detail.error">
-        <p className="text-destructive">{errorMessage}</p>
-        <Link to="/devices/$deviceId" params={{ deviceId }}>
-          <Button variant="outline">Back to Device</Button>
-        </Link>
-      </div>
-    )
+  if (!device || isNaN(numericCoredumpId)) {
+    return null
   }
 
   return (
-    <CoredumpDetail
-      coredump={coredump}
-      deviceId={deviceId}
+    <CoredumpAccordionTable
+      deviceId={device.id}
+      expandedCoredumpId={numericCoredumpId}
     />
   )
 }

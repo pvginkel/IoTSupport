@@ -6,6 +6,8 @@ interface DeviceLogsViewerProps {
   deviceId: number
   /** Device entity ID from config - logs only shown if this is set */
   deviceEntityId: string | undefined
+  /** When true, the viewer fills the available parent height instead of using a fixed height */
+  fullHeight?: boolean
 }
 
 // Threshold in pixels for determining if scroll is "at bottom"
@@ -21,9 +23,9 @@ const VIEWER_HEIGHT = '480px'
  * - Terminal styling with dark background and monospace font
  * - Right-aligned checkbox to toggle live updates (default checked)
  * - Auto-scroll only when already at bottom
- * - Hidden when device has no entity_id or no logs
+ * - Hidden when device has no entity_id; shows "No logs available" when empty
  */
-export function DeviceLogsViewer({ deviceId, deviceEntityId }: DeviceLogsViewerProps) {
+export function DeviceLogsViewer({ deviceId, deviceEntityId, fullHeight }: DeviceLogsViewerProps) {
   const {
     logs,
     isLoading,
@@ -88,13 +90,8 @@ export function DeviceLogsViewer({ deviceId, deviceEntityId }: DeviceLogsViewerP
     return null
   }
 
-  // Don't render if no logs (but still loading is ok to show loading state initially)
-  if (logs.length === 0 && !isLoading) {
-    return null
-  }
-
   return (
-    <div data-testid="devices.logs.viewer" className="space-y-2">
+    <div data-testid="devices.logs.viewer" className={fullHeight ? 'flex flex-col flex-1 min-h-0 gap-2' : 'space-y-2'}>
       {/* Header with label and checkbox */}
       <div className="flex items-center justify-between">
         <label className="block text-sm font-medium text-muted-foreground">
@@ -116,13 +113,15 @@ export function DeviceLogsViewer({ deviceId, deviceEntityId }: DeviceLogsViewerP
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        style={{ height: VIEWER_HEIGHT }}
-        className="overflow-auto rounded-md border border-border bg-gray-900 p-4 font-mono text-sm text-gray-200"
+        style={fullHeight ? undefined : { height: VIEWER_HEIGHT }}
+        className={`overflow-auto rounded-md border border-border bg-gray-900 p-4 font-mono text-sm text-gray-200${fullHeight ? ' flex-1 min-h-0' : ''}`}
         data-testid="devices.logs.container"
         data-scroll-at-bottom={isAtBottom ? 'true' : 'false'}
       >
         {isLoading && logs.length === 0 ? (
           <div className="text-gray-500">Loading logs...</div>
+        ) : logs.length === 0 ? (
+          <div className="text-gray-500">No logs available</div>
         ) : (
           logs.map((log, index) => (
             <div

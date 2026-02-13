@@ -82,8 +82,8 @@ test.describe('Device List', () => {
     // URL now uses device ID
     await expect(page).toHaveURL(`/devices/${device.id}`);
     await expect(devicesPage.editor).toBeVisible();
-    // In edit mode, key is displayed as text (read-only)
-    await expect(devicesPage.keyDisplay).toContainText(device.key);
+    // In edit mode, device key is shown in the header
+    await expect(devicesPage.headerDeviceKey).toContainText(device.key);
   });
 });
 
@@ -156,8 +156,8 @@ test.describe('Edit Device', () => {
     await devicesPage.gotoEdit(device.id);
     await devicesPage.waitForEditorLoaded();
 
-    // Verify key is displayed (read-only in edit mode)
-    await expect(devicesPage.keyDisplay).toContainText(device.key);
+    // Verify key is displayed in the header
+    await expect(devicesPage.headerDeviceKey).toContainText(device.key);
 
     // Update the JSON
     await devicesPage.setJsonObject({

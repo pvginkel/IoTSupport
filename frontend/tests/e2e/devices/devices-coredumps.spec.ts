@@ -6,8 +6,7 @@ test.describe('Core Dumps Table', () => {
     const device = await devices.create();
 
     const devicesPage = new DevicesPage(page);
-    await devicesPage.gotoEdit(device.id);
-    await devicesPage.waitForEditorLoaded();
+    await devicesPage.gotoCoredumps(device.id);
 
     // Coredump table section should be visible with empty state
     await expect(devicesPage.coredumpTable).toBeVisible();
@@ -25,8 +24,7 @@ test.describe('Core Dumps Table', () => {
     });
 
     const devicesPage = new DevicesPage(page);
-    await devicesPage.gotoEdit(device.id);
-    await devicesPage.waitForEditorLoaded();
+    await devicesPage.gotoCoredumps(device.id);
 
     // Table should show the coredump row
     await expect(devicesPage.coredumpRows).toHaveCount(1);
@@ -40,7 +38,7 @@ test.describe('Core Dumps Table', () => {
     await expect(row).toContainText('KB');           // Size (formatted)
   });
 
-  test('navigates to detail page on row click', async ({ page, devices }) => {
+  test('expands accordion on row click', async ({ page, devices }) => {
     const device = await devices.create();
     const coredump = await devices.createCoredump({
       deviceId: device.id,
@@ -48,17 +46,18 @@ test.describe('Core Dumps Table', () => {
     });
 
     const devicesPage = new DevicesPage(page);
-    await devicesPage.gotoEdit(device.id);
-    await devicesPage.waitForEditorLoaded();
+    await devicesPage.gotoCoredumps(device.id);
 
     // Click the coredump row
     await devicesPage.clickCoredumpRow(coredump.id);
 
-    // Should navigate to the detail page
+    // Accordion should expand
+    await expect(devicesPage.coredumpAccordionExpanded).toBeVisible();
+
+    // URL should include the coredump ID
     await expect(page).toHaveURL(
       `/devices/${device.id}/coredumps/${coredump.id}`
     );
-    await expect(devicesPage.coredumpDetail).toBeVisible();
   });
 
   test('download link points to correct endpoint', async ({ page, devices }) => {
@@ -66,8 +65,7 @@ test.describe('Core Dumps Table', () => {
     const coredump = await devices.createCoredump({ deviceId: device.id });
 
     const devicesPage = new DevicesPage(page);
-    await devicesPage.gotoEdit(device.id);
-    await devicesPage.waitForEditorLoaded();
+    await devicesPage.gotoCoredumps(device.id);
 
     // Verify download link href
     const downloadLink = devicesPage.coredumpRowById(coredump.id)
@@ -83,8 +81,7 @@ test.describe('Core Dumps Table', () => {
     const coredump = await devices.createCoredump({ deviceId: device.id });
 
     const devicesPage = new DevicesPage(page);
-    await devicesPage.gotoEdit(device.id);
-    await devicesPage.waitForEditorLoaded();
+    await devicesPage.gotoCoredumps(device.id);
 
     // Verify row exists
     await expect(devicesPage.coredumpRowById(coredump.id)).toBeVisible();
@@ -107,8 +104,7 @@ test.describe('Core Dumps Table', () => {
     const coredump = await devices.createCoredump({ deviceId: device.id });
 
     const devicesPage = new DevicesPage(page);
-    await devicesPage.gotoEdit(device.id);
-    await devicesPage.waitForEditorLoaded();
+    await devicesPage.gotoCoredumps(device.id);
 
     // Click delete
     await devicesPage.deleteCoredumpById(coredump.id);
@@ -133,13 +129,12 @@ test.describe('Core Dumps Table', () => {
     });
 
     const devicesPage = new DevicesPage(page);
-    await devicesPage.gotoEdit(device.id);
-    await devicesPage.waitForEditorLoaded();
+    await devicesPage.gotoCoredumps(device.id);
 
     await expect(devicesPage.coredumpRows).toHaveCount(2);
   });
 
-  test('coredump table is not visible in new device mode', async ({ page, deviceModels }) => {
+  test('tabs not visible in new device mode', async ({ page, deviceModels }) => {
     const model = await deviceModels.create();
 
     const devicesPage = new DevicesPage(page);
@@ -147,13 +142,13 @@ test.describe('Core Dumps Table', () => {
     await devicesPage.waitForEditorLoaded();
     await devicesPage.selectModel(model.name);
 
-    // Coredump table should not be present in new mode
-    await expect(devicesPage.coredumpTable).not.toBeVisible();
+    // Tabs should not be present in new mode
+    await expect(devicesPage.detailTabs).not.toBeVisible();
   });
 });
 
-test.describe('Core Dump Detail Page', () => {
-  test('shows metadata and parsed output', async ({ page, devices }) => {
+test.describe('Core Dump Accordion', () => {
+  test('shows metadata and parsed output in expansion panel', async ({ page, devices }) => {
     const device = await devices.create();
     const coredump = await devices.createCoredump({
       deviceId: device.id,
@@ -164,20 +159,21 @@ test.describe('Core Dump Detail Page', () => {
     });
 
     const devicesPage = new DevicesPage(page);
-    await devicesPage.gotoCoredumpDetail(device.id, coredump.id);
+    await devicesPage.gotoCoredumps(device.id);
 
-    // Detail page should be visible
-    await expect(devicesPage.coredumpDetail).toBeVisible();
+    // Click to expand
+    await devicesPage.clickCoredumpRow(coredump.id);
+    await expect(devicesPage.coredumpAccordionExpanded).toBeVisible();
 
     // Metadata should show key fields
-    const metadata = devicesPage.coredumpDetailMetadata;
+    const metadata = devicesPage.coredumpAccordionMetadata;
     await expect(metadata).toContainText('esp32s3');
     await expect(metadata).toContainText('3.1.4');
     await expect(metadata).toContainText('PARSED');
     await expect(metadata).toContainText(coredump.filename);
 
     // Monaco editor should be visible with parsed output
-    await expect(devicesPage.coredumpDetailEditor).toBeVisible();
+    await expect(devicesPage.coredumpAccordionEditor).toBeVisible();
   });
 
   test('shows placeholder when parsed output is null', async ({ page, devices }) => {
@@ -189,53 +185,52 @@ test.describe('Core Dump Detail Page', () => {
     });
 
     const devicesPage = new DevicesPage(page);
-    await devicesPage.gotoCoredumpDetail(device.id, coredump.id);
+    await devicesPage.gotoCoredumps(device.id);
 
-    await expect(devicesPage.coredumpDetail).toBeVisible();
+    // Expand the row
+    await devicesPage.clickCoredumpRow(coredump.id);
+    await expect(devicesPage.coredumpAccordionExpanded).toBeVisible();
 
     // Should show "not available" instead of editor
-    await expect(devicesPage.coredumpDetailNoOutput).toBeVisible();
-    await expect(devicesPage.coredumpDetailNoOutput).toContainText('not available');
-    await expect(devicesPage.coredumpDetailEditor).not.toBeVisible();
+    await expect(devicesPage.coredumpAccordionNoOutput).toBeVisible();
+    await expect(devicesPage.coredumpAccordionNoOutput).toContainText('not available');
+    await expect(devicesPage.coredumpAccordionEditor).not.toBeVisible();
   });
 
-  test('download link points to correct endpoint', async ({ page, devices }) => {
+  test('deep-link expands correct row and activates coredumps tab', async ({ page, devices }) => {
     const device = await devices.create();
-    const coredump = await devices.createCoredump({ deviceId: device.id });
+    const coredump = await devices.createCoredump({
+      deviceId: device.id,
+      parsedOutput: 'Deep link output',
+    });
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.gotoCoredumpDetail(device.id, coredump.id);
 
-    await expect(devicesPage.coredumpDetailDownload).toHaveAttribute(
-      'href',
-      `/api/devices/${device.id}/coredumps/${coredump.id}/download`
-    );
+    // Coredumps tab should be active
+    await expect(devicesPage.tabCoredumps).toHaveAttribute('aria-current', 'page');
+
+    // Accordion should be expanded
+    await expect(devicesPage.coredumpAccordionExpanded).toBeVisible();
   });
 
-  test('back button navigates to device editor', async ({ page, devices }) => {
+  test('collapsing accordion navigates back to coredumps index', async ({ page, devices }) => {
     const device = await devices.create();
     const coredump = await devices.createCoredump({ deviceId: device.id });
 
     const devicesPage = new DevicesPage(page);
-    await devicesPage.gotoCoredumpDetail(device.id, coredump.id);
+    await devicesPage.gotoCoredumps(device.id);
 
-    await expect(devicesPage.coredumpDetail).toBeVisible();
+    // Expand
+    await devicesPage.clickCoredumpRow(coredump.id);
+    await expect(devicesPage.coredumpAccordionExpanded).toBeVisible();
 
-    // Click back
-    await devicesPage.coredumpDetailBack.click();
+    // Collapse by clicking the same row
+    await devicesPage.clickCoredumpRow(coredump.id);
+    await expect(devicesPage.coredumpAccordionExpanded).not.toBeVisible();
 
-    // Should navigate to device editor
-    await expect(page).toHaveURL(`/devices/${device.id}`);
-    await expect(devicesPage.editor).toBeVisible();
-  });
-
-  test('shows error for non-existent coredump', async ({ page, devices }) => {
-    const device = await devices.create();
-
-    const devicesPage = new DevicesPage(page);
-    await devicesPage.gotoCoredumpDetail(device.id, 99999);
-
-    await expect(devicesPage.coredumpDetailError).toBeVisible();
+    // URL should be back to coredumps index
+    await expect(page).toHaveURL(`/devices/${device.id}/coredumps`);
   });
 });
 
@@ -247,11 +242,9 @@ test.describe('Last Core Dump Column', () => {
     await devicesPage.goto();
     await devicesPage.waitForListLoaded();
 
-    // "Last Core Dump" column header should be visible
     await expect(devicesPage.lastCoredumpAtHeader).toBeVisible();
     await expect(devicesPage.lastCoredumpAtHeader).toContainText('Last Core Dump');
 
-    // Should be clickable (sortable)
     await devicesPage.lastCoredumpAtHeader.click();
   });
 
@@ -262,7 +255,6 @@ test.describe('Last Core Dump Column', () => {
     await devicesPage.goto();
     await devicesPage.waitForListLoaded();
 
-    // Row should contain em-dash for null lastCoredumpAt
     const row = devicesPage.rowByKey(device.key);
     await expect(row).toContainText('—');
   });
@@ -275,17 +267,10 @@ test.describe('Last Core Dump Column', () => {
     await devicesPage.goto();
     await devicesPage.waitForListLoaded();
 
-    // Row should contain a formatted date (not em-dash) for the last coredump column
-    // We can't check the exact formatted value since toLocaleString is locale-dependent,
-    // but we can verify the row does NOT show only em-dashes (it has a date now)
     const row = devicesPage.rowByKey(device.key);
     await expect(row).toBeVisible();
 
-    // The row should contain digit characters from the formatted datetime
     const rowText = await row.textContent();
-    // After creating a coredump, the last coredump column should have a date with digits
-    // The row will contain other numbers too (from other columns), but this verifies the
-    // API returned a non-null lastCoredumpAt and the UI rendered it
     expect(rowText).toBeTruthy();
   });
 });

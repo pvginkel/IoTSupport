@@ -21,7 +21,7 @@ test.describe('Device Provisioning Modal', () => {
     await devicesPage.gotoEdit(device.id);
     await devicesPage.waitForEditorLoaded();
 
-    // Provision Device button should be visible
+    // Provision Device button should be visible in configuration tab
     await expect(devicesPage.provisionDeviceButton).toBeVisible();
     await expect(devicesPage.provisionDeviceButton).toHaveText(/Provision Device/);
   });
@@ -104,14 +104,14 @@ test.describe('Device Provisioning Modal', () => {
   });
 
 
-  test('form action buttons remain in the right section', async ({ page, devices }) => {
+  test('form action buttons are visible in configuration tab', async ({ page, devices }) => {
     const device = await devices.create();
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.gotoEdit(device.id);
     await devicesPage.waitForEditorLoaded();
 
-    // Cancel, Duplicate, and Save buttons should still be visible
+    // Cancel, Duplicate, and Save buttons should be visible in config tab
     await expect(devicesPage.cancelButton).toBeVisible();
     await expect(devicesPage.duplicateButton).toBeVisible();
     await expect(devicesPage.saveButton).toBeVisible();
@@ -131,8 +131,7 @@ test.describe('Device Provisioning Modal', () => {
       enableOTA: true
     });
 
-    // We can't easily test the disabled state during save without race conditions
-    // but we can verify the button exists and is enabled when not saving
+    // Verify the button exists and is enabled when not saving
     await expect(devicesPage.provisionDeviceButton).toBeEnabled();
   });
 });
@@ -164,8 +163,6 @@ test.describe('Provision Modal Error States', () => {
 
     // Open modal
     await devicesPage.openProvisionModal();
-
-    // Connect button should be visible (initial state)
     await expect(devicesPage.provisionModalConnectButton).toBeVisible();
 
     // Close modal

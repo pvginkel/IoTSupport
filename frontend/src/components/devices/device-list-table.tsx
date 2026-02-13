@@ -6,22 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { DeviceSummary } from '@/hooks/use-devices'
 import type { DeviceModelSummary } from '@/hooks/use-device-models'
 import type { SortPreference } from '@/lib/utils/sort-preferences'
-
-// Helper to get rotation state badge styling - using semantic and status colors
-function getRotationStateBadge(state: string): { bgColor: string; textColor: string } {
-  switch (state.toUpperCase()) {
-    case 'OK':
-      return { bgColor: 'bg-green-900/30', textColor: 'text-green-400' }
-    case 'QUEUED':
-      return { bgColor: 'bg-yellow-900/30', textColor: 'text-yellow-400' }
-    case 'PENDING':
-      return { bgColor: 'bg-primary/20', textColor: 'text-primary' }
-    case 'TIMEOUT':
-      return { bgColor: 'bg-red-900/30', textColor: 'text-red-400' }
-    default:
-      return { bgColor: 'bg-muted', textColor: 'text-muted-foreground' }
-  }
-}
+import { getRotationStateBadge } from '@/lib/utils/device-badges'
 
 // Extended device with model name for sorting
 interface DeviceWithModelName extends DeviceSummary {

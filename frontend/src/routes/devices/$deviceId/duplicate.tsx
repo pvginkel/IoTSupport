@@ -49,7 +49,6 @@ function DuplicateDeviceRoute() {
         mode="duplicate"
         initialKey={device.key}
         initialDeviceModelId={device.deviceModelId}
-        initialDeviceModel={device.deviceModel}
         initialConfig={device.config}
         duplicateFrom={device.key}
       />

@@ -20,8 +20,68 @@ export class DevicesPage {
     await this.page.goto(`/devices/${deviceId}/duplicate`);
   }
 
+  async gotoLogs(deviceId: number) {
+    await this.page.goto(`/devices/${deviceId}/logs`);
+  }
+
+  async gotoCoredumps(deviceId: number) {
+    await this.page.goto(`/devices/${deviceId}/coredumps`);
+  }
+
   async gotoCoredumpDetail(deviceId: number, coredumpId: number) {
     await this.page.goto(`/devices/${deviceId}/coredumps/${coredumpId}`);
+  }
+
+  // --- Tab Navigation ---
+  get tabConfiguration(): Locator {
+    return this.page.locator('[data-testid="devices.detail.tab.configuration"]');
+  }
+
+  get tabLogs(): Locator {
+    return this.page.locator('[data-testid="devices.detail.tab.logs"]');
+  }
+
+  get tabCoredumps(): Locator {
+    return this.page.locator('[data-testid="devices.detail.tab.coredumps"]');
+  }
+
+  get detailHeader(): Locator {
+    return this.page.locator('[data-testid="devices.detail.header"]');
+  }
+
+  get detailTabs(): Locator {
+    return this.page.locator('[data-testid="devices.detail.tabs"]');
+  }
+
+  // Header identity locators
+  get headerDeviceKey(): Locator {
+    return this.page.locator('[data-testid="devices.detail.header.device-key"]');
+  }
+
+  get headerDeviceModel(): Locator {
+    return this.page.locator('[data-testid="devices.detail.header.device-model"]');
+  }
+
+  get headerRotationBadge(): Locator {
+    return this.page.locator('[data-testid="devices.detail.header.rotation-badge"]');
+  }
+
+  get headerOtaBadge(): Locator {
+    return this.page.locator('[data-testid="devices.detail.header.ota-badge"]');
+  }
+
+  async clickTab(tab: 'configuration' | 'logs' | 'coredumps') {
+    switch (tab) {
+      case 'configuration':
+        await this.tabConfiguration.click();
+        break;
+      case 'logs':
+        await this.tabLogs.click();
+        break;
+      case 'coredumps':
+        await this.tabCoredumps.click();
+        break;
+    }
   }
 
   // Locators - List
@@ -45,16 +105,10 @@ export class DevicesPage {
     return this.page.locator('[data-testid="devices.list.row"]');
   }
 
-  /**
-   * Get a row by device key
-   */
   rowByKey(key: string): Locator {
     return this.page.locator(`[data-testid="devices.list.row"][data-device-key="${key}"]`);
   }
 
-  /**
-   * Get a row by device ID
-   */
   rowById(id: number): Locator {
     return this.page.locator(`[data-testid="devices.list.row"][data-device-id="${id}"]`);
   }
@@ -154,6 +208,10 @@ export class DevicesPage {
     return this.page.locator('[data-testid="devices.logs.entry"]');
   }
 
+  get logsEmptyState(): Locator {
+    return this.page.locator('[data-testid="devices.logs.empty"]');
+  }
+
   // Locators - Coredump Table
   get coredumpTable(): Locator {
     return this.page.locator('[data-testid="coredumps.table"]');
@@ -183,7 +241,24 @@ export class DevicesPage {
     return this.page.locator('[data-testid="coredumps.delete.confirm-dialog"]');
   }
 
-  // Locators - Coredump Detail Page
+  // Locators - Coredump Accordion
+  get coredumpAccordionExpanded(): Locator {
+    return this.page.locator('[data-testid="coredumps.accordion.expanded"]');
+  }
+
+  get coredumpAccordionMetadata(): Locator {
+    return this.page.locator('[data-testid="coredumps.accordion.metadata"]');
+  }
+
+  get coredumpAccordionEditor(): Locator {
+    return this.page.locator('[data-testid="coredumps.accordion.editor"]');
+  }
+
+  get coredumpAccordionNoOutput(): Locator {
+    return this.page.locator('[data-testid="coredumps.accordion.no-output"]');
+  }
+
+  // Locators - Coredump Detail Page (legacy - kept for backward compat)
   get coredumpDetail(): Locator {
     return this.page.locator('[data-testid="coredumps.detail"]');
   }
@@ -271,17 +346,13 @@ export class DevicesPage {
   // Actions - Editor
   async selectModel(modelName: string) {
     await this.modelSelect.click();
-    // Click the option that contains the model name
     await this.page.locator(`[role="option"]:has-text("${modelName}")`).click();
   }
 
   async setJsonContent(content: string) {
-    // Wait for Monaco to be ready
     await this.monacoEditor.waitFor({ state: 'visible' });
 
-    // Use Monaco's API to set the value directly
     await this.page.evaluate((newContent) => {
-      // Access Monaco's editor instance through the window
       const monaco = (window as unknown as { monaco?: { editor: { getEditors(): Array<{ setValue(value: string): void }> } } }).monaco;
       if (monaco) {
         const editors = monaco.editor.getEditors();
@@ -291,7 +362,6 @@ export class DevicesPage {
       }
     }, content);
 
-    // Wait for the editor to process the change
     await this.page.waitForTimeout(200);
   }
 
@@ -348,16 +418,26 @@ export class DevicesPage {
 
   // Assertions helpers
   async waitForListLoaded() {
-    // Wait for either the table or empty state to be visible
     await Promise.race([
       this.list.waitFor({ state: 'visible', timeout: 10000 }),
       this.emptyState.waitFor({ state: 'visible', timeout: 10000 }),
     ]);
   }
 
+  /** Wait for the configuration tab editor to be ready */
   async waitForEditorLoaded() {
     await this.editor.waitFor({ state: 'visible' });
     await this.monacoEditor.waitFor({ state: 'visible' });
+  }
+
+  /** Alias for waitForEditorLoaded — used in config tab context */
+  async waitForConfigTabLoaded() {
+    await this.waitForEditorLoaded();
+  }
+
+  /** Wait for the coredumps tab table to be ready */
+  async waitForCoredumpsTabLoaded() {
+    await this.coredumpTable.waitFor({ state: 'visible' });
   }
 
   async waitForSuccessToast() {
@@ -382,102 +462,62 @@ export class DevicesPage {
     return keys;
   }
 
-  /**
-   * Wait for provisioning to complete (success or error state)
-   */
   async waitForProvisioningComplete(): Promise<void> {
-    // Wait for either success message or error message to appear
     await Promise.race([
       this.page.locator('text=Provisioning Complete').waitFor({ state: 'visible', timeout: 30000 }),
       this.page.locator('text=Provisioning Failed').waitFor({ state: 'visible', timeout: 30000 }),
     ]);
   }
 
-  /**
-   * Wait for provisioning success state
-   */
   async waitForProvisioningSuccess(): Promise<void> {
     await this.page.locator('text=Provisioning Complete').waitFor({ state: 'visible', timeout: 30000 });
   }
 
-  /**
-   * Wait for provisioning error state
-   */
   async waitForProvisioningError(): Promise<void> {
     await this.page.locator('text=Provisioning Failed').waitFor({ state: 'visible', timeout: 30000 });
   }
 
   // Actions - Coredump Table
-  /**
-   * Click a coredump row by coredump ID to navigate to the detail page
-   */
   async clickCoredumpRow(coredumpId: number) {
     await this.coredumpRowById(coredumpId).click();
   }
 
-  /**
-   * Click the delete button on a coredump row
-   */
   async deleteCoredumpById(coredumpId: number) {
     await this.coredumpRowById(coredumpId).locator('[data-testid="coredumps.table.row.delete"]').click();
   }
 
-  /**
-   * Confirm the coredump delete dialog
-   */
   async confirmCoredumpDelete() {
     await this.coredumpDeleteConfirmDialog.locator('button:has-text("Delete")').click();
   }
 
-  /**
-   * Cancel the coredump delete dialog
-   */
   async cancelCoredumpDelete() {
     await this.coredumpDeleteConfirmDialog.locator('button:has-text("Cancel")').click();
   }
 
   // Actions - Device Logs Viewer
-  /**
-   * Toggle the live updates checkbox for the log viewer
-   */
   async toggleLogsLiveUpdates(): Promise<void> {
     await this.logsLiveCheckbox.click();
   }
 
-  /**
-   * Check if the logs viewer is visible
-   */
   async isLogsViewerVisible(): Promise<boolean> {
     return await this.logsViewer.isVisible();
   }
 
-  /**
-   * Get the current scroll-at-bottom state of the logs container
-   */
   async getLogsScrollAtBottom(): Promise<boolean> {
     const value = await this.logsContainer.getAttribute('data-scroll-at-bottom');
     return value === 'true';
   }
 
-  /**
-   * Get the number of log entries currently displayed
-   */
   async getLogsEntryCount(): Promise<number> {
     return await this.logsEntries.count();
   }
 
-  /**
-   * Scroll the logs container to top (simulates user scrolling up)
-   */
   async scrollLogsToTop(): Promise<void> {
     await this.logsContainer.evaluate((el) => {
       el.scrollTop = 0;
     });
   }
 
-  /**
-   * Scroll the logs container to bottom
-   */
   async scrollLogsToBottom(): Promise<void> {
     await this.logsContainer.evaluate((el) => {
       el.scrollTop = el.scrollHeight;
