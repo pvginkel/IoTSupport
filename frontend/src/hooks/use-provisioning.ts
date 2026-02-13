@@ -481,7 +481,10 @@ export function useProvisioning(
         message: `Verification complete (MD5: ${md5sum.slice(0, 8)}...)`,
       });
 
-      // Success!
+      // Success — release the serial port so the user doesn't have to
+      // disconnect manually via browser site settings.
+      await cleanup();
+
       updateState({
         phase: 'success',
         progress: 100,
@@ -502,6 +505,8 @@ export function useProvisioning(
         await cleanup();
         return;
       }
+
+      await cleanup();
 
       updateState({
         phase: 'error',
