@@ -12,6 +12,8 @@ from sqlalchemy.pool import StaticPool
 from app import create_app
 from app.config import Settings
 from app.database import upgrade_database
+from app.models.device import Device
+from app.models.device_model import DeviceModel
 from app.services.container import ServiceContainer
 
 
@@ -407,6 +409,34 @@ class TestTestSessionAuthenticationMiddleware:
         assert response.status_code == 401
 
 
+@pytest.fixture
+def testing_device(testing_app: Flask, testing_container: ServiceContainer) -> Device:
+    """Create a device model + device in the testing DB for coredump tests."""
+    with testing_app.app_context():
+        session = testing_container.db_session()
+        model = DeviceModel(code="testchip", name="Test Chip")
+        session.add(model)
+        session.flush()
+
+        device = Device(
+            key="abcd1234",
+            device_model_id=model.id,
+            config="{}",
+            rotation_state="OK",
+        )
+        session.add(device)
+        session.flush()
+        # Eagerly capture the id before leaving context
+        device_id = device.id
+        session.commit()
+        testing_container.db_session.reset()
+
+        # Re-fetch so the object is bound to a fresh session for later use
+        session = testing_container.db_session()
+        device = session.get(Device, device_id)
+        return device  # type: ignore[return-value]
+
+
 class TestKeycloakCleanupDisabled:
     """Tests for Keycloak cleanup endpoint when not in testing mode."""
 
@@ -454,3 +484,135 @@ class TestKeycloakCleanup:
         )
 
         assert response.status_code == 400
+
+
+class TestCreateTestCoredump:
+    """Tests for POST /api/testing/coredumps."""
+
+    def test_create_coredump_success(self, testing_client: FlaskClient, testing_device: Device):
+        """Successfully creates a coredump with full payload."""
+        response = testing_client.post(
+            "/api/testing/coredumps",
+            json={
+                "device_id": testing_device.id,
+                "chip": "esp32",
+                "firmware_version": "1.2.3",
+                "size": 131072,
+                "parse_status": "PARSED",
+                "parsed_output": "Guru Meditation Error: Core 0 panic",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data["device_id"] == testing_device.id
+        assert data["chip"] == "esp32"
+        assert data["firmware_version"] == "1.2.3"
+        assert data["size"] == 131072
+        assert data["parse_status"] == "PARSED"
+        assert data["parsed_output"] == "Guru Meditation Error: Core 0 panic"
+        assert data["filename"] == f"test_coredump_{data['id']}.dmp"
+        assert data["uploaded_at"] is not None
+        assert data["parsed_at"] is not None
+
+    def test_create_coredump_minimal(self, testing_client: FlaskClient, testing_device: Device):
+        """Creates coredump with only device_id, verifying defaults are applied."""
+        response = testing_client.post(
+            "/api/testing/coredumps",
+            json={"device_id": testing_device.id},
+        )
+
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data["device_id"] == testing_device.id
+        assert data["chip"] == "esp32s3"
+        assert data["firmware_version"] == "0.0.0-test"
+        assert data["size"] == 262144
+        assert data["parse_status"] == "PARSED"
+
+    def test_create_coredump_parsed_status_sets_parsed_at(
+        self, testing_client: FlaskClient, testing_device: Device
+    ):
+        """PARSED status sets parsed_at timestamp."""
+        response = testing_client.post(
+            "/api/testing/coredumps",
+            json={"device_id": testing_device.id, "parse_status": "PARSED"},
+        )
+
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data["parsed_at"] is not None
+
+    def test_create_coredump_pending_status_null_parsed_at(
+        self, testing_client: FlaskClient, testing_device: Device
+    ):
+        """PENDING status leaves parsed_at null."""
+        response = testing_client.post(
+            "/api/testing/coredumps",
+            json={"device_id": testing_device.id, "parse_status": "PENDING"},
+        )
+
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data["parse_status"] == "PENDING"
+        assert data["parsed_at"] is None
+
+    def test_create_coredump_error_status_sets_parsed_at(
+        self, testing_client: FlaskClient, testing_device: Device
+    ):
+        """ERROR status sets parsed_at timestamp."""
+        response = testing_client.post(
+            "/api/testing/coredumps",
+            json={"device_id": testing_device.id, "parse_status": "ERROR"},
+        )
+
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data["parse_status"] == "ERROR"
+        assert data["parsed_at"] is not None
+
+    def test_create_coredump_invalid_device_id(self, testing_client: FlaskClient):
+        """Returns 404 for nonexistent device."""
+        response = testing_client.post(
+            "/api/testing/coredumps",
+            json={"device_id": 99999},
+        )
+
+        assert response.status_code == 404
+        data = response.get_json()
+        assert data["code"] == "RECORD_NOT_FOUND"
+
+    def test_create_coredump_invalid_parse_status(
+        self, testing_client: FlaskClient, testing_device: Device
+    ):
+        """Returns 400 for invalid parse_status value."""
+        response = testing_client.post(
+            "/api/testing/coredumps",
+            json={"device_id": testing_device.id, "parse_status": "INVALID"},
+        )
+
+        assert response.status_code == 400
+
+    def test_create_coredump_returns_400_when_not_testing(self, client: FlaskClient):
+        """Coredump endpoint returns 400 when not in testing mode."""
+        response = client.post(
+            "/api/testing/coredumps",
+            json={"device_id": 1},
+        )
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["code"] == "ROUTE_NOT_AVAILABLE"
+
+    def test_create_coredump_parsed_default_output(
+        self, testing_client: FlaskClient, testing_device: Device
+    ):
+        """PARSED with no parsed_output gets placeholder text."""
+        response = testing_client.post(
+            "/api/testing/coredumps",
+            json={"device_id": testing_device.id, "parse_status": "PARSED"},
+        )
+
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data["parsed_output"] == "Test coredump parsed output"
