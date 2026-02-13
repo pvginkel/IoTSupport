@@ -1,8 +1,10 @@
-import { Link } from '@tanstack/react-router'
+import { Link, useLocation } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import type { Device } from '@/hooks/use-devices'
 import { useCoredumps } from '@/hooks/use-coredumps'
 import { getRotationStateBadge } from '@/lib/utils/device-badges'
+import { setDeviceTabPreference, type DeviceTab } from '@/lib/utils/device-tab-preference'
 
 interface DeviceDetailHeaderProps {
   device: Device
@@ -15,6 +17,16 @@ interface DeviceDetailHeaderProps {
 export function DeviceDetailHeader({ device }: DeviceDetailHeaderProps) {
   const { coredumps } = useCoredumps(device.id)
   const rotationBadge = getRotationStateBadge(device.rotationState)
+
+  // Persist the active tab so it can be restored on next device visit.
+  // Catches direct-URL navigation, back-button, etc.
+  const location = useLocation()
+  useEffect(() => {
+    let tab: DeviceTab = 'configuration'
+    if (location.pathname.includes('/logs')) tab = 'logs'
+    else if (location.pathname.includes('/coredumps')) tab = 'coredumps'
+    setDeviceTabPreference(tab)
+  }, [location.pathname])
 
   // Title: prefer name, then entity ID, then key
   const displayTitle = (device.deviceName && device.deviceName.trim())
@@ -96,6 +108,7 @@ export function DeviceDetailHeader({ device }: DeviceDetailHeaderProps) {
           to="/devices/$deviceId"
           params={{ deviceId: String(device.id) }}
           exact
+          tab="configuration"
           testId="devices.detail.tab.configuration"
         >
           Configuration
@@ -103,6 +116,7 @@ export function DeviceDetailHeader({ device }: DeviceDetailHeaderProps) {
         <TabLink
           to="/devices/$deviceId/logs"
           params={{ deviceId: String(device.id) }}
+          tab="logs"
           testId="devices.detail.tab.logs"
         >
           Logs
@@ -110,6 +124,7 @@ export function DeviceDetailHeader({ device }: DeviceDetailHeaderProps) {
         <TabLink
           to="/devices/$deviceId/coredumps"
           params={{ deviceId: String(device.id) }}
+          tab="coredumps"
           testId="devices.detail.tab.coredumps"
         >
           Core Dumps
@@ -129,12 +144,14 @@ function TabLink({
   to,
   params,
   exact,
+  tab,
   testId,
   children,
 }: {
   to: string
   params: Record<string, string>
   exact?: boolean
+  tab: DeviceTab
   testId: string
   children: React.ReactNode
 }) {
@@ -149,6 +166,7 @@ function TabLink({
         'aria-current': 'page',
       }}
       data-testid={testId}
+      onClick={() => setDeviceTabPreference(tab)}
     >
       {children}
       {/* Active underline indicator rendered via CSS */}

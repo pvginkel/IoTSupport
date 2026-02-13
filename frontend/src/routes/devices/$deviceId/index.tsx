@@ -1,8 +1,18 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { DeviceConfigurationTab } from '@/components/devices/device-configuration-tab'
 import { useDevice } from '@/hooks/use-devices'
+import { getDeviceTabPreference } from '@/lib/utils/device-tab-preference'
 
 export const Route = createFileRoute('/devices/$deviceId/')({
+  beforeLoad: ({ params }) => {
+    const tab = getDeviceTabPreference()
+    if (tab === 'logs') {
+      throw redirect({ to: '/devices/$deviceId/logs', params })
+    }
+    if (tab === 'coredumps') {
+      throw redirect({ to: '/devices/$deviceId/coredumps', params })
+    }
+  },
   component: ConfigurationTabRoute,
 })
 
