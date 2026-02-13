@@ -1,6 +1,7 @@
 """Testing API endpoints for Playwright test suite support."""
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from dependency_injector.wiring import Provide, inject
@@ -9,13 +10,17 @@ from spectree import Response as SpectreeResponse
 
 from app.config import Settings
 from app.exceptions import RouteNotAvailableException
+from app.models.coredump import CoreDump, ParseStatus
+from app.schemas.coredump import CoredumpDetailSchema
 from app.schemas.testing import (
     ForceErrorQuerySchema,
     KeycloakCleanupSchema,
+    TestCoredumpCreateSchema,
     TestSessionCreateSchema,
     TestSessionResponseSchema,
 )
 from app.services.container import ServiceContainer
+from app.services.device_service import DeviceService
 from app.services.keycloak_admin_service import KeycloakAdminService
 from app.services.testing_service import TestingService
 from app.utils.auth import get_cookie_secure, public
@@ -217,3 +222,71 @@ def cleanup_keycloak_clients(
         "deleted_count": len(deleted_client_ids),
         "deleted_client_ids": deleted_client_ids,
     }, 200
+
+
+@testing_bp.route("/coredumps", methods=["POST"])
+@public
+@api.validate(
+    json=TestCoredumpCreateSchema,
+    resp=SpectreeResponse(HTTP_201=CoredumpDetailSchema),
+)
+@handle_api_errors
+@inject
+def create_test_coredump(
+    device_service: DeviceService = Provide[ServiceContainer.device_service],
+) -> tuple[dict[str, Any], int]:
+    """Create a coredump database record for testing.
+
+    Seeds a CoreDump row directly in the database without filesystem I/O
+    or sidecar parsing. Used by Playwright tests to set up coredump UI scenarios.
+
+    Request Body:
+        device_id: Device ID (required, must exist)
+        chip: Chip type (default: esp32s3)
+        firmware_version: Firmware version (default: 0.0.0-test)
+        size: Coredump size in bytes (default: 262144)
+        parse_status: PENDING, PARSED, or ERROR (default: PARSED)
+        parsed_output: Parsed output text (auto-set for PARSED if omitted)
+
+    Returns:
+        201: Coredump record created successfully
+    """
+    data = TestCoredumpCreateSchema.model_validate(request.get_json())
+
+    # Verify the device exists (raises RecordNotFoundException if not)
+    device_service.get_device(data.device_id)
+
+    now = datetime.now(UTC)
+
+    # Default parsed_output for PARSED status
+    parsed_output = data.parsed_output
+    if data.parse_status == ParseStatus.PARSED.value and parsed_output is None:
+        parsed_output = "Test coredump parsed output"
+
+    # Set parsed_at for terminal states (PARSED or ERROR)
+    parsed_at = now if data.parse_status in (ParseStatus.PARSED.value, ParseStatus.ERROR.value) else None
+
+    # Create the coredump record with a placeholder filename
+    coredump = CoreDump(
+        device_id=data.device_id,
+        filename="placeholder.dmp",
+        chip=data.chip,
+        firmware_version=data.firmware_version,
+        size=data.size,
+        parse_status=data.parse_status,
+        parsed_output=parsed_output,
+        uploaded_at=now,
+        parsed_at=parsed_at,
+    )
+
+    session = current_app.container.db_session()
+    session.add(coredump)
+    session.flush()
+
+    # Update filename with the actual ID
+    coredump.filename = f"test_coredump_{coredump.id}.dmp"
+    session.flush()
+
+    logger.info("Created test coredump: id=%d device_id=%d status=%s", coredump.id, data.device_id, data.parse_status)
+
+    return CoredumpDetailSchema.model_validate(coredump).model_dump(), 201
