@@ -1,60 +1,10 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { DeviceEditor } from '@/components/devices/device-editor'
-import { useDevice } from '@/hooks/use-devices'
-import { Button } from '@/components/ui/button'
+import { createFileRoute, Outlet } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/devices/$deviceId')({
-  component: EditDeviceRoute,
+  component: DeviceIdLayout,
 })
 
-function EditDeviceRoute() {
-  const { deviceId } = Route.useParams()
-  const numericId = parseInt(deviceId, 10)
-  const { device, isLoading, error } = useDevice(isNaN(numericId) ? undefined : numericId)
-
-  if (isNaN(numericId)) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4">
-        <p className="text-destructive">Invalid device ID</p>
-        <Link to="/devices">
-          <Button variant="outline">Back to Device List</Button>
-        </Link>
-      </div>
-    )
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-muted-foreground">Loading device configuration...</p>
-      </div>
-    )
-  }
-
-  if (error || !device) {
-    const errorMessage = error?.message || 'Device not found'
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4">
-        <p className="text-destructive">{errorMessage}</p>
-        <Link to="/devices">
-          <Button variant="outline">Back to Device List</Button>
-        </Link>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex h-full flex-col">
-      <DeviceEditor
-        mode="edit"
-        deviceId={device.id}
-        initialKey={device.key}
-        initialDeviceModelId={device.deviceModelId}
-        initialDeviceModel={device.deviceModel}
-        initialConfig={device.config}
-        initialDeviceName={device.deviceName}
-        initialDeviceEntityId={device.deviceEntityId}
-      />
-    </div>
-  )
+// Layout route: renders child routes (index, duplicate, coredump detail)
+function DeviceIdLayout() {
+  return <Outlet />
 }

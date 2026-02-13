@@ -122,6 +122,7 @@ export function DeviceListTable({
             {renderSortHeader('deviceEntityId', 'Entity ID')}
             {renderSortHeader('rotationState', 'Rotation State')}
             {renderSortHeader('enableOta', 'OTA Status')}
+            {renderSortHeader('lastCoredumpAt', 'Last Core Dump')}
             <th className="px-4 py-3 text-right text-sm font-semibold text-foreground">Actions</th>
           </tr>
         </thead>
@@ -153,6 +154,11 @@ export function DeviceListTable({
                   {device.enableOta === true && <span className="text-green-400">✓</span>}
                   {device.enableOta === false && <span className="text-red-400">✕</span>}
                   {device.enableOta === null && <span className="text-muted-foreground/50">—</span>}
+                </td>
+                <td className="px-4 py-3 text-sm text-muted-foreground">
+                  {device.lastCoredumpAt
+                    ? new Date(device.lastCoredumpAt).toLocaleString()
+                    : '—'}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <Button

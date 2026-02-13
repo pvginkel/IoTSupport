@@ -12,6 +12,7 @@ import { useFormInstrumentation } from '@/lib/test/form-instrumentation'
 import { configureMonacoSchemaValidation } from '@/lib/utils/monaco-schema'
 import { ProvisionDeviceModal } from './provision-device-modal'
 import { DeviceLogsViewer } from './device-logs-viewer'
+import { CoredumpTable } from './coredump-table'
 
 interface DeviceEditorProps {
   mode: 'new' | 'edit' | 'duplicate'
@@ -561,6 +562,11 @@ export function DeviceEditor({
               deviceId={deviceId}
               deviceEntityId={initialDeviceEntityId}
             />
+          )}
+
+          {/* Core Dumps Table (edit mode only) */}
+          {mode === 'edit' && deviceId && (
+            <CoredumpTable deviceId={deviceId} />
           )}
         </div>
       </div>

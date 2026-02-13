@@ -23,6 +23,7 @@ export interface DeviceSummary {
   enableOta: boolean | null
   rotationState: string
   secretCreatedAt: string | null
+  lastCoredumpAt: string | null
 }
 
 // Full device with content and model info (returned from single-device endpoints)
@@ -59,6 +60,7 @@ function transformDeviceSummary(apiDevice: {
   enable_ota: boolean | null
   rotation_state: string
   secret_created_at?: string | null
+  last_coredump_at?: string | null
 }): DeviceSummary {
   return {
     id: apiDevice.id,
@@ -68,7 +70,8 @@ function transformDeviceSummary(apiDevice: {
     deviceEntityId: apiDevice.device_entity_id || '',
     enableOta: apiDevice.enable_ota,
     rotationState: apiDevice.rotation_state,
-    secretCreatedAt: apiDevice.secret_created_at ?? null
+    secretCreatedAt: apiDevice.secret_created_at ?? null,
+    lastCoredumpAt: apiDevice.last_coredump_at ?? null
   }
 }
 

@@ -1,6 +1,207 @@
 {
   "components": {
     "schemas": {
+      "CoredumpDetailSchema.58985ac": {
+        "description": "Detail schema for a single coredump (includes parsed_output).",
+        "properties": {
+          "chip": {
+            "description": "Chip type (e.g., esp32s3)",
+            "title": "Chip",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "Record creation timestamp",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_id": {
+            "description": "Device ID",
+            "title": "Device Id",
+            "type": "integer"
+          },
+          "filename": {
+            "description": "Filename of the .dmp file on disk",
+            "title": "Filename",
+            "type": "string"
+          },
+          "firmware_version": {
+            "description": "Firmware version at time of crash",
+            "title": "Firmware Version",
+            "type": "string"
+          },
+          "id": {
+            "description": "Coredump ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "parse_status": {
+            "description": "Parse status: PENDING, PARSED, or ERROR",
+            "title": "Parse Status",
+            "type": "string"
+          },
+          "parsed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When parsing completed",
+            "title": "Parsed At"
+          },
+          "parsed_output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Parsed crash analysis output",
+            "title": "Parsed Output"
+          },
+          "size": {
+            "description": "Size of the coredump binary in bytes",
+            "title": "Size",
+            "type": "integer"
+          },
+          "updated_at": {
+            "description": "Record last update timestamp",
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "uploaded_at": {
+            "description": "When the coredump was uploaded",
+            "format": "date-time",
+            "title": "Uploaded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "device_id",
+          "filename",
+          "chip",
+          "firmware_version",
+          "size",
+          "parse_status",
+          "uploaded_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CoredumpDetailSchema",
+        "type": "object"
+      },
+      "CoredumpListResponseSchema.58985ac": {
+        "description": "Response schema for coredump list endpoint.",
+        "properties": {
+          "coredumps": {
+            "items": {
+              "$ref": "#/components/schemas/CoredumpListResponseSchema.58985ac.CoredumpSummarySchema"
+            },
+            "title": "Coredumps",
+            "type": "array"
+          },
+          "count": {
+            "description": "Total count of coredumps for this device",
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "coredumps",
+          "count"
+        ],
+        "title": "CoredumpListResponseSchema",
+        "type": "object"
+      },
+      "CoredumpListResponseSchema.58985ac.CoredumpSummarySchema": {
+        "description": "Summary schema for coredump list responses (excludes parsed_output).",
+        "properties": {
+          "chip": {
+            "description": "Chip type (e.g., esp32s3)",
+            "title": "Chip",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "Record creation timestamp",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_id": {
+            "description": "Device ID",
+            "title": "Device Id",
+            "type": "integer"
+          },
+          "filename": {
+            "description": "Filename of the .dmp file on disk",
+            "title": "Filename",
+            "type": "string"
+          },
+          "firmware_version": {
+            "description": "Firmware version at time of crash",
+            "title": "Firmware Version",
+            "type": "string"
+          },
+          "id": {
+            "description": "Coredump ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "parse_status": {
+            "description": "Parse status: PENDING, PARSED, or ERROR",
+            "title": "Parse Status",
+            "type": "string"
+          },
+          "parsed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When parsing completed",
+            "title": "Parsed At"
+          },
+          "size": {
+            "description": "Size of the coredump binary in bytes",
+            "title": "Size",
+            "type": "integer"
+          },
+          "uploaded_at": {
+            "description": "When the coredump was uploaded",
+            "format": "date-time",
+            "title": "Uploaded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "device_id",
+          "filename",
+          "chip",
+          "firmware_version",
+          "size",
+          "parse_status",
+          "uploaded_at",
+          "created_at"
+        ],
+        "title": "CoredumpSummarySchema",
+        "type": "object"
+      },
       "DashboardResponseSchema.57872a8": {
         "description": "Response schema for devices dashboard.",
         "properties": {
@@ -273,6 +474,20 @@
             "description": "Unique 8-character device key",
             "title": "Key",
             "type": "string"
+          },
+          "last_coredump_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Timestamp of the most recent coredump",
+            "title": "Last Coredump At"
           },
           "rotation_state": {
             "description": "Current rotation state",
@@ -1232,6 +1447,58 @@
         "title": "RotationTriggerResponseSchema",
         "type": "object"
       },
+      "TestCoredumpCreateSchema.355d24f": {
+        "description": "Request schema for creating a test coredump record.",
+        "properties": {
+          "chip": {
+            "default": "esp32s3",
+            "description": "Chip type",
+            "title": "Chip",
+            "type": "string"
+          },
+          "device_id": {
+            "description": "Device ID to associate the coredump with",
+            "title": "Device Id",
+            "type": "integer"
+          },
+          "firmware_version": {
+            "default": "0.0.0-test",
+            "description": "Firmware version at time of crash",
+            "title": "Firmware Version",
+            "type": "string"
+          },
+          "parse_status": {
+            "default": "PARSED",
+            "description": "Parse status: PENDING, PARSED, or ERROR",
+            "title": "Parse Status",
+            "type": "string"
+          },
+          "parsed_output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Parsed crash analysis output",
+            "title": "Parsed Output"
+          },
+          "size": {
+            "default": 262144,
+            "description": "Size of the coredump binary in bytes",
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "device_id"
+        ],
+        "title": "TestCoredumpCreateSchema",
+        "type": "object"
+      },
       "TestSessionCreateSchema.355d24f": {
         "description": "Request schema for creating a test authentication session.",
         "properties": {
@@ -2061,6 +2328,247 @@
         "tags": []
       }
     },
+    "/api/devices/{device_id}/coredumps": {
+      "delete": {
+        "description": "",
+        "operationId": "delete__api_devices_{device_id}_coredumps",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Delete all coredumps for a device.",
+        "tags": []
+      },
+      "get": {
+        "description": "",
+        "operationId": "get__api_devices_{device_id}_coredumps",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoredumpListResponseSchema.58985ac"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "List all coredumps for a device.",
+        "tags": []
+      }
+    },
+    "/api/devices/{device_id}/coredumps/{coredump_id}": {
+      "delete": {
+        "description": "",
+        "operationId": "delete__api_devices_{device_id}_coredumps_{coredump_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "",
+            "in": "path",
+            "name": "coredump_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Delete a single coredump.",
+        "tags": []
+      },
+      "get": {
+        "description": "",
+        "operationId": "get__api_devices_{device_id}_coredumps_{coredump_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "",
+            "in": "path",
+            "name": "coredump_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoredumpDetailSchema.58985ac"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Get coredump detail including parsed output.",
+        "tags": []
+      }
+    },
+    "/api/devices/{device_id}/coredumps/{coredump_id}/download": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_devices_{device_id}_coredumps_{coredump_id}_download",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "",
+            "in": "path",
+            "name": "coredump_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Download raw coredump .dmp binary.",
+        "tags": []
+      }
+    },
     "/api/devices/{device_id}/keycloak-status": {
       "get": {
         "description": "Returns whether the Keycloak client exists and provides a deep link to the Keycloak admin console. Does not return an error if the client is missing - instead returns exists=false.",
@@ -2397,7 +2905,7 @@
     },
     "/api/devices/{device_id}/rotate": {
       "post": {
-        "description": "Queues the device for credential rotation. If already pending, returns the current status without changing state.",
+        "description": "Queues the device for credential rotation and immediately starts the rotation process. If already pending, returns the current status without changing state.",
         "operationId": "post__api_devices_{device_id}_rotate",
         "parameters": [
           {
@@ -2594,6 +3102,16 @@
         "parameters": [],
         "responses": {},
         "summary": "Get raw JSON configuration for the device.",
+        "tags": []
+      }
+    },
+    "/api/iot/coredump": {
+      "post": {
+        "description": "Accepts raw binary body containing the ESP32 coredump data. Requires chip and firmware_version query parameters.\n\nThe coredump is stored in COREDUMPS_DIR/{device_key}/ with a DB record tracking metadata and parse status. Background parsing is triggered if the sidecar is configured.",
+        "operationId": "post__api_iot_coredump",
+        "parameters": [],
+        "responses": {},
+        "summary": "Upload a coredump from a device.",
         "tags": []
       }
     },
@@ -2922,6 +3440,47 @@
           }
         },
         "summary": "Create an authenticated test session, bypassing the real OIDC flow.",
+        "tags": []
+      }
+    },
+    "/api/testing/coredumps": {
+      "post": {
+        "description": "Seeds a CoreDump row directly in the database without filesystem I/O or sidecar parsing. Used by Playwright tests to set up coredump UI scenarios.\n\nRequest Body:     device_id: Device ID (required, must exist)     chip: Chip type (default: esp32s3)     firmware_version: Firmware version (default: 0.0.0-test)     size: Coredump size in bytes (default: 262144)     parse_status: PENDING, PARSED, or ERROR (default: PARSED)     parsed_output: Parsed output text (auto-set for PARSED if omitted)\n\nReturns:     201: Coredump record created successfully",
+        "operationId": "post__api_testing_coredumps",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestCoredumpCreateSchema.355d24f"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoredumpDetailSchema.58985ac"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Create a coredump database record for testing.",
         "tags": []
       }
     },

@@ -20,6 +20,10 @@ export class DevicesPage {
     await this.page.goto(`/devices/${deviceId}/duplicate`);
   }
 
+  async gotoCoredumpDetail(deviceId: number, coredumpId: number) {
+    await this.page.goto(`/devices/${deviceId}/coredumps/${coredumpId}`);
+  }
+
   // Locators - List
   get list(): Locator {
     return this.page.locator('[data-testid="devices.list.table"]');
@@ -148,6 +152,69 @@ export class DevicesPage {
 
   get logsEntries(): Locator {
     return this.page.locator('[data-testid="devices.logs.entry"]');
+  }
+
+  // Locators - Coredump Table
+  get coredumpTable(): Locator {
+    return this.page.locator('[data-testid="coredumps.table"]');
+  }
+
+  get coredumpTableEmpty(): Locator {
+    return this.page.locator('[data-testid="coredumps.table.empty"]');
+  }
+
+  get coredumpTableLoading(): Locator {
+    return this.page.locator('[data-testid="coredumps.table.loading"]');
+  }
+
+  get coredumpTableError(): Locator {
+    return this.page.locator('[data-testid="coredumps.table.error"]');
+  }
+
+  get coredumpRows(): Locator {
+    return this.page.locator('[data-testid="coredumps.table.row"]');
+  }
+
+  coredumpRowById(coredumpId: number): Locator {
+    return this.page.locator(`[data-testid="coredumps.table.row"][data-coredump-id="${coredumpId}"]`);
+  }
+
+  get coredumpDeleteConfirmDialog(): Locator {
+    return this.page.locator('[data-testid="coredumps.delete.confirm-dialog"]');
+  }
+
+  // Locators - Coredump Detail Page
+  get coredumpDetail(): Locator {
+    return this.page.locator('[data-testid="coredumps.detail"]');
+  }
+
+  get coredumpDetailMetadata(): Locator {
+    return this.page.locator('[data-testid="coredumps.detail.metadata"]');
+  }
+
+  get coredumpDetailEditor(): Locator {
+    return this.page.locator('[data-testid="coredumps.detail.editor"]');
+  }
+
+  get coredumpDetailNoOutput(): Locator {
+    return this.page.locator('[data-testid="coredumps.detail.no-output"]');
+  }
+
+  get coredumpDetailDownload(): Locator {
+    return this.page.locator('[data-testid="coredumps.detail.download"]');
+  }
+
+  get coredumpDetailBack(): Locator {
+    return this.page.locator('[data-testid="coredumps.detail.back"]');
+  }
+
+  get coredumpDetailError(): Locator {
+    return this.page.locator('[data-testid="coredumps.detail.error"]');
+  }
+
+  // Locators - Device List Column Header
+  get lastCoredumpAtHeader(): Locator {
+    return this.page.locator('[data-testid="devices.list.header.lastCoredumpAt"]');
   }
 
   // Locators - Dialogs
@@ -338,6 +405,35 @@ export class DevicesPage {
    */
   async waitForProvisioningError(): Promise<void> {
     await this.page.locator('text=Provisioning Failed').waitFor({ state: 'visible', timeout: 30000 });
+  }
+
+  // Actions - Coredump Table
+  /**
+   * Click a coredump row by coredump ID to navigate to the detail page
+   */
+  async clickCoredumpRow(coredumpId: number) {
+    await this.coredumpRowById(coredumpId).click();
+  }
+
+  /**
+   * Click the delete button on a coredump row
+   */
+  async deleteCoredumpById(coredumpId: number) {
+    await this.coredumpRowById(coredumpId).locator('[data-testid="coredumps.table.row.delete"]').click();
+  }
+
+  /**
+   * Confirm the coredump delete dialog
+   */
+  async confirmCoredumpDelete() {
+    await this.coredumpDeleteConfirmDialog.locator('button:has-text("Delete")').click();
+  }
+
+  /**
+   * Cancel the coredump delete dialog
+   */
+  async cancelCoredumpDelete() {
+    await this.coredumpDeleteConfirmDialog.locator('button:has-text("Cancel")').click();
   }
 
   // Actions - Device Logs Viewer

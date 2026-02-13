@@ -23,6 +23,30 @@ export interface CreatedDevice {
   clientId: string;
 }
 
+export interface CoredumpFactoryOptions {
+  deviceId: number;
+  chip?: string;
+  firmwareVersion?: string;
+  size?: number;
+  parseStatus?: string;
+  parsedOutput?: string | null;
+}
+
+export interface CreatedCoredump {
+  id: number;
+  deviceId: number;
+  filename: string;
+  chip: string;
+  firmwareVersion: string;
+  size: number;
+  parseStatus: string;
+  parsedOutput: string | null;
+  parsedAt: string | null;
+  uploadedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export class DevicesFactory {
   private client: ApiClient;
   private deviceModelsFactory: DeviceModelsFactory;
@@ -172,6 +196,41 @@ export class DevicesFactory {
     if (id !== null) {
       await this.delete(id);
     }
+  }
+
+  /**
+   * Create a coredump record for a device via the testing endpoint.
+   * Uses POST /api/testing/coredumps to seed coredump data directly in the database.
+   */
+  async createCoredump(options: CoredumpFactoryOptions): Promise<CreatedCoredump> {
+    const result = await apiRequest(() =>
+      this.client.POST('/api/testing/coredumps', {
+        body: {
+          device_id: options.deviceId,
+          chip: options.chip ?? 'esp32s3',
+          firmware_version: options.firmwareVersion ?? '0.0.0-test',
+          size: options.size ?? 262144,
+          parse_status: options.parseStatus ?? 'PARSED',
+          parsed_output: options.parsedOutput ?? null,
+        },
+      })
+    );
+
+    const data = result.data!;
+    return {
+      id: data.id,
+      deviceId: data.device_id,
+      filename: data.filename,
+      chip: data.chip,
+      firmwareVersion: data.firmware_version,
+      size: data.size,
+      parseStatus: data.parse_status,
+      parsedOutput: data.parsed_output ?? null,
+      parsedAt: data.parsed_at ?? null,
+      uploadedAt: data.uploaded_at,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
   }
 
   /**
