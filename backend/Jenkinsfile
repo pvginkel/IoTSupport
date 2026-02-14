@@ -10,11 +10,11 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko') {
                 url: 'https://github.com/pvginkel/IoTSupport.git'
         }
 
-        stage("Building IoTSupport") {
+        stage("Building iot-support") {
             container('kaniko') {
                 helmCharts.kaniko([
-                    "registry:5000/iotsupport-app:${currentBuild.number}",
-                    "registry:5000/iotsupport-app:latest"
+                    "registry:5000/iotsupport-backend:${currentBuild.number}",
+                    "registry:5000/iotsupport-backend:latest"
                 ])
             }
         }

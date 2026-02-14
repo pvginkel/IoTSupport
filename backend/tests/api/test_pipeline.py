@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 from flask import Flask
 from flask.testing import FlaskClient
 
-from app.config import Settings
+from app.app_config import AppSettings
 from app.services.container import ServiceContainer
 from tests.conftest import create_test_firmware
 
@@ -190,7 +190,7 @@ class TestPipelineFirmwareZipUpload:
         assert response.status_code == 400
 
     def test_upload_firmware_zip_creates_versioned_file(
-        self, app: Flask, client: FlaskClient, container: ServiceContainer, test_settings: Settings
+        self, app: Flask, client: FlaskClient, container: ServiceContainer, test_app_settings: AppSettings
     ) -> None:
         """Test that ZIP upload creates versioned ZIP on disk."""
         model_code = "zipfile"
@@ -210,7 +210,7 @@ class TestPipelineFirmwareZipUpload:
         assert response.status_code == 200
 
         # Verify versioned ZIP exists on disk
-        assets_dir = test_settings.assets_dir
+        assets_dir = test_app_settings.assets_dir
         assert assets_dir is not None
         zip_path = assets_dir / model_code / "firmware-4.1.0.zip"
         assert zip_path.exists()
@@ -321,8 +321,8 @@ class TestPipelineUploadScript:
     ) -> None:
         """Test that the script contains the token URL from config."""
         # Get the configured token URL
-        config: Settings = container.config()
-        expected_token_url = config.oidc_token_url or ""
+        app_config: AppSettings = container.app_config()
+        expected_token_url = app_config.oidc_token_url or ""
 
         response = client.get("/api/pipeline/upload.sh")
 
@@ -421,8 +421,8 @@ class TestPipelineUploadScriptPowerShell:
         self, app: Flask, client: FlaskClient, container: ServiceContainer
     ) -> None:
         """Test that the script contains the token URL from config."""
-        config: Settings = container.config()
-        expected_token_url = config.oidc_token_url or ""
+        app_config: AppSettings = container.app_config()
+        expected_token_url = app_config.oidc_token_url or ""
 
         response = client.get("/api/pipeline/upload.ps1")
 

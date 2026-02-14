@@ -8,10 +8,26 @@ from typing import Any
 import httpx
 import jwt
 from jwt import PyJWKClient
+from prometheus_client import Counter, Histogram
 
 from app.config import Settings
 from app.exceptions import AuthenticationException
-from app.services.metrics_service import MetricsService
+
+# Auth metrics
+AUTH_VALIDATION_TOTAL = Counter(
+    "auth_validation_total",
+    "Total auth token validations by status",
+    ["status"],
+)
+AUTH_VALIDATION_DURATION_SECONDS = Histogram(
+    "auth_validation_duration_seconds",
+    "Auth token validation duration in seconds",
+)
+JWKS_REFRESH_TOTAL = Counter(
+    "jwks_refresh_total",
+    "Total JWKS initialization/refresh events",
+    ["trigger", "status"],
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +37,8 @@ class AuthContext:
     """Authentication context extracted from validated JWT token."""
 
     subject: str  # JWT "sub" claim
-    email: str | None  # JWT "email" claim (may be None for M2M)
-    name: str | None  # JWT "name" claim (may be None for M2M)
+    email: str | None  # JWT "email" claim
+    name: str | None  # JWT "name" claim
     roles: set[str]  # Combined roles from realm_access and resource_access
 
 
@@ -36,19 +52,16 @@ class AuthService:
     def __init__(
         self,
         config: Settings,
-        metrics_service: MetricsService,
     ) -> None:
         """Initialize auth service with OIDC configuration.
 
         Args:
             config: Application settings containing OIDC configuration
-            metrics_service: Metrics service for recording auth operations
 
         Raises:
             ValueError: If OIDC is enabled but required config is missing
         """
         self.config = config
-        self.metrics_service = metrics_service
 
         # JWKS client instance (initialized once if OIDC enabled)
         self._jwks_client: PyJWKClient | None = None
@@ -76,20 +89,13 @@ class AuthService:
                 logger.info("Initialized JWKS client with URI: %s", self._jwks_uri)
 
                 # Record successful JWKS initialization
-                self.metrics_service.increment_counter(
-                    "iot_jwks_refresh_total",
-                    labels={"trigger": "startup", "status": "success"}
-                )
+                JWKS_REFRESH_TOTAL.labels(trigger="startup", status="success").inc()
             except Exception as e:
                 logger.error("Failed to initialize JWKS client: %s", str(e))
-                self.metrics_service.increment_counter(
-                    "iot_jwks_refresh_total",
-                    labels={"trigger": "startup", "status": "failed"}
-                )
+                JWKS_REFRESH_TOTAL.labels(trigger="startup", status="failed").inc()
                 raise
         else:
             logger.info("AuthService initialized with OIDC disabled")
-
 
     def _discover_jwks_uri(self) -> str:
         """Discover JWKS URI from OIDC provider's discovery endpoint.
@@ -173,12 +179,8 @@ class AuthService:
 
             # Record successful validation
             duration = time.perf_counter() - start_time
-            self.metrics_service.increment_counter(
-                "iot_auth_validation_total", labels={"status": "success"}
-            )
-            self.metrics_service.record_operation_duration(
-                "iot_auth_validation_duration_seconds", duration
-            )
+            AUTH_VALIDATION_TOTAL.labels(status="success").inc()
+            AUTH_VALIDATION_DURATION_SECONDS.observe(max(duration, 0.0))
 
             logger.info(
                 "Token validated successfully for subject=%s email=%s roles=%s",
@@ -196,34 +198,22 @@ class AuthService:
 
         except jwt.ExpiredSignatureError as e:
             duration = time.perf_counter() - start_time
-            self.metrics_service.increment_counter(
-                "iot_auth_validation_total", labels={"status": "expired"}
-            )
-            self.metrics_service.record_operation_duration(
-                "iot_auth_validation_duration_seconds", duration
-            )
+            AUTH_VALIDATION_TOTAL.labels(status="expired").inc()
+            AUTH_VALIDATION_DURATION_SECONDS.observe(max(duration, 0.0))
             logger.warning("Token validation failed: expired")
             raise AuthenticationException("Token has expired") from e
 
         except jwt.InvalidSignatureError as e:
             duration = time.perf_counter() - start_time
-            self.metrics_service.increment_counter(
-                "iot_auth_validation_total", labels={"status": "invalid_signature"}
-            )
-            self.metrics_service.record_operation_duration(
-                "iot_auth_validation_duration_seconds", duration
-            )
+            AUTH_VALIDATION_TOTAL.labels(status="invalid_signature").inc()
+            AUTH_VALIDATION_DURATION_SECONDS.observe(max(duration, 0.0))
             logger.warning("Token validation failed: invalid signature")
             raise AuthenticationException("Invalid token signature") from e
 
         except (jwt.InvalidIssuerError, jwt.InvalidAudienceError) as e:
             duration = time.perf_counter() - start_time
-            self.metrics_service.increment_counter(
-                "iot_auth_validation_total", labels={"status": "invalid_claims"}
-            )
-            self.metrics_service.record_operation_duration(
-                "iot_auth_validation_duration_seconds", duration
-            )
+            AUTH_VALIDATION_TOTAL.labels(status="invalid_claims").inc()
+            AUTH_VALIDATION_DURATION_SECONDS.observe(max(duration, 0.0))
             logger.warning("Token validation failed: invalid issuer or audience")
             raise AuthenticationException(
                 "Token issuer or audience does not match expected values"
@@ -231,31 +221,22 @@ class AuthService:
 
         except jwt.PyJWTError as e:
             duration = time.perf_counter() - start_time
-            self.metrics_service.increment_counter(
-                "iot_auth_validation_total", labels={"status": "invalid_token"}
-            )
-            self.metrics_service.record_operation_duration(
-                "iot_auth_validation_duration_seconds", duration
-            )
+            AUTH_VALIDATION_TOTAL.labels(status="invalid_token").inc()
+            AUTH_VALIDATION_DURATION_SECONDS.observe(max(duration, 0.0))
             logger.warning("Token validation failed: %s", str(e))
             raise AuthenticationException(f"Invalid token: {str(e)}") from e
 
         except AuthenticationException:
             # Re-raise authentication exceptions as-is
             duration = time.perf_counter() - start_time
-            self.metrics_service.record_operation_duration(
-                "iot_auth_validation_duration_seconds", duration
-            )
+            AUTH_VALIDATION_TOTAL.labels(status="error").inc()
+            AUTH_VALIDATION_DURATION_SECONDS.observe(max(duration, 0.0))
             raise
 
         except Exception as e:
             duration = time.perf_counter() - start_time
-            self.metrics_service.increment_counter(
-                "iot_auth_validation_total", labels={"status": "error"}
-            )
-            self.metrics_service.record_operation_duration(
-                "iot_auth_validation_duration_seconds", duration
-            )
+            AUTH_VALIDATION_TOTAL.labels(status="error").inc()
+            AUTH_VALIDATION_DURATION_SECONDS.observe(max(duration, 0.0))
             logger.error("Unexpected error during token validation: %s", str(e))
             raise AuthenticationException(
                 f"Token validation failed: {str(e)}"

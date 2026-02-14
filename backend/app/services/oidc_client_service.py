@@ -8,10 +8,22 @@ from dataclasses import dataclass
 from urllib.parse import urlencode
 
 import httpx
+from prometheus_client import Counter
 
 from app.config import Settings
 from app.exceptions import AuthenticationException
-from app.services.metrics_service import MetricsService
+
+# OIDC metrics
+OIDC_TOKEN_EXCHANGE_TOTAL = Counter(
+    "oidc_token_exchange_total",
+    "Total authorization code exchange outcomes",
+    ["status"],
+)
+AUTH_TOKEN_REFRESH_TOTAL = Counter(
+    "auth_token_refresh_total",
+    "Total token refresh outcomes",
+    ["status"],
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,19 +67,16 @@ class OidcClientService:
     def __init__(
         self,
         config: Settings,
-        metrics_service: MetricsService,
     ) -> None:
         """Initialize OIDC client service.
 
         Args:
             config: Application settings containing OIDC configuration
-            metrics_service: Metrics service for recording operations
 
         Raises:
             ValueError: If OIDC endpoint discovery fails
         """
         self.config = config
-        self.metrics_service = metrics_service
         self._endpoints: OidcEndpoints | None = None
 
         # Discover endpoints at initialization if OIDC is enabled
@@ -192,7 +201,6 @@ class OidcClientService:
             Tuple of (authorization_url, auth_state)
         """
         # Generate PKCE code verifier (43-128 characters, no padding)
-        # RFC 7636 requires only unreserved characters: [A-Za-z0-9\-._~]
         code_verifier = secrets.token_urlsafe(32)
         code_challenge = self.generate_pkce_challenge(code_verifier)
 
@@ -277,9 +285,7 @@ class OidcClientService:
                 )
 
             # Record successful token exchange
-            self.metrics_service.increment_counter(
-                "iot_oidc_token_exchange_total", labels={"status": "success"}
-            )
+            OIDC_TOKEN_EXCHANGE_TOTAL.labels(status="success").inc()
 
             logger.info("Successfully exchanged authorization code for tokens")
 
@@ -293,9 +299,7 @@ class OidcClientService:
 
         except httpx.HTTPError as e:
             # Record failed token exchange
-            self.metrics_service.increment_counter(
-                "iot_oidc_token_exchange_total", labels={"status": "failed"}
-            )
+            OIDC_TOKEN_EXCHANGE_TOTAL.labels(status="failed").inc()
 
             logger.error("Token exchange failed: %s", str(e))
             error_detail = "Unknown error"
@@ -352,9 +356,7 @@ class OidcClientService:
                 )
 
             # Record successful refresh
-            self.metrics_service.increment_counter(
-                "iot_auth_token_refresh_total", labels={"status": "success"}
-            )
+            AUTH_TOKEN_REFRESH_TOTAL.labels(status="success").inc()
 
             logger.info("Successfully refreshed access token")
 
@@ -368,9 +370,7 @@ class OidcClientService:
 
         except httpx.HTTPError as e:
             # Record failed refresh
-            self.metrics_service.increment_counter(
-                "iot_auth_token_refresh_total", labels={"status": "failed"}
-            )
+            AUTH_TOKEN_REFRESH_TOTAL.labels(status="failed").inc()
 
             logger.error("Token refresh failed: %s", str(e))
             raise AuthenticationException(

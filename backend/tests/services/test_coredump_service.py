@@ -10,7 +10,7 @@ from flask import Flask
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import Settings
+from app.app_config import AppSettings
 from app.exceptions import (
     InvalidOperationException,
     RecordNotFoundException,
@@ -74,7 +74,7 @@ class TestCoredumpServiceSave:
         assert filename.endswith(".dmp")
 
         # Verify .dmp file exists
-        config = container.config()
+        config = container.app_config()
         assert config.coredumps_dir is not None
         dmp_path = config.coredumps_dir / device_key / filename
         assert dmp_path.exists()
@@ -157,7 +157,7 @@ class TestCoredumpServiceSave:
         # Create a service with None coredumps_dir
         service = CoredumpService(
             coredumps_dir=None,
-            config=container.config(),
+            config=container.app_config(),
             firmware_service=container.firmware_service(),
             metrics_service=container.metrics_service(),
         )
@@ -221,7 +221,7 @@ class TestCoredumpServiceRetention:
         device_id, device_key, _ = create_test_device(app, container, model_code="ret1")
 
         service = container.coredump_service()
-        config = container.config()
+        config = container.app_config()
 
         # Override max_coredumps to a small value for testing
         original_max = config.max_coredumps
@@ -366,7 +366,7 @@ class TestCoredumpServiceCRUD:
         device_id, device_key, _ = create_test_device(app, container, model_code="cr5")
 
         # Create file on disk
-        config = container.config()
+        config = container.app_config()
         assert config.coredumps_dir is not None
         device_dir = config.coredumps_dir / device_key
         device_dir.mkdir(parents=True, exist_ok=True)
@@ -392,7 +392,7 @@ class TestCoredumpServiceCRUD:
         device_id, device_key, _ = create_test_device(app, container, model_code="cr6")
 
         # Create file on disk
-        config = container.config()
+        config = container.app_config()
         assert config.coredumps_dir is not None
         device_dir = config.coredumps_dir / device_key
         device_dir.mkdir(parents=True, exist_ok=True)
@@ -434,7 +434,7 @@ class TestCoredumpServiceCRUD:
         """Test that delete_all_coredumps removes all records and files for a device."""
         device_id, device_key, _ = create_test_device(app, container, model_code="cr8")
 
-        config = container.config()
+        config = container.app_config()
         assert config.coredumps_dir is not None
         device_dir = config.coredumps_dir / device_key
         device_dir.mkdir(parents=True, exist_ok=True)
@@ -485,7 +485,7 @@ class TestCoredumpServiceParsing:
         """Test successful parsing via sidecar."""
         device_id, device_key, _ = create_test_device(app, container, model_code="ps1")
         service = container.coredump_service()
-        config = container.config()
+        config = container.app_config()
 
         # Save a coredump
         content = b"\xDE\xAD" * 128
@@ -543,7 +543,7 @@ class TestCoredumpServiceParsing:
         """Test that parsing retries on failure and succeeds on third attempt."""
         device_id, device_key, _ = create_test_device(app, container, model_code="ps2")
         service = container.coredump_service()
-        config = container.config()
+        config = container.app_config()
 
         filename, coredump_id = service.save_coredump(
             device_id=device_id,
@@ -603,7 +603,7 @@ class TestCoredumpServiceParsing:
         """Test that after 3 failures, parse_status is set to ERROR."""
         device_id, device_key, _ = create_test_device(app, container, model_code="ps3")
         service = container.coredump_service()
-        config = container.config()
+        config = container.app_config()
 
         filename, coredump_id = service.save_coredump(
             device_id=device_id,
@@ -652,7 +652,7 @@ class TestCoredumpServiceParsing:
         """Test that missing firmware ZIP sets ERROR without retrying."""
         device_id, device_key, _ = create_test_device(app, container, model_code="ps4")
         service = container.coredump_service()
-        config = container.config()
+        config = container.app_config()
 
         filename, coredump_id = service.save_coredump(
             device_id=device_id,
@@ -694,7 +694,7 @@ class TestCoredumpServiceParsing:
         """Test that xfer directory files are cleaned up after parsing."""
         device_id, device_key, _ = create_test_device(app, container, model_code="ps5")
         service = container.coredump_service()
-        config = container.config()
+        config = container.app_config()
 
         filename, coredump_id = service.save_coredump(
             device_id=device_id,
@@ -732,7 +732,7 @@ class TestCoredumpServiceParsing:
         assert len(list(xfer_dir.glob("*"))) == 0
 
     def _create_firmware_zip(
-        self, settings: Settings, model_code: str, version: str
+        self, settings: AppSettings, model_code: str, version: str
     ) -> Path:
         """Create a minimal firmware ZIP containing a dummy .elf file."""
         assert settings.assets_dir is not None

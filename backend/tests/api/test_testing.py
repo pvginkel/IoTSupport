@@ -10,6 +10,7 @@ from flask.testing import FlaskClient
 from sqlalchemy.pool import StaticPool
 
 from app import create_app
+from app.app_config import AppSettings
 from app.config import Settings
 from app.database import upgrade_database
 from app.models.device import Device
@@ -18,11 +19,7 @@ from app.services.container import ServiceContainer
 
 
 def _build_testing_settings(tmp_path: Path) -> Settings:
-    """Build settings for testing mode tests."""
-    # Create temporary assets directory for tests
-    assets_dir = tmp_path / "assets"
-    assets_dir.mkdir(exist_ok=True)
-
+    """Build infrastructure settings for testing mode tests."""
     return Settings(
         # Flask settings
         secret_key="test-secret-key",
@@ -30,18 +27,10 @@ def _build_testing_settings(tmp_path: Path) -> Settings:
         debug=True,
         # Database settings
         database_url="sqlite:///:memory:",
-        # Firmware storage
-        assets_dir=assets_dir,
         # CORS settings
         cors_origins=["http://localhost:3000"],
-        # MQTT settings
-        mqtt_url="mqtt://mqtt.example.com:1883",
-        device_mqtt_url="mqtt://mqtt.example.com:1883",
-        mqtt_username=None,
-        mqtt_password=None,
         # OIDC settings (disabled)
         baseurl="http://localhost:3200",
-        device_baseurl="http://localhost:3200",
         oidc_enabled=False,
         oidc_issuer_url=None,
         oidc_client_id=None,
@@ -53,6 +42,24 @@ def _build_testing_settings(tmp_path: Path) -> Settings:
         oidc_cookie_secure=False,
         oidc_cookie_samesite="Lax",
         oidc_refresh_cookie_name="refresh_token",
+    )
+
+
+def _build_testing_app_settings(tmp_path: Path) -> AppSettings:
+    """Build IoT-specific app settings for testing mode tests."""
+    # Create temporary assets directory for tests
+    assets_dir = tmp_path / "assets"
+    assets_dir.mkdir(exist_ok=True)
+
+    return AppSettings(
+        # Firmware storage
+        assets_dir=assets_dir,
+        # MQTT settings
+        mqtt_url="mqtt://mqtt.example.com:1883",
+        device_mqtt_url="mqtt://mqtt.example.com:1883",
+        mqtt_username=None,
+        mqtt_password=None,
+        mqtt_client_id="iotsupport-backend",
         # Keycloak Admin API settings
         oidc_token_url="https://auth.example.com/realms/iot/protocol/openid-connect/token",
         keycloak_base_url="https://auth.example.com",
@@ -62,6 +69,8 @@ def _build_testing_settings(tmp_path: Path) -> Settings:
         keycloak_device_scope_name="iot-device-audience",
         keycloak_admin_url="https://auth.example.com/admin/realms/iot",
         keycloak_console_base_url="https://auth.example.com/admin/master/console/#/iot/clients",
+        # Device provisioning
+        device_baseurl="http://localhost:3200",
         # WiFi credentials for provisioning
         wifi_ssid="TestNetwork",
         wifi_password="test-wifi-password",
@@ -74,8 +83,6 @@ def _build_testing_settings(tmp_path: Path) -> Settings:
         elasticsearch_username=None,
         elasticsearch_password=None,
         elasticsearch_index_pattern="logstash-http-*",
-        # MQTT client ID
-        mqtt_client_id="iotsupport-backend",
         # Fernet key (derived from "test-secret-key" using SHA256 + base64)
         fernet_key="LOrG82NjxiRqZMyoBc1DynoBsU6y_MUyzuw_YPL33xw=",
     )
@@ -101,8 +108,9 @@ def testing_template_connection(tmp_path_factory) -> Generator[sqlite3.Connectio
     conn = sqlite3.connect(":memory:", check_same_thread=False)
 
     settings = _override_settings_for_sqlite(_build_testing_settings(tmp_path), conn)
+    app_settings = _build_testing_app_settings(tmp_path)
 
-    template_app = create_app(settings)
+    template_app = create_app(settings, app_settings=app_settings)
     with template_app.app_context():
         upgrade_database(recreate=True)
 
@@ -112,19 +120,29 @@ def testing_template_connection(tmp_path_factory) -> Generator[sqlite3.Connectio
 
 @pytest.fixture
 def testing_settings(tmp_path) -> Settings:
-    """Create test settings with FLASK_ENV=testing to enable testing endpoints."""
+    """Create infrastructure test settings with FLASK_ENV=testing to enable testing endpoints."""
     return _build_testing_settings(tmp_path)
 
 
 @pytest.fixture
-def testing_app(testing_settings: Settings, testing_template_connection: sqlite3.Connection) -> Generator[Flask, None, None]:
+def testing_app_settings(tmp_path) -> AppSettings:
+    """Create IoT-specific test settings for testing endpoints."""
+    return _build_testing_app_settings(tmp_path)
+
+
+@pytest.fixture
+def testing_app(
+    testing_settings: Settings,
+    testing_app_settings: AppSettings,
+    testing_template_connection: sqlite3.Connection,
+) -> Generator[Flask, None, None]:
     """Create Flask app with testing mode enabled and database set up."""
     clone_conn = sqlite3.connect(":memory:", check_same_thread=False)
     testing_template_connection.backup(clone_conn)
 
     settings = _override_settings_for_sqlite(testing_settings, clone_conn)
 
-    app = create_app(settings)
+    app = create_app(settings, app_settings=testing_app_settings)
 
     try:
         yield app
@@ -288,8 +306,8 @@ class TestClearTestSession:
         cookies = response.headers.getlist("Set-Cookie")
         assert any("access_token=" in cookie and "Max-Age=0" in cookie for cookie in cookies)
 
-    def test_clear_session_makes_auth_self_return_401(self, testing_client: FlaskClient):
-        """After clearing session, /api/auth/self returns 401."""
+    def test_clear_session_makes_auth_self_return_local_user(self, testing_client: FlaskClient):
+        """After clearing session, /api/auth/self returns default local user (OIDC disabled)."""
         # Create and then clear session
         testing_client.post(
             "/api/testing/auth/session",
@@ -297,10 +315,12 @@ class TestClearTestSession:
         )
         testing_client.post("/api/testing/auth/clear")
 
-        # Check /api/auth/self now returns 401
+        # With OIDC disabled, /api/auth/self falls back to default local-user
         response = testing_client.get("/api/auth/self")
 
-        assert response.status_code == 401
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["subject"] == "local-user"
 
     def test_clear_session_without_existing_session(self, testing_client: FlaskClient):
         """Clearing when no session exists returns 204 (idempotent)."""
@@ -392,21 +412,23 @@ class TestTestSessionAuthenticationMiddleware:
 
         assert response.status_code == 200
 
-    def test_no_test_session_allows_access_but_no_auth_context(
+    def test_no_test_session_returns_local_user(
         self, testing_client: FlaskClient
     ):
-        """Without a test session, endpoints work but /api/auth/self returns 401.
+        """Without a test session and OIDC disabled, /api/auth/self returns local-user.
 
         With OIDC disabled, endpoints don't require authentication.
-        However, /api/auth/self requires a valid auth context to return user info.
+        /api/auth/self returns a default local-user identity.
         """
         # Regular endpoints work without auth when OIDC is disabled
         response = testing_client.get("/api/devices")
         assert response.status_code == 200
 
-        # But /api/auth/self returns 401 since there's no auth context
+        # /api/auth/self returns default local-user when OIDC is disabled
         response = testing_client.get("/api/auth/self")
-        assert response.status_code == 401
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["subject"] == "local-user"
 
 
 @pytest.fixture

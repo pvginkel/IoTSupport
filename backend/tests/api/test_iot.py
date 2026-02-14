@@ -6,7 +6,7 @@ from flask import Flask
 from flask.testing import FlaskClient
 from sqlalchemy import select
 
-from app.config import Settings
+from app.app_config import AppSettings
 from app.models.coredump import CoreDump, ParseStatus
 from app.models.device import RotationState
 from app.services.container import ServiceContainer
@@ -334,7 +334,7 @@ class TestIotCoredump:
     """Tests for POST /api/iot/coredump."""
 
     def test_upload_coredump_success(
-        self, app: Flask, client: FlaskClient, container: ServiceContainer, test_settings: Settings
+        self, app: Flask, client: FlaskClient, container: ServiceContainer, test_app_settings: AppSettings
     ) -> None:
         """Test successful coredump upload creates .dmp file and DB record."""
         _, device_key, model_code = create_test_device(app, container, model_code="cd1")
@@ -354,7 +354,7 @@ class TestIotCoredump:
         assert data["filename"].endswith(".dmp")
 
         # Verify .dmp file was written
-        coredumps_dir = test_settings.coredumps_dir
+        coredumps_dir = test_app_settings.coredumps_dir
         assert coredumps_dir is not None
         device_dir = coredumps_dir / device_key
         assert device_dir.exists()

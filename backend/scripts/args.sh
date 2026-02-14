@@ -1,10 +1,8 @@
 mkdir -p $(pwd)/tmp
 
-NAME=electronics-inventory
+NAME=iot-support
+BACKEND_PORT=3201
+TESTING_BACKEND_PORT=$((BACKEND_PORT + 10))
 ARGS="
-    -p 3201:3201
-    -v $(pwd)/tmp:/data
-    -e ESP32_CONFIGS_DIR=/data/esp32-configs
-    -e ASSETS_DIR=/data/assets
-    -e SIGNING_KEY_PATH=/data/signing_key.pem
+    -p ${BACKEND_PORT}:${BACKEND_PORT}
 "

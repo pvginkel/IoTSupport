@@ -1,35 +1,39 @@
 [tool.poetry]
-name = "iot-support-backend"
+name = "iot-support"
 version = "0.1.0"
 description = "Flask backend for managing ESP32 IoT device configurations"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Pieter van Ginkel <pvginkel@gmail.com>"]
 readme = "README.md"
 packages = [{include = "app"}]
 
 [tool.poetry.scripts]
+cli = "app.cli:main"
 dev = "run:main"
-iotsupport-cli = "app.cli:main"
 
 [tool.poetry.dependencies]
 python = "^3.11"
 flask = "^3.0.0"
-flask-sqlalchemy = "^3.1.0"
 pydantic = "^2.5.0"
 pydantic-settings = "^2.1.0"
 spectree = "^1.2.0"
 flask-cors = "^4.0.0"
 waitress = "^3.0.0"
+paste = "^3.10.1"
 dependency-injector = "^4.48.1"
+requests = "^2.31.0"
 prometheus-flask-exporter = "^0.23.0"
-cryptography = "^42.0.0"
+python-dotenv = "^1.0.0"
+flask-sqlalchemy = "^3.1.0"
+alembic = "^1.13.0"
+psycopg = {extras = ["binary"], version = "^3.1.0"}
+pyjwt = "^2.11.0"
+cryptography = "^46.0.4"
+httpx = "^0.28.1"
+itsdangerous = "^2.1.0"
 pillow = "^11.0.0"
-httpx = "^0.27.0"
 pypng = "^0.20220715.0"
 lz4 = "^4.3.0"
 paho-mqtt = "^2.1.0"
-pyjwt = {extras = ["crypto"], version = "^2.8.0"}
-psycopg = {extras = ["binary"], version = "^3.1.0"}
-alembic = "^1.13.0"
 croniter = "^6.0.0"
 jsonschema = "^4.26.0"
 dateparser = "^1.2.2"
@@ -42,6 +46,7 @@ pytest = "^7.4.0"
 pytest-cov = "^4.1.0"
 types-flask = "^1.1.0"
 types-flask-cors = "^4.0.0"
+types-requests = "^2.31.0"
 types-waitress = "^3.0.1.20250801"
 types-croniter = "^6.0.0.20250809"
 types-dateparser = "^1.2.2.20250809"
@@ -73,7 +78,8 @@ ignore = [
 "app/utils/lvgl/LVGLImage.py" = ["I001", "UP035", "B904", "UP006", "C416", "B905", "E741"]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.12"
+plugins = ["sqlalchemy.ext.mypy.plugin"]
 check_untyped_defs = true
 disallow_any_generics = true
 disallow_incomplete_defs = true
@@ -90,48 +96,12 @@ disallow_untyped_defs = false
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "spectree.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "prometheus_client.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "png.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "lz4.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "PIL.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "httpx.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "paho.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
 module = "alembic.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "flask_sqlalchemy.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = ["sqlalchemy", "sqlalchemy.*"]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "app.utils.lvgl.LVGLImage"
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "app.models.*"
+disable_error_code = ["attr-defined"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -139,8 +109,13 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v"
+markers = [
+    "integration: marks tests as integration tests (requires external dependencies)",
+    "slow: marks tests as slow running tests"
+]
 filterwarnings = [
     "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+    "ignore::pluggy._warnings.PluggyTeardownRaisedWarning",
     "ignore::DeprecationWarning:pydantic.*"
 ]
 

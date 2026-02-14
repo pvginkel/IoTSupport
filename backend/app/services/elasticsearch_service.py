@@ -11,7 +11,7 @@ import httpx
 from app.exceptions import ExternalServiceException, ServiceUnavailableException
 
 if TYPE_CHECKING:
-    from app.config import Settings
+    from app.app_config import AppSettings
     from app.services.metrics_service import MetricsService
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class ElasticsearchService:
 
     def __init__(
         self,
-        config: "Settings",
+        config: "AppSettings",
         metrics_service: "MetricsService",
     ) -> None:
         """Initialize Elasticsearch service.
@@ -92,9 +92,7 @@ class ElasticsearchService:
 
     def _record_duration(self, operation: str, duration: float) -> None:
         """Record Elasticsearch query duration."""
-        self.metrics_service.elasticsearch_query_duration_seconds.labels(
-            operation=operation
-        ).observe(duration)
+        self.metrics_service.record_elasticsearch_query(operation, duration)
 
     def query_logs(
         self,

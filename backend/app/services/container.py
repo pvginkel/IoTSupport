@@ -3,6 +3,7 @@
 from dependency_injector import containers, providers
 from sqlalchemy.orm import sessionmaker
 
+from app.app_config import AppSettings
 from app.config import Settings
 from app.services.auth_service import AuthService
 from app.services.coredump_service import CoredumpService
@@ -10,6 +11,7 @@ from app.services.device_model_service import DeviceModelService
 from app.services.device_service import DeviceService
 from app.services.elasticsearch_service import ElasticsearchService
 from app.services.firmware_service import FirmwareService
+from app.services.health_service import HealthService
 from app.services.image_proxy_service import ImageProxyService
 from app.services.keycloak_admin_service import KeycloakAdminService
 from app.services.logsink_service import LogSinkService
@@ -18,36 +20,81 @@ from app.services.mqtt_service import MqttService
 from app.services.oidc_client_service import OidcClientService
 from app.services.rotation_service import RotationService
 from app.services.settings_service import SettingsService
+from app.services.sse_connection_manager import SSEConnectionManager
+from app.services.task_service import TaskService
 from app.services.test_data_service import TestDataService
 from app.services.testing_service import TestingService
 from app.utils.lifecycle_coordinator import LifecycleCoordinator
+from app.utils.temp_file_manager import TempFileManager
 
 
 class ServiceContainer(containers.DeclarativeContainer):
     """Container for service dependency injection."""
 
-    # Configuration provider - Singleton for app settings
+    # Configuration providers
     config = providers.Dependency(instance_of=Settings)
-
-    # Database session providers
+    app_config = providers.Dependency(instance_of=AppSettings)
     session_maker = providers.Dependency(instance_of=sessionmaker)
     db_session = providers.ContextLocalSingleton(
         session_maker.provided.call()
     )
 
-    # LifecycleCoordinator - Singleton for graceful shutdown
+    # Lifecycle coordinator - manages startup and graceful shutdown
     lifecycle_coordinator = providers.Singleton(
         LifecycleCoordinator,
         graceful_shutdown_timeout=config.provided.graceful_shutdown_timeout,
     )
 
-    # MetricsService - Singleton for app lifetime
-    metrics_service = providers.Singleton(MetricsService)
+    # Health service - callback registry for health checks
+    health_service = providers.Singleton(
+        HealthService,
+        lifecycle_coordinator=lifecycle_coordinator,
+        settings=config,
+    )
+
+    # Temp file manager
+    temp_file_manager = providers.Singleton(
+        TempFileManager,
+        lifecycle_coordinator=lifecycle_coordinator,
+    )
+
+    # Metrics service - background thread for Prometheus metrics
+    metrics_service = providers.Singleton(
+        MetricsService,
+        container=providers.Self(),
+        lifecycle_coordinator=lifecycle_coordinator,
+    )
+
+    # Auth services - OIDC authentication
+    auth_service = providers.Singleton(AuthService, config=config)
+    oidc_client_service = providers.Singleton(OidcClientService, config=config)
+
+    # Testing service - Singleton for test session management
+    testing_service = providers.Singleton(TestingService)
+
+    # SSE connection manager (always included - TaskService depends on it)
+    sse_connection_manager = providers.Singleton(
+        SSEConnectionManager,
+        gateway_url=config.provided.sse_gateway_url,
+        http_timeout=2.0,
+    )
+
+    # Task service - in-memory task management
+    task_service = providers.Singleton(
+        TaskService,
+        lifecycle_coordinator=lifecycle_coordinator,
+        sse_connection_manager=sse_connection_manager,
+        max_workers=config.provided.task_max_workers,
+        task_timeout=config.provided.task_timeout_seconds,
+        cleanup_interval=config.provided.task_cleanup_interval_seconds,
+    )
+
+    # --- IoT-specific services ---
 
     # MqttService - Singleton to maintain persistent MQTT connection
     mqtt_service = providers.Singleton(
         MqttService,
-        config=config,
+        config=app_config,
     )
 
     # TestDataService - Factory creates new instance per request with database session
@@ -68,41 +115,24 @@ class ServiceContainer(containers.DeclarativeContainer):
         metrics_service=metrics_service,
     )
 
-    # AuthService - Singleton to cache JWKS keys for performance
-    auth_service = providers.Singleton(
-        AuthService,
-        config=config,
-        metrics_service=metrics_service,
-    )
-
-    # OidcClientService - Singleton to cache OIDC endpoints
-    oidc_client_service = providers.Singleton(
-        OidcClientService,
-        config=config,
-        metrics_service=metrics_service,
-    )
-
-    # TestingService - Singleton for test session management
-    testing_service = providers.Singleton(TestingService)
-
     # KeycloakAdminService - Singleton for admin API access
     keycloak_admin_service = providers.Singleton(
         KeycloakAdminService,
-        config=config,
+        config=app_config,
         metrics_service=metrics_service,
     )
 
     # ElasticsearchService - Singleton for device log queries
     elasticsearch_service = providers.Singleton(
         ElasticsearchService,
-        config=config,
+        config=app_config,
         metrics_service=metrics_service,
     )
 
     # LogSinkService - Singleton for MQTT log ingestion to Elasticsearch
     logsink_service = providers.Singleton(
         LogSinkService,
-        config=config,
+        config=app_config,
         mqtt_service=mqtt_service,
         lifecycle_coordinator=lifecycle_coordinator,
     )
@@ -110,17 +140,14 @@ class ServiceContainer(containers.DeclarativeContainer):
     # FirmwareService - Singleton for firmware file management
     firmware_service = providers.Singleton(
         FirmwareService,
-        assets_dir=config.provided.assets_dir,
+        assets_dir=app_config.provided.assets_dir,
     )
 
     # CoredumpService - Singleton for coredump file management + DB tracking + parsing
-    # Note: container is not injected via constructor because providers.Self()
-    # resolves to None during Singleton construction. Instead, the container
-    # reference is set post-init in create_app() via coredump_service().container = container.
     coredump_service = providers.Singleton(
         CoredumpService,
-        coredumps_dir=config.provided.coredumps_dir,
-        config=config,
+        coredumps_dir=app_config.provided.coredumps_dir,
+        config=app_config,
         firmware_service=firmware_service,
         metrics_service=metrics_service,
     )
@@ -137,7 +164,7 @@ class ServiceContainer(containers.DeclarativeContainer):
     device_service = providers.Factory(
         DeviceService,
         db=db_session,
-        config=config,
+        config=app_config,
         device_model_service=device_model_service,
         keycloak_admin_service=keycloak_admin_service,
         mqtt_service=mqtt_service,
@@ -147,7 +174,7 @@ class ServiceContainer(containers.DeclarativeContainer):
     rotation_service = providers.Factory(
         RotationService,
         db=db_session,
-        config=config,
+        config=app_config,
         device_service=device_service,
         keycloak_admin_service=keycloak_admin_service,
         mqtt_service=mqtt_service,

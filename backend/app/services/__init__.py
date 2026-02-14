@@ -1,1 +1,1 @@
-"""Service layer for IoT support backend."""
+"""Services package."""

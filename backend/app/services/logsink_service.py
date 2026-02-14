@@ -20,7 +20,7 @@ from app.utils.ansi import strip_ansi
 from app.utils.lifecycle_coordinator import LifecycleCoordinatorProtocol, LifecycleEvent
 
 if TYPE_CHECKING:
-    from app.config import Settings
+    from app.app_config import AppSettings
     from app.services.mqtt_service import MqttService
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class LogSinkService:
 
     def __init__(
         self,
-        config: "Settings",
+        config: "AppSettings",
         mqtt_service: "MqttService",
         lifecycle_coordinator: LifecycleCoordinatorProtocol,
     ) -> None:

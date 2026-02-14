@@ -1,6 +1,5 @@
 """Authentication utilities for OIDC integration."""
 
-import functools
 import logging
 import time
 from collections.abc import Callable
@@ -51,7 +50,7 @@ def get_token_expiry_seconds(token: str) -> int | None:
         if exp is None:
             return None
 
-        # Calculate remaining time
+        # time.time() is correct here: exp is an absolute Unix timestamp
         remaining = int(exp - time.time())
         return max(remaining, 0)  # Don't return negative
 
@@ -74,20 +73,20 @@ def public(func: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def allow_roles(*roles: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Decorator to allow additional roles beyond admin to access an endpoint.
+    """Decorator to restrict endpoint access to specific roles.
 
-    By default, all authenticated endpoints require the 'admin' role.
-    This decorator allows additional roles to access the endpoint.
-    Admin role is always implicitly allowed.
+    When OIDC is enabled, the default authorization policy is authenticated-only
+    (any valid token passes). This decorator adds role enforcement: only users
+    with at least one of the listed roles are allowed.
 
     Args:
         *roles: Role names that are allowed to access this endpoint
 
     Usage:
-        @some_bp.route("/pipeline/upload")
-        @allow_roles("pipeline")
-        def upload_firmware():
-            return {"status": "uploaded"}
+        @some_bp.route("/admin")
+        @allow_roles("admin")
+        def admin_endpoint():
+            return {"status": "admin only"}
     """
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         func.allowed_roles = set(roles)  # type: ignore[attr-defined]
@@ -104,38 +103,6 @@ def get_auth_context() -> AuthContext | None:
     return getattr(g, "auth_context", None)
 
 
-def requires_role(role: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Decorator to require a specific role for endpoint access.
-
-    Args:
-        role: Required role name
-
-    Usage:
-        @some_bp.route("/admin")
-        @requires_role("admin")
-        def admin_endpoint():
-            return {"data": "sensitive"}
-    """
-
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            auth_context = get_auth_context()
-            if not auth_context:
-                raise AuthenticationException("Authentication required")
-
-            if role not in auth_context.roles:
-                raise AuthorizationException(
-                    f"Insufficient permissions - '{role}' role required"
-                )
-
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
 def extract_token_from_request(config: Settings) -> str | None:
     """Extract JWT token from request cookie or Authorization header.
 
@@ -147,7 +114,7 @@ def extract_token_from_request(config: Settings) -> str | None:
     Returns:
         JWT token string or None if not found
     """
-    # Check cookie first
+    # Check cookie first (takes precedence)
     token = request.cookies.get(config.oidc_cookie_name)
     if token:
         logger.debug("Token extracted from cookie")
@@ -167,10 +134,9 @@ def extract_token_from_request(config: Settings) -> str | None:
 def check_authorization(auth_context: AuthContext, view_func: Callable[..., Any] | None = None) -> None:
     """Check if user has required authorization for the current request.
 
-    Authorization rules:
-    - 'admin' role grants full access to all endpoints
-    - Endpoints decorated with @allow_roles("role") also allow those roles
-    - Without @allow_roles, only admin role is permitted
+    Authorization rules (EI-specific, different from IoTSupport):
+    - Default: authenticated-only (any valid token passes, no role check)
+    - When @allow_roles is set: user must have at least one of the listed roles
 
     Args:
         auth_context: Authenticated user context
@@ -179,29 +145,23 @@ def check_authorization(auth_context: AuthContext, view_func: Callable[..., Any]
     Raises:
         AuthorizationException: If user lacks required permissions
     """
-    # Admin role always grants full access
-    if "admin" in auth_context.roles:
-        logger.debug("User has admin role - full access granted")
-        return
-
-    # Check for additional allowed roles from @allow_roles decorator
+    # Check for role restrictions from @allow_roles decorator
     if view_func is not None:
         allowed_roles: set[str] = getattr(view_func, "allowed_roles", set())
-        for role in allowed_roles:
-            if role in auth_context.roles:
-                logger.debug("User has '%s' role - access granted via @allow_roles", role)
-                return
-
-        # User has a role but it's not allowed for this endpoint
         if allowed_roles:
+            # Role enforcement is active: user must have at least one allowed role
+            for role in allowed_roles:
+                if role in auth_context.roles:
+                    logger.debug("User has '%s' role - access granted via @allow_roles", role)
+                    return
+
+            # User has no matching role
             raise AuthorizationException(
-                f"Insufficient permissions - requires 'admin' or one of: {', '.join(sorted(allowed_roles))}"
+                f"Insufficient permissions - requires one of: {', '.join(sorted(allowed_roles))}"
             )
 
-    # No recognized roles
-    raise AuthorizationException(
-        "Insufficient permissions - 'admin' role required"
-    )
+    # No @allow_roles set: authenticated-only (any valid token passes)
+    logger.debug("No role restriction - authenticated user granted access")
 
 
 def authenticate_request(
@@ -348,7 +308,7 @@ def deserialize_auth_state(signed_data: str, secret_key: str, max_age: int = 600
 def get_cookie_secure(config: Settings) -> bool:
     """Determine if cookies should use Secure flag.
 
-    In the new config system, oidc_cookie_secure is always resolved
+    In the config system, oidc_cookie_secure is always resolved
     (either explicit or inferred from baseurl), so we just return it.
 
     Args:

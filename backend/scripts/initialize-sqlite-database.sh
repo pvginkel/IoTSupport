@@ -7,19 +7,17 @@ BACKEND_DIR="$(dirname "$SCRIPT_DIR")"
 
 print_usage() {
     cat <<'EOF'
-Usage: initialize-sqlite-database.sh --db PATH
-
-Creates and initializes a SQLite database with the current schema.
-This is used by Playwright tests to create a seed database that can be
-copied for each test worker.
+Usage: initialize-sqlite-database.sh --db PATH [--load-test-data]
 
 Options:
   --db PATH            Path to the SQLite database file to initialize (required)
+  --load-test-data     Load fixed test dataset after initializing the schema
   -h, --help           Show this help message
 EOF
 }
 
 DB_PATH=""
+LOAD_TEST_DATA=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -31,6 +29,10 @@ while [[ $# -gt 0 ]]; do
             fi
             DB_PATH="$2"
             shift 2
+            ;;
+        --load-test-data)
+            LOAD_TEST_DATA=true
+            shift
             ;;
         --help|-h)
             print_usage
@@ -57,7 +59,12 @@ echo "Using DATABASE_URL=$DATABASE_URL"
 
 cd "$BACKEND_DIR"
 
-echo "Applying database migrations..."
-poetry run iotsupport-cli upgrade-db
+if $LOAD_TEST_DATA; then
+    echo "Loading fixed test dataset into SQLite database..."
+    poetry run cli load-test-data --yes-i-am-sure
+else
+    echo "Applying database migrations..."
+    poetry run cli upgrade-db
+fi
 
 echo "SQLite database initialization complete."

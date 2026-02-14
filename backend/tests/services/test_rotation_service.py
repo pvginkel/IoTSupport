@@ -215,7 +215,7 @@ class TestRotationServiceProcessJob:
                 assert result.device_rotated is None
 
     def test_process_rotation_job_timeout_handling(
-        self, app: Flask, container: ServiceContainer, test_settings
+        self, app: Flask, container: ServiceContainer, test_app_settings
     ) -> None:
         """Test that timed-out pending devices are handled."""
         with app.app_context():
@@ -246,7 +246,7 @@ class TestRotationServiceProcessJob:
 
                 # Put device in pending state with old timestamp
                 device.rotation_state = RotationState.PENDING.value
-                timeout_seconds = test_settings.rotation_timeout_seconds
+                timeout_seconds = test_app_settings.rotation_timeout_seconds
                 device.last_rotation_attempt_at = datetime.utcnow() - timedelta(
                     seconds=timeout_seconds + 60
                 )
@@ -547,7 +547,7 @@ class TestRotationServiceDashboard:
                 assert d_pending.key in healthy_keys
 
     def test_dashboard_warning_timeout_under_threshold(
-        self, app: Flask, container: ServiceContainer, test_settings
+        self, app: Flask, container: ServiceContainer, test_app_settings
     ) -> None:
         """Test dashboard classifies TIMEOUT under threshold as warning."""
         with app.app_context():
@@ -568,7 +568,7 @@ class TestRotationServiceDashboard:
                 device = device_service.create_device(device_model_id=model.id, config="{}")
                 device.rotation_state = RotationState.TIMEOUT.value
                 # Less than threshold days ago
-                threshold_days = test_settings.rotation_critical_threshold_days
+                threshold_days = test_app_settings.rotation_critical_threshold_days
                 device.last_rotation_completed_at = datetime.utcnow() - timedelta(
                     days=threshold_days - 1
                 )
@@ -583,7 +583,7 @@ class TestRotationServiceDashboard:
                 assert result["warning"][0]["key"] == device.key
 
     def test_dashboard_critical_timeout_over_threshold(
-        self, app: Flask, container: ServiceContainer, test_settings
+        self, app: Flask, container: ServiceContainer, test_app_settings
     ) -> None:
         """Test dashboard classifies TIMEOUT over threshold as critical."""
         with app.app_context():
@@ -604,7 +604,7 @@ class TestRotationServiceDashboard:
                 device = device_service.create_device(device_model_id=model.id, config="{}")
                 device.rotation_state = RotationState.TIMEOUT.value
                 # More than threshold days ago
-                threshold_days = test_settings.rotation_critical_threshold_days
+                threshold_days = test_app_settings.rotation_critical_threshold_days
                 device.last_rotation_completed_at = datetime.utcnow() - timedelta(
                     days=threshold_days + 1
                 )
