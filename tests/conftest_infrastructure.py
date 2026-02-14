@@ -115,7 +115,7 @@ def test_app_settings() -> AppSettings:
 
 
 @pytest.fixture(scope="session")
-def template_connection() -> Generator[sqlite3.Connection, None, None]:
+def template_connection() -> Generator[sqlite3.Connection]:
     """Create a template SQLite database once and apply migrations."""
     conn = sqlite3.connect(":memory:", check_same_thread=False)
 
@@ -141,7 +141,7 @@ def template_connection() -> Generator[sqlite3.Connection, None, None]:
 
 
 @pytest.fixture
-def app(test_settings: Settings, test_app_settings: AppSettings, template_connection: sqlite3.Connection) -> Generator[Flask, None, None]:
+def app(test_settings: Settings, test_app_settings: AppSettings, template_connection: sqlite3.Connection) -> Generator[Flask]:
     """Create Flask app for testing using a fresh copy of the template database."""
     clone_conn = sqlite3.connect(":memory:", check_same_thread=False)
     template_connection.backup(clone_conn)
@@ -177,7 +177,7 @@ def app(test_settings: Settings, test_app_settings: AppSettings, template_connec
 
 
 @pytest.fixture
-def session(container: ServiceContainer) -> Generator[Session, None, None]:
+def session(container: ServiceContainer) -> Generator[Session]:
     """Create a new database session for a test."""
 
     session = container.db_session()
@@ -347,7 +347,7 @@ def oidc_app(
     template_connection: sqlite3.Connection,
     mock_oidc_discovery: dict[str, Any],
     generate_test_jwt: Any,
-) -> Generator[Flask, None, None]:
+) -> Generator[Flask]:
     """Create Flask app with OIDC enabled, using the standard template clone pattern.
 
     Keeps httpx.get and PyJWKClient mocks active so that AuthService can

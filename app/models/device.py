@@ -1,7 +1,7 @@
 """Device model for IoT device instances."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -13,7 +13,7 @@ if False:  # TYPE_CHECKING
     from app.models.device_model import DeviceModel
 
 
-class RotationState(str, Enum):
+class RotationState(StrEnum):
     """Rotation state machine states.
 
     OK: Device is operating normally, secret is valid

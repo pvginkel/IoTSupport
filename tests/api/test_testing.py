@@ -102,7 +102,7 @@ def _override_settings_for_sqlite(settings: Settings, conn: sqlite3.Connection) 
 
 
 @pytest.fixture(scope="module")
-def testing_template_connection(tmp_path_factory) -> Generator[sqlite3.Connection, None, None]:
+def testing_template_connection(tmp_path_factory) -> Generator[sqlite3.Connection]:
     """Create a template SQLite database for testing mode tests."""
     tmp_path = tmp_path_factory.mktemp("testing")
     conn = sqlite3.connect(":memory:", check_same_thread=False)
@@ -135,7 +135,7 @@ def testing_app(
     testing_settings: Settings,
     testing_app_settings: AppSettings,
     testing_template_connection: sqlite3.Connection,
-) -> Generator[Flask, None, None]:
+) -> Generator[Flask]:
     """Create Flask app with testing mode enabled and database set up."""
     clone_conn = sqlite3.connect(":memory:", check_same_thread=False)
     testing_template_connection.backup(clone_conn)
@@ -166,7 +166,7 @@ def testing_container(testing_app: Flask) -> ServiceContainer:
 
 
 @pytest.fixture
-def clear_test_sessions(testing_container: ServiceContainer) -> Generator[None, None, None]:
+def clear_test_sessions(testing_container: ServiceContainer) -> Generator[None]:
     """Clear test sessions before and after each test.
 
     Note: Not autouse - only used by tests that need testing_container.

@@ -1,7 +1,7 @@
 """CoreDump model for ESP32 device crash dumps."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -12,7 +12,7 @@ if False:  # TYPE_CHECKING
     from app.models.device import Device
 
 
-class ParseStatus(str, Enum):
+class ParseStatus(StrEnum):
     """Parse status for coredump analysis.
 
     PENDING: Coredump uploaded, awaiting parsing (or sidecar not configured)
