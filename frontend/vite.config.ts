@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
 function backendProxyStatusPlugin(target: string): Plugin {
-  const probeUrl = new URL('/api/health', target).toString()
+  const probeUrl = new URL('/health/readyz', target).toString()
 
   const checkBackend = async () => {
     const controller = new AbortController()

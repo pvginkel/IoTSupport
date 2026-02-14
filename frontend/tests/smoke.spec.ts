@@ -35,7 +35,7 @@ test.describe('Smoke Tests', () => {
 
   test('backend health endpoint responds via proxy', async ({ request }) => {
     // Access backend through the Vite proxy
-    const response = await request.get('/api/health');
+    const response = await request.get('/health/readyz');
     expect(response.ok()).toBeTruthy();
   });
 
