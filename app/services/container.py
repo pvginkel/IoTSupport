@@ -6,11 +6,13 @@ from sqlalchemy.orm import sessionmaker
 from app.app_config import AppSettings
 from app.config import Settings
 from app.services.auth_service import AuthService
+from app.services.cas_image_service import CasImageService
 from app.services.coredump_service import CoredumpService
 from app.services.device_model_service import DeviceModelService
 from app.services.device_service import DeviceService
 from app.services.elasticsearch_service import ElasticsearchService
 from app.services.firmware_service import FirmwareService
+from app.services.frontend_version_service import FrontendVersionService
 from app.services.health_service import HealthService
 from app.services.image_proxy_service import ImageProxyService
 from app.services.keycloak_admin_service import KeycloakAdminService
@@ -19,6 +21,7 @@ from app.services.metrics_service import MetricsService
 from app.services.mqtt_service import MqttService
 from app.services.oidc_client_service import OidcClientService
 from app.services.rotation_service import RotationService
+from app.services.s3_service import S3Service
 from app.services.settings_service import SettingsService
 from app.services.sse_connection_manager import SSEConnectionManager
 from app.services.task_service import TaskService
@@ -37,6 +40,14 @@ class ServiceContainer(containers.DeclarativeContainer):
     session_maker = providers.Dependency(instance_of=sessionmaker)
     db_session = providers.ContextLocalSingleton(
         session_maker.provided.call()
+    )
+
+    # S3 storage services
+    s3_service = providers.Factory(S3Service, settings=config)
+    cas_image_service = providers.Factory(
+        CasImageService,
+        s3_service=s3_service,
+        app_settings=app_config,
     )
 
     # Lifecycle coordinator - manages startup and graceful shutdown
@@ -87,6 +98,14 @@ class ServiceContainer(containers.DeclarativeContainer):
         max_workers=config.provided.task_max_workers,
         task_timeout=config.provided.task_timeout_seconds,
         cleanup_interval=config.provided.task_cleanup_interval_seconds,
+    )
+
+    # Frontend version service - SSE version notifications
+    frontend_version_service = providers.Singleton(
+        FrontendVersionService,
+        settings=config,
+        lifecycle_coordinator=lifecycle_coordinator,
+        sse_connection_manager=sse_connection_manager,
     )
 
     # --- IoT-specific services ---

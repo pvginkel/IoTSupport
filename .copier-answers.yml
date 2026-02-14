@@ -13,5 +13,5 @@ s3_bucket_name: iot-support-attachments
 testing_port_offset: 10
 use_database: true
 use_oidc: true
-use_s3: false
-use_sse: false
+use_s3: true
+use_sse: true

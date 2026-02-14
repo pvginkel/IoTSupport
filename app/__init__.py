@@ -1,5 +1,7 @@
 """Flask application factory."""
 
+import logging
+
 from flask import g
 from flask_cors import CORS
 
@@ -86,6 +88,22 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
     from app.utils import _init_request_id
     _init_request_id(app)
 
+    # Set up log capture handler in testing mode
+    if settings.is_testing:
+        from app.utils.log_capture import LogCaptureHandler
+        log_handler = LogCaptureHandler.get_instance()
+
+        # Set lifecycle coordinator for connection_close events
+        lifecycle_coordinator = container.lifecycle_coordinator()
+        log_handler.set_lifecycle_coordinator(lifecycle_coordinator)
+
+        # Attach to root logger
+        root_logger = logging.getLogger()
+        root_logger.addHandler(log_handler)
+        root_logger.setLevel(logging.INFO)
+
+        app.logger.info("Log capture handler initialized for testing mode")
+
     # Register error handlers: core + business (template), then app-specific hook
     from app.utils.flask_error_handlers import (
         register_business_error_handlers,
@@ -137,9 +155,28 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
     app.register_blueprint(health_bp)
     app.register_blueprint(metrics_bp)
 
+    # Always register testing blueprints (runtime check handles access control)
+    from app.api.testing_logs import testing_logs_bp
+    app.register_blueprint(testing_logs_bp)
+
+    from app.api.testing_sse import testing_sse_bp
+    app.register_blueprint(testing_sse_bp)
+
+    # Register SSE Gateway callback blueprint
+    from app.api.sse import sse_bp
+    app.register_blueprint(sse_bp)
+
     # Register testing auth endpoints (runtime check handles access control)
     from app.api.testing_auth import testing_auth_bp
     app.register_blueprint(testing_auth_bp)
+
+    # Register CAS (Content-Addressable Storage) blueprint
+    from app.api.cas import cas_bp
+    app.register_blueprint(cas_bp)
+
+    # Register testing content endpoints (runtime check handles access control)
+    from app.api.testing_content import testing_content_bp
+    app.register_blueprint(testing_content_bp)
 
     @app.teardown_request
     def close_session(exc: Exception | None) -> None:
@@ -173,12 +210,24 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
         temp_file_manager = container.temp_file_manager()
         temp_file_manager.start_cleanup_thread()
 
+        # Ensure S3 bucket exists during startup
+        try:
+            s3_service = container.s3_service()
+            s3_service.ensure_bucket_exists()
+        except Exception as e:
+            # Log warning but don't fail startup - S3 might be optional
+            app.logger.warning(f"Failed to ensure S3 bucket exists: {e}")
+
         # Initialize request diagnostics if enabled
         from app.services.diagnostics_service import DiagnosticsService
         diagnostics_service = DiagnosticsService(settings)
         with app.app_context():
             diagnostics_service.init_app(app, db.engine)
         app.diagnostics_service = diagnostics_service
+
+        # Initialize FrontendVersionService singleton to register its observer callback
+        # with SSEConnectionManager. Must happen before fire_startup().
+        container.frontend_version_service()
 
         # Signal that application startup is complete. Services that registered
         # for STARTUP notifications will be invoked here.

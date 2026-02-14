@@ -171,6 +171,52 @@ class Environment(BaseSettings):
         description="Cookie name for storing refresh token"
     )
 
+    # ── use_s3 ─────────────────────────────────────────────────────────
+
+    S3_ENDPOINT_URL: str = Field(
+        default="http://localhost:9000",
+        description="Ceph RGW S3-compatible endpoint"
+    )
+    S3_ACCESS_KEY_ID: str = Field(
+        default="admin",
+        description="S3 access key"
+    )
+    S3_SECRET_ACCESS_KEY: str = Field(
+        default="password",
+        description="S3 secret key"
+    )
+    S3_BUCKET_NAME: str = Field(
+        default="iot-support-attachments",
+        description="Single bucket for all documents"
+    )
+    S3_REGION: str = Field(
+        default="us-east-1",
+        description="S3 region for boto3"
+    )
+    S3_USE_SSL: bool = Field(
+        default=False,
+        description="SSL for S3 connections (False for local Ceph)"
+    )
+
+    # ── use_sse ────────────────────────────────────────────────────────
+
+    FRONTEND_VERSION_URL: str = Field(
+        default="http://localhost:3000/version.json",
+        description="URL to fetch frontend version information"
+    )
+    SSE_HEARTBEAT_INTERVAL: int = Field(
+        default=5,
+        description="SSE heartbeat interval in seconds (5 for development, 30 for production)"
+    )
+    SSE_GATEWAY_URL: str = Field(
+        default="http://localhost:3001",
+        description="SSE Gateway base URL for internal send endpoint"
+    )
+    SSE_CALLBACK_SECRET: str = Field(
+        default="",
+        description="Shared secret for authenticating SSE Gateway callbacks (required in production)"
+    )
+
 
 class Settings(BaseModel):
     """Application settings with lowercase fields and derived values.
@@ -226,6 +272,22 @@ class Settings(BaseModel):
     oidc_cookie_secure: bool = False  # Resolved: inferred from baseurl via load()
     oidc_cookie_samesite: str = "Lax"
     oidc_refresh_cookie_name: str = "refresh_token"
+
+    # ── use_s3 ─────────────────────────────────────────────────────────
+
+    s3_endpoint_url: str = "http://localhost:9000"
+    s3_access_key_id: str = "admin"
+    s3_secret_access_key: str = "password"
+    s3_bucket_name: str = "iot-support-attachments"
+    s3_region: str = "us-east-1"
+    s3_use_ssl: bool = False
+
+    # ── use_sse ────────────────────────────────────────────────────────
+
+    frontend_version_url: str = "http://localhost:3000/version.json"
+    sse_heartbeat_interval: int = 5  # Resolved: 30 for production via load()
+    sse_gateway_url: str = "http://localhost:3001"
+    sse_callback_secret: str = ""
 
     @property
     def is_testing(self) -> bool:
@@ -306,6 +368,11 @@ class Settings(BaseModel):
         if env is None:
             env = Environment()
 
+        # Compute sse_heartbeat_interval: 30 for production, else use env value
+        sse_heartbeat_interval = (
+            30 if env.FLASK_ENV == "production" else env.SSE_HEARTBEAT_INTERVAL
+        )
+
         # Resolve OIDC audience: fall back to client_id if not explicitly set
         oidc_audience = env.OIDC_AUDIENCE or env.OIDC_CLIENT_ID
 
@@ -360,6 +427,18 @@ class Settings(BaseModel):
             oidc_cookie_secure=oidc_cookie_secure,
             oidc_cookie_samesite=env.OIDC_COOKIE_SAMESITE,
             oidc_refresh_cookie_name=env.OIDC_REFRESH_COOKIE_NAME,
+            # use_s3
+            s3_endpoint_url=env.S3_ENDPOINT_URL,
+            s3_access_key_id=env.S3_ACCESS_KEY_ID,
+            s3_secret_access_key=env.S3_SECRET_ACCESS_KEY,
+            s3_bucket_name=env.S3_BUCKET_NAME,
+            s3_region=env.S3_REGION,
+            s3_use_ssl=env.S3_USE_SSL,
+            # use_sse
+            frontend_version_url=env.FRONTEND_VERSION_URL,
+            sse_heartbeat_interval=sse_heartbeat_interval,
+            sse_gateway_url=env.SSE_GATEWAY_URL,
+            sse_callback_secret=env.SSE_CALLBACK_SECRET,
         )
 
 
