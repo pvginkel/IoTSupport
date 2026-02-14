@@ -71,7 +71,7 @@ class CoredumpService:
         """
         self.coredumps_dir = coredumps_dir
         self.config = config
-        self.container: "ServiceContainer | None" = None
+        self.container: ServiceContainer | None = None
         self.firmware_service = firmware_service
         self.metrics_service = metrics_service
 
