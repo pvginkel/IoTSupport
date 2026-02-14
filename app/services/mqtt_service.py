@@ -52,11 +52,13 @@ class MqttService:
     def __init__(
         self,
         config: "AppSettings",
+        flask_env: str = "production",
     ) -> None:
         """Initialize MQTT service with optional broker connection.
 
         Args:
             config: Application settings with MQTT configuration
+            flask_env: Flask environment (from infrastructure Settings)
         """
         self.config = config
 
@@ -91,7 +93,7 @@ class MqttService:
         # We check flask_env='development' (not 'testing' or 'production') to avoid
         # affecting tests or production deployments.
         if (
-            os.environ.get("FLASK_ENV") == "development"
+            flask_env == "development"
             and os.environ.get("WERKZEUG_RUN_MAIN") != "true"
         ):
             logger.info("MQTT skipped in reloader parent process (development mode)")
