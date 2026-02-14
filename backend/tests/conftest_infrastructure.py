@@ -5,6 +5,7 @@ client, session, OIDC) that the template owns. App-specific fixtures
 (domain objects, domain builders) live in conftest.py.
 """
 
+import os
 import sqlite3
 from collections.abc import Generator
 from pathlib import Path
@@ -22,12 +23,34 @@ from app import create_app
 from app.app_config import AppSettings
 from app.config import Settings
 from app.database import upgrade_database
+from app.exceptions import InvalidOperationException
 from app.services.container import ServiceContainer
 
 # Load test environment variables from .env.test
 _TEST_ENV_FILE = Path(__file__).parent.parent / ".env.test"
 if _TEST_ENV_FILE.exists():
     load_dotenv(_TEST_ENV_FILE, override=True)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Verify required infrastructure is available before running any tests.
+
+    Checks S3 connectivity at session start and aborts with a clear
+    message if the service is unreachable. This prevents confusing scattered
+    errors throughout the suite.
+    """
+    import urllib.error
+    import urllib.request
+
+    endpoint = os.environ.get("S3_ENDPOINT_URL", "http://localhost:9000")
+    try:
+        urllib.request.urlopen(endpoint, timeout=3)
+    except (urllib.error.URLError, OSError, TimeoutError):
+        pytest.exit(
+            f"S3 is not reachable at {endpoint}. "
+            "Ensure S3_ENDPOINT_URL is configured before running tests.",
+            returncode=1,
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -81,6 +104,18 @@ def _build_test_settings() -> Settings:
         # Shutdown
         graceful_shutdown_timeout=600,
         drain_auth_key="",
+        # S3 configuration (from environment, see .env.test)
+        s3_endpoint_url=os.environ.get("S3_ENDPOINT_URL", "http://localhost:9000"),
+        s3_access_key_id=os.environ.get("S3_ACCESS_KEY_ID", "admin"),
+        s3_secret_access_key=os.environ.get("S3_SECRET_ACCESS_KEY", "password"),
+        s3_bucket_name=os.environ.get("S3_BUCKET_NAME", "test-app-test-attachments"),
+        s3_region=os.environ.get("S3_REGION", "us-east-1"),
+        s3_use_ssl=os.environ.get("S3_USE_SSL", "false").lower() == "true",
+        # SSE
+        sse_heartbeat_interval=1,
+        frontend_version_url="http://localhost:3000/version.json",
+        sse_gateway_url="http://localhost:3001",
+        sse_callback_secret="",
         # OIDC Authentication (disabled for most tests)
         baseurl="http://localhost:3000",
         oidc_enabled=False,
@@ -114,6 +149,22 @@ def test_app_settings() -> AppSettings:
     return _build_test_app_settings()
 
 
+def _assert_s3_available(app: Flask) -> None:
+    """Ensure S3 storage is reachable for tests."""
+    try:
+        app.container.s3_service().ensure_bucket_exists()
+    except InvalidOperationException as exc:  # pragma: no cover - environment guard
+        pytest.fail(
+            "S3 storage is not available for tests: "
+            f"{exc.message}. Ensure S3_ENDPOINT_URL, credentials, and bucket access are configured."
+        )
+    except Exception as exc:  # pragma: no cover - environment guard
+        pytest.fail(
+            "Unexpected error while verifying S3 availability for tests: "
+            f"{exc}"
+        )
+
+
 @pytest.fixture(scope="session")
 def template_connection() -> Generator[sqlite3.Connection]:
     """Create a template SQLite database once and apply migrations."""
@@ -131,6 +182,7 @@ def template_connection() -> Generator[sqlite3.Connection]:
     template_app = create_app(settings, app_settings=app_settings, skip_background_services=True)
     with template_app.app_context():
         upgrade_database(recreate=True)
+        _assert_s3_available(template_app)
 
     # Note: Prometheus registry cleanup is handled by the autouse
     # clear_prometheus_registry fixture, no need to do it here
