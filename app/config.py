@@ -10,10 +10,17 @@ Usage:
 
     # Tests: Construct directly with test values
     settings = Settings(database_url="sqlite://", secret_key="test", ...)
+
+Fields are organized by feature flag so each group can be independently enabled:
+- Core (always present): Flask, CORS, tasks, metrics, shutdown
+- use_database: DATABASE_URL, pool settings, diagnostics, engine options
+- use_oidc: BASEURL, all OIDC_* settings
+- use_s3: all S3_* settings
+- use_sse: SSE_*, FRONTEND_VERSION_URL
+
+App-specific fields live in app/app_config.py as AppSettings.
 """
 
-import base64
-import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -25,26 +32,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Default secret key that must be changed in production
 _DEFAULT_SECRET_KEY = "dev-secret-key-change-in-production"
-
-
-class ConfigurationError(Exception):
-    """Raised when application configuration is invalid."""
-
-    pass
-
-
-def _derive_fernet_key(secret_key: str) -> str:
-    """Derive a Fernet-compatible key from SECRET_KEY.
-
-    Args:
-        secret_key: Application SECRET_KEY
-
-    Returns:
-        URL-safe base64 encoded 32-byte key as string
-    """
-    # Use SHA256 to derive a 32-byte key from the secret
-    key_bytes = hashlib.sha256(secret_key.encode()).digest()
-    return base64.urlsafe_b64encode(key_bytes).decode()
 
 
 class Environment(BaseSettings):
@@ -61,75 +48,83 @@ class Environment(BaseSettings):
         extra="ignore",
     )
 
-    # Flask settings
+    # ── Core (always present) ──────────────────────────────────────────
+
     SECRET_KEY: str = Field(default=_DEFAULT_SECRET_KEY)
     FLASK_ENV: str = Field(default="development")
     DEBUG: bool = Field(default=True)
+    CORS_ORIGINS: list[str] = Field(
+        default=["http://localhost:3000"], description="Allowed CORS origins"
+    )
+    TASK_MAX_WORKERS: int = Field(
+        default=4,
+        description="Maximum number of concurrent background tasks"
+    )
+    TASK_TIMEOUT_SECONDS: int = Field(
+        default=300,
+        description="Task execution timeout in seconds (5 minutes)"
+    )
+    TASK_CLEANUP_INTERVAL_SECONDS: int = Field(
+        default=600,
+        description="How often to clean up completed tasks in seconds (10 minutes)"
+    )
+    METRICS_UPDATE_INTERVAL: int = Field(
+        default=60,
+        description="Metrics background update interval in seconds"
+    )
+    GRACEFUL_SHUTDOWN_TIMEOUT: int = Field(
+        default=600,
+        description="Maximum seconds to wait for tasks during shutdown (10 minutes)"
+    )
+    DRAIN_AUTH_KEY: str = Field(
+        default="",
+        description="Bearer token for authenticating drain endpoint access"
+    )
 
-    # Database settings
+    # ── use_database ───────────────────────────────────────────────────
+
     DATABASE_URL: str = Field(
         default="postgresql+psycopg://postgres:postgres@localhost:5432/iotsupport",
         description="PostgreSQL connection string",
     )
-
-    # Firmware storage directory
-    ASSETS_DIR: Path | None = Field(
-        default=None,
-        description="Path to firmware storage directory"
-    )
-
-    # Coredump storage directory
-    COREDUMPS_DIR: Path | None = Field(
-        default=None,
-        description="Path to coredump storage directory"
-    )
-
-    # Coredump parsing sidecar settings
-    PARSE_SIDECAR_XFER_DIR: Path | None = Field(
-        default=None,
-        description="Path to shared volume for file transfer to parse sidecar"
-    )
-    PARSE_SIDECAR_URL: str | None = Field(
-        default=None,
-        description="Base URL of the coredump parse sidecar (e.g., http://sidecar:8080)"
-    )
-    MAX_COREDUMPS: int = Field(
+    DB_POOL_SIZE: int = Field(
         default=20,
-        description="Maximum number of coredumps to retain per device"
+        description="Number of persistent connections in the pool"
+    )
+    DB_POOL_MAX_OVERFLOW: int = Field(
+        default=30,
+        description="Max temporary connections above pool_size"
+    )
+    DB_POOL_TIMEOUT: int = Field(
+        default=10,
+        description="Seconds to wait for a connection before timeout"
+    )
+    DB_POOL_ECHO: bool | str = Field(
+        default=False,
+        description="Log connection pool checkout/checkin events. Use 'debug' for verbose output."
+    )
+    DIAGNOSTICS_ENABLED: bool = Field(
+        default=False,
+        description="Enable request timing and query profiling diagnostics"
+    )
+    DIAGNOSTICS_SLOW_QUERY_THRESHOLD_MS: int = Field(
+        default=100,
+        description="Log queries taking longer than this (milliseconds)"
+    )
+    DIAGNOSTICS_SLOW_REQUEST_THRESHOLD_MS: int = Field(
+        default=500,
+        description="Log requests taking longer than this (milliseconds)"
+    )
+    DIAGNOSTICS_LOG_ALL_QUERIES: bool = Field(
+        default=False,
+        description="Log all queries (verbose, use for debugging only)"
     )
 
-    # CORS settings
-    CORS_ORIGINS: list[str] = Field(
-        default=["http://localhost:3000"],
-        description="Allowed CORS origins"
-    )
+    # ── use_oidc ───────────────────────────────────────────────────────
 
-    # MQTT settings
-    MQTT_URL: str | None = Field(
-        default=None,
-        description="MQTT broker URL (e.g., mqtt://localhost:1883, mqtts://broker:8883)"
-    )
-    DEVICE_MQTT_URL: str | None = Field(
-        default=None,
-        description="MQTT broker URL for device provisioning (defaults to MQTT_URL if not set)"
-    )
-    MQTT_USERNAME: str | None = Field(
-        default=None,
-        description="MQTT broker username"
-    )
-    MQTT_PASSWORD: str | None = Field(
-        default=None,
-        description="MQTT broker password"
-    )
-
-    # OIDC Authentication Settings
     BASEURL: str = Field(
-        default="http://localhost:3200",
+        default="http://localhost:3000",
         description="Base URL for the application (used for redirect URI and cookie security)"
-    )
-    DEVICE_BASEURL: str | None = Field(
-        default=None,
-        description="Base URL for device provisioning (defaults to BASEURL if not set)"
     )
     OIDC_ENABLED: bool = Field(
         default=False,
@@ -137,7 +132,7 @@ class Environment(BaseSettings):
     )
     OIDC_ISSUER_URL: str | None = Field(
         default=None,
-        description="OIDC issuer URL (e.g., https://auth.example.com/realms/iot)"
+        description="OIDC issuer URL (e.g., https://auth.example.com/realms/myapp)"
     )
     OIDC_CLIENT_ID: str | None = Field(
         default=None,
@@ -176,86 +171,6 @@ class Environment(BaseSettings):
         description="Cookie name for storing refresh token"
     )
 
-    # Keycloak Admin API Settings (for device provisioning)
-    OIDC_TOKEN_URL: str | None = Field(
-        default=None,
-        description="OIDC token endpoint URL (e.g., https://auth.example.com/realms/iot/protocol/openid-connect/token)"
-    )
-    KEYCLOAK_BASE_URL: str | None = Field(
-        default=None,
-        description="Keycloak base URL (e.g., https://keycloak.local)"
-    )
-    KEYCLOAK_REALM: str | None = Field(
-        default=None,
-        description="Keycloak realm name for device clients"
-    )
-    KEYCLOAK_ADMIN_CLIENT_ID: str | None = Field(
-        default=None,
-        description="Keycloak admin service account client ID"
-    )
-    KEYCLOAK_ADMIN_CLIENT_SECRET: str | None = Field(
-        default=None,
-        description="Keycloak admin service account client secret"
-    )
-    KEYCLOAK_DEVICE_SCOPE_NAME: str = Field(
-        default="iot-device-audience",
-        description="Client scope name to add to device clients (must contain audience mapper)"
-    )
-
-    # WiFi Credentials for Provisioning
-    WIFI_SSID: str | None = Field(
-        default=None,
-        description="WiFi SSID for device provisioning"
-    )
-    WIFI_PASSWORD: str | None = Field(
-        default=None,
-        description="WiFi password for device provisioning"
-    )
-
-    # Rotation Settings
-    ROTATION_CRON: str | None = Field(
-        default=None,
-        description="CRON schedule for credential rotation (e.g., '0 8 * * 6#1' for first Saturday of month at 8am)"
-    )
-    ROTATION_TIMEOUT_SECONDS: int = Field(
-        default=300,
-        description="Timeout for device to complete rotation before rollback"
-    )
-    ROTATION_CRITICAL_THRESHOLD_DAYS: int | None = Field(
-        default=None,
-        description="Days after which a timed-out device is considered critical"
-    )
-
-    # Elasticsearch Settings (for device logs)
-    ELASTICSEARCH_URL: str | None = Field(
-        default=None,
-        description="Elasticsearch base URL (e.g., https://elasticsearch.local:9200)"
-    )
-    ELASTICSEARCH_USERNAME: str | None = Field(
-        default=None,
-        description="Elasticsearch username for HTTP Basic Auth"
-    )
-    ELASTICSEARCH_PASSWORD: str | None = Field(
-        default=None,
-        description="Elasticsearch password for HTTP Basic Auth"
-    )
-    ELASTICSEARCH_INDEX_PATTERN: str = Field(
-        default="logstash-http-*",
-        description="Index pattern for device logs"
-    )
-
-    # MQTT Client ID for persistent sessions
-    MQTT_CLIENT_ID: str = Field(
-        default="iotsupport-backend",
-        description="MQTT client ID for persistent sessions (shared by all MQTT operations)"
-    )
-
-    # Graceful shutdown timeout
-    GRACEFUL_SHUTDOWN_TIMEOUT: int = Field(
-        default=30,
-        description="Maximum seconds to wait for graceful shutdown of background services"
-    )
-
 
 class Settings(BaseModel):
     """Application settings with lowercase fields and derived values.
@@ -264,100 +179,67 @@ class Settings(BaseModel):
     All field names are lowercase for consistency.
 
     For production, use Settings.load() to load from environment.
-    For tests, construct directly with test values.
+    For tests, construct directly with test values (defaults provided for convenience).
+
+    Fields are grouped by feature flag (see Environment docstring).
     """
 
     model_config = ConfigDict(from_attributes=True)
 
-    # Flask settings
-    secret_key: str
-    flask_env: str
-    debug: bool
+    # ── Core (always present) ──────────────────────────────────────────
 
-    # Database settings
-    database_url: str
+    secret_key: str = _DEFAULT_SECRET_KEY
+    flask_env: str = "development"
+    debug: bool = True
+    cors_origins: list[str] = Field(default=["http://localhost:3000"])
+    task_max_workers: int = 4
+    task_timeout_seconds: int = 300
+    task_cleanup_interval_seconds: int = 600
+    metrics_update_interval: int = 60
+    graceful_shutdown_timeout: int = 600
+    drain_auth_key: str = ""
 
-    # Firmware storage directory
-    assets_dir: Path | None
+    # ── use_database ───────────────────────────────────────────────────
 
-    # Coredump storage directory
-    coredumps_dir: Path | None = None
-
-    # Coredump parsing sidecar settings
-    parse_sidecar_xfer_dir: Path | None = None
-    parse_sidecar_url: str | None = None
-    max_coredumps: int = 20
-
-    # CORS settings
-    cors_origins: list[str]
-
-    # MQTT settings
-    mqtt_url: str | None
-    device_mqtt_url: str | None  # Resolved: DEVICE_MQTT_URL or MQTT_URL
-    mqtt_username: str | None
-    mqtt_password: str | None
-
-    # OIDC Authentication Settings
-    baseurl: str
-    device_baseurl: str  # Resolved: DEVICE_BASEURL or BASEURL
-    oidc_enabled: bool
-    oidc_issuer_url: str | None
-    oidc_client_id: str | None
-    oidc_client_secret: str | None
-    oidc_scopes: str
-    oidc_audience: str | None  # Resolved: OIDC_AUDIENCE or OIDC_CLIENT_ID
-    oidc_clock_skew_seconds: int
-    oidc_cookie_name: str
-    oidc_cookie_secure: bool  # Resolved: explicit or inferred from BASEURL
-    oidc_cookie_samesite: str
-    oidc_refresh_cookie_name: str
-
-    # Keycloak Admin API Settings
-    oidc_token_url: str | None
-    keycloak_base_url: str | None
-    keycloak_realm: str | None
-    keycloak_admin_client_id: str | None
-    keycloak_admin_client_secret: str | None
-    keycloak_device_scope_name: str
-    keycloak_admin_url: str | None  # Resolved: computed from base + realm
-    keycloak_console_base_url: str | None  # Resolved: computed from base + realm
-
-    # WiFi Credentials for Provisioning
-    wifi_ssid: str | None
-    wifi_password: str | None
-
-    # Rotation Settings
-    rotation_cron: str | None
-    rotation_timeout_seconds: int
-    rotation_critical_threshold_days: int | None
-
-    # Elasticsearch Settings (for device logs)
-    elasticsearch_url: str | None
-    elasticsearch_username: str | None
-    elasticsearch_password: str | None
-    elasticsearch_index_pattern: str
-
-    # MQTT Client ID
-    mqtt_client_id: str
-
-    # Graceful shutdown timeout
-    graceful_shutdown_timeout: int = 30
-
-    # Secret Encryption Key (derived from secret_key)
-    fernet_key: str
-
-    # SQLAlchemy engine options
+    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/iotsupport"
+    db_pool_size: int = 20
+    db_pool_max_overflow: int = 30
+    db_pool_timeout: int = 10
+    db_pool_echo: bool | str = False
+    diagnostics_enabled: bool = False
+    diagnostics_slow_query_threshold_ms: int = 100
+    diagnostics_slow_request_threshold_ms: int = 500
+    diagnostics_log_all_queries: bool = False
     sqlalchemy_engine_options: dict[str, Any] = Field(default_factory=dict)
 
-    @property
-    def is_production(self) -> bool:
-        """Check if running in production mode."""
-        return self.flask_env == "production" or not self.debug
+    # ── use_oidc ───────────────────────────────────────────────────────
+
+    baseurl: str = "http://localhost:3000"
+    oidc_enabled: bool = False
+    oidc_issuer_url: str | None = None
+    oidc_client_id: str | None = None
+    oidc_client_secret: str | None = None
+    oidc_scopes: str = "openid profile email"
+    oidc_audience: str | None = None  # Resolved: falls back to oidc_client_id via load()
+    oidc_clock_skew_seconds: int = 30
+    oidc_cookie_name: str = "access_token"
+    oidc_cookie_secure: bool = False  # Resolved: inferred from baseurl via load()
+    oidc_cookie_samesite: str = "Lax"
+    oidc_refresh_cookie_name: str = "refresh_token"
 
     @property
     def is_testing(self) -> bool:
-        """Check if the application is running in testing mode."""
+        """Check if running in testing environment."""
         return self.flask_env == "testing"
+
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production environment."""
+        return self.flask_env == "production"
+
+    def set_engine_options_override(self, options: dict[str, Any]) -> None:
+        """Override SQLAlchemy engine options (used for testing with SQLite)."""
+        self.sqlalchemy_engine_options = options
 
     def to_flask_config(self) -> "FlaskConfig":
         """Create Flask configuration object from settings."""
@@ -374,6 +256,8 @@ class Settings(BaseModel):
         Raises:
             ConfigurationError: If required settings are missing or insecure
         """
+        from app.exceptions import ConfigurationError
+
         errors: list[str] = []
 
         # SECRET_KEY must be changed from default in production
@@ -383,61 +267,7 @@ class Settings(BaseModel):
                 "(current value is the insecure default)"
             )
 
-
-        # Keycloak settings required when provisioning is used
-        keycloak_settings = [
-            ("KEYCLOAK_BASE_URL", self.keycloak_base_url),
-            ("KEYCLOAK_REALM", self.keycloak_realm),
-            ("KEYCLOAK_ADMIN_CLIENT_ID", self.keycloak_admin_client_id),
-            ("KEYCLOAK_ADMIN_CLIENT_SECRET", self.keycloak_admin_client_secret),
-        ]
-        keycloak_missing = [name for name, value in keycloak_settings if not value]
-        if keycloak_missing and self.is_production:
-            errors.append(
-                f"Keycloak settings required for device provisioning: {', '.join(keycloak_missing)}"
-            )
-
-        # ASSETS_DIR required for firmware storage
-        if self.is_production and not self.assets_dir:
-            errors.append(
-                "ASSETS_DIR must be set for firmware storage"
-            )
-
-        # MQTT_URL required for provisioning
-        if self.is_production and not self.mqtt_url:
-            errors.append(
-                "MQTT_URL must be set for device provisioning"
-            )
-
-        # WiFi settings required for provisioning
-        if self.is_production and (not self.wifi_ssid or not self.wifi_password):
-            errors.append(
-                "WIFI_SSID and WIFI_PASSWORD must be set for device provisioning"
-            )
-
-        # OIDC_TOKEN_URL required for provisioning
-        if self.is_production and not self.oidc_token_url:
-            errors.append(
-                "OIDC_TOKEN_URL must be set for device provisioning"
-            )
-
-        # Rotation settings required for production
-        if self.is_production and not self.rotation_cron:
-            errors.append(
-                "ROTATION_CRON must be set for credential rotation scheduling"
-            )
-        if self.is_production and self.rotation_critical_threshold_days is None:
-            errors.append(
-                "ROTATION_CRITICAL_THRESHOLD_DAYS must be set for dashboard status"
-            )
-
-        # Elasticsearch required for device logs
-        if self.is_production and not self.elasticsearch_url:
-            errors.append(
-                "ELASTICSEARCH_URL must be set for device logs"
-            )
-
-        # OIDC settings required when OIDC is enabled
+        # OIDC settings required when OIDC is enabled (any environment)
         if self.oidc_enabled:
             if not self.oidc_issuer_url:
                 errors.append(
@@ -463,8 +293,8 @@ class Settings(BaseModel):
 
         This method:
         1. Loads Environment from environment variables
-        2. Computes derived values (device_baseurl, fernet_key, etc.)
-        3. Strips trailing slashes from URLs
+        2. Computes derived values (sse_heartbeat_interval)
+        3. Builds default SQLAlchemy engine options
         4. Constructs and returns a Settings instance
 
         Args:
@@ -476,60 +306,49 @@ class Settings(BaseModel):
         if env is None:
             env = Environment()
 
-        # Helper to strip trailing slashes from URLs
-        def strip_slashes(url: str | None) -> str | None:
-            return url.rstrip("/") if url else url
-
-        # Compute derived values
-        baseurl = strip_slashes(env.BASEURL) or "http://localhost:3200"
-        device_baseurl = strip_slashes(env.DEVICE_BASEURL) or baseurl
-        device_mqtt_url = env.DEVICE_MQTT_URL or env.MQTT_URL
-
-        # Derive Fernet key from SECRET_KEY for encrypting cached secrets
-        fernet_key = _derive_fernet_key(env.SECRET_KEY)
-
-        # Compute OIDC audience: use explicit value or fall back to client_id
+        # Resolve OIDC audience: fall back to client_id if not explicitly set
         oidc_audience = env.OIDC_AUDIENCE or env.OIDC_CLIENT_ID
 
-        # Compute cookie secure flag: use explicit value or infer from baseurl
+        # Resolve OIDC cookie secure: explicit setting takes priority, else infer from baseurl
         if env.OIDC_COOKIE_SECURE is not None:
             oidc_cookie_secure = env.OIDC_COOKIE_SECURE
         else:
-            oidc_cookie_secure = baseurl.startswith("https://")
-
-        # Compute Keycloak URLs
-        keycloak_base_url = strip_slashes(env.KEYCLOAK_BASE_URL)
-        keycloak_admin_url = None
-        keycloak_console_base_url = None
-        if keycloak_base_url and env.KEYCLOAK_REALM:
-            keycloak_admin_url = f"{keycloak_base_url}/admin/realms/{env.KEYCLOAK_REALM}"
-            keycloak_console_base_url = f"{keycloak_base_url}/admin/master/console/#/{env.KEYCLOAK_REALM}/clients"
+            oidc_cookie_secure = env.BASEURL.startswith("https://")
 
         # Build default SQLAlchemy engine options
         sqlalchemy_engine_options = {
-            "pool_size": 5,
-            "max_overflow": 10,
-            "pool_timeout": 30,
-            "pool_pre_ping": True,
+            "pool_size": env.DB_POOL_SIZE,
+            "max_overflow": env.DB_POOL_MAX_OVERFLOW,
+            "pool_timeout": env.DB_POOL_TIMEOUT,
+            "pool_pre_ping": True,  # Verify connections before use
+            "echo_pool": env.DB_POOL_ECHO,
         }
 
         return cls(
+            # Core (always present)
             secret_key=env.SECRET_KEY,
             flask_env=env.FLASK_ENV,
             debug=env.DEBUG,
-            database_url=env.DATABASE_URL,
-            assets_dir=env.ASSETS_DIR,
-            coredumps_dir=env.COREDUMPS_DIR,
-            parse_sidecar_xfer_dir=env.PARSE_SIDECAR_XFER_DIR,
-            parse_sidecar_url=strip_slashes(env.PARSE_SIDECAR_URL),
-            max_coredumps=env.MAX_COREDUMPS,
             cors_origins=env.CORS_ORIGINS,
-            mqtt_url=env.MQTT_URL,
-            device_mqtt_url=device_mqtt_url,
-            mqtt_username=env.MQTT_USERNAME,
-            mqtt_password=env.MQTT_PASSWORD,
-            baseurl=baseurl,
-            device_baseurl=device_baseurl,
+            task_max_workers=env.TASK_MAX_WORKERS,
+            task_timeout_seconds=env.TASK_TIMEOUT_SECONDS,
+            task_cleanup_interval_seconds=env.TASK_CLEANUP_INTERVAL_SECONDS,
+            metrics_update_interval=env.METRICS_UPDATE_INTERVAL,
+            graceful_shutdown_timeout=env.GRACEFUL_SHUTDOWN_TIMEOUT,
+            drain_auth_key=env.DRAIN_AUTH_KEY,
+            # use_database
+            database_url=env.DATABASE_URL,
+            db_pool_size=env.DB_POOL_SIZE,
+            db_pool_max_overflow=env.DB_POOL_MAX_OVERFLOW,
+            db_pool_timeout=env.DB_POOL_TIMEOUT,
+            db_pool_echo=env.DB_POOL_ECHO,
+            diagnostics_enabled=env.DIAGNOSTICS_ENABLED,
+            diagnostics_slow_query_threshold_ms=env.DIAGNOSTICS_SLOW_QUERY_THRESHOLD_MS,
+            diagnostics_slow_request_threshold_ms=env.DIAGNOSTICS_SLOW_REQUEST_THRESHOLD_MS,
+            diagnostics_log_all_queries=env.DIAGNOSTICS_LOG_ALL_QUERIES,
+            sqlalchemy_engine_options=sqlalchemy_engine_options,
+            # use_oidc
+            baseurl=env.BASEURL,
             oidc_enabled=env.OIDC_ENABLED,
             oidc_issuer_url=env.OIDC_ISSUER_URL,
             oidc_client_id=env.OIDC_CLIENT_ID,
@@ -541,27 +360,6 @@ class Settings(BaseModel):
             oidc_cookie_secure=oidc_cookie_secure,
             oidc_cookie_samesite=env.OIDC_COOKIE_SAMESITE,
             oidc_refresh_cookie_name=env.OIDC_REFRESH_COOKIE_NAME,
-            oidc_token_url=strip_slashes(env.OIDC_TOKEN_URL),
-            keycloak_base_url=keycloak_base_url,
-            keycloak_realm=env.KEYCLOAK_REALM,
-            keycloak_admin_client_id=env.KEYCLOAK_ADMIN_CLIENT_ID,
-            keycloak_admin_client_secret=env.KEYCLOAK_ADMIN_CLIENT_SECRET,
-            keycloak_device_scope_name=env.KEYCLOAK_DEVICE_SCOPE_NAME,
-            keycloak_admin_url=keycloak_admin_url,
-            keycloak_console_base_url=keycloak_console_base_url,
-            wifi_ssid=env.WIFI_SSID,
-            wifi_password=env.WIFI_PASSWORD,
-            rotation_cron=env.ROTATION_CRON,
-            rotation_timeout_seconds=env.ROTATION_TIMEOUT_SECONDS,
-            rotation_critical_threshold_days=env.ROTATION_CRITICAL_THRESHOLD_DAYS,
-            elasticsearch_url=strip_slashes(env.ELASTICSEARCH_URL),
-            elasticsearch_username=env.ELASTICSEARCH_USERNAME,
-            elasticsearch_password=env.ELASTICSEARCH_PASSWORD,
-            elasticsearch_index_pattern=env.ELASTICSEARCH_INDEX_PATTERN,
-            mqtt_client_id=env.MQTT_CLIENT_ID,
-            graceful_shutdown_timeout=env.GRACEFUL_SHUTDOWN_TIMEOUT,
-            fernet_key=fernet_key,
-            sqlalchemy_engine_options=sqlalchemy_engine_options,
         )
 
 

@@ -22,7 +22,7 @@ from app.models.coredump import CoreDump
 from app.models.device import Device, RotationState
 
 if TYPE_CHECKING:
-    from app.config import Settings
+    from app.app_config import AppSettings
     from app.services.device_model_service import DeviceModelService
     from app.services.keycloak_admin_service import KeycloakAdminService
     from app.services.mqtt_service import MqttService
@@ -40,7 +40,7 @@ class DeviceService:
     def __init__(
         self,
         db: Session,
-        config: "Settings",
+        config: "AppSettings",
         device_model_service: "DeviceModelService",
         keycloak_admin_service: "KeycloakAdminService",
         mqtt_service: "MqttService",

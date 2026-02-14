@@ -1,41 +1,42 @@
-"""Flask application factory for IoT Support backend."""
+"""Flask application factory."""
 
-import logging
-from typing import TYPE_CHECKING
-
+from flask import g
 from flask_cors import CORS
 
-if TYPE_CHECKING:
-    from app.config import Settings
-
 from app.app import App
+from app.app_config import AppSettings
 from app.config import Settings
 from app.extensions import db
-from app.services.container import ServiceContainer
-
-logger = logging.getLogger(__name__)
 
 
-def create_app(settings: "Settings | None" = None) -> App:
-    """Create and configure Flask application."""
-    logger.info("create_app() called", stack_info=True)
+def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | None" = None, skip_background_services: bool = False) -> App:
+    """Create and configure Flask application.
 
+    This factory follows a hook-based pattern where app-specific behavior
+    is injected through three functions in app/startup.py:
+    - create_container(): builds the DI container with app-specific providers
+    - register_blueprints(): registers domain resource blueprints
+    - register_error_handlers(): registers app-specific error handlers
+    """
     app = App(__name__)
 
     # Load configuration
     if settings is None:
         settings = Settings.load()
 
-    # Validate production configuration
+    # Validate configuration before proceeding
     settings.validate_production_config()
 
     app.config.from_object(settings.to_flask_config())
 
-    # Initialize Flask-SQLAlchemy
+    # Initialize extensions
     db.init_app(app)
 
     # Import models to register them with SQLAlchemy
     from app import models  # noqa: F401
+
+    # Import empty string normalization to register event handlers
+    from app.utils import empty_string_normalization  # noqa: F401
 
     # Initialize SessionLocal for per-request sessions
     # This needs to be done in app context since db.engine requires it
@@ -49,91 +50,138 @@ def create_app(settings: "Settings | None" = None) -> App:
             expire_on_commit=False,
         )
 
+        # Enable SQLAlchemy pool logging via events if configured
+        # (echo_pool config option doesn't work reliably in SQLAlchemy 2.x)
+        if settings.db_pool_echo:
+            from app.utils.pool_diagnostics import setup_pool_logging
+
+            setup_pool_logging(db.engine)
+
     # Initialize SpecTree for OpenAPI docs
     from app.utils.spectree_config import configure_spectree
 
     configure_spectree(app)
 
-    # Initialize service container
-    container = ServiceContainer()
+    # --- Hook 1: Create service container ---
+    from app.startup import create_container
+
+    # Load app-specific configuration alongside infrastructure settings
+    if app_settings is None:
+        app_settings = AppSettings.load(flask_env=settings.flask_env)
+
+    container = create_container()
     container.config.override(settings)
+    container.app_config.override(app_settings)
     container.session_maker.override(SessionLocal)
 
-    # Wire container with API modules
-    wire_modules = [
-        "app.api",
-        "app.api.auth",
-        "app.api.coredumps",
-        "app.api.device_models",
-        "app.api.devices",
-        "app.api.health",
-        "app.api.images",
-        "app.api.iot",
-        "app.api.metrics",
-        "app.api.pipeline",
-        "app.api.rotation",
-        "app.api.testing",
-    ]
-
-    container.wire(modules=wire_modules)
+    # Wire container to all API modules via package scanning
+    container.wire(packages=['app.api'])
 
     app.container = container
-
-    # Set container reference on singleton services that need DB access.
-    # This cannot be done via constructor injection because providers.Self()
-    # resolves to None during Singleton construction.
-    container.coredump_service().container = container
-
-    # Initialize lifecycle coordinator signal handlers
-    container.lifecycle_coordinator().initialize()
 
     # Configure CORS
     CORS(app, origins=settings.cors_origins)
 
-    # Configure logging
-    debug_mode = settings.flask_env in ("development", "testing")
-    logging.basicConfig(
-        level=logging.DEBUG if debug_mode else logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    # Initialize correlation ID tracking
+    from app.utils import _init_request_id
+    _init_request_id(app)
+
+    # Register error handlers: core + business (template), then app-specific hook
+    from app.utils.flask_error_handlers import (
+        register_business_error_handlers,
+        register_core_error_handlers,
     )
 
-    # Register main API blueprint
+    register_core_error_handlers(app)
+    register_business_error_handlers(app)
+
+    # --- Hook 2: App-specific error handlers ---
+    from app.startup import register_error_handlers
+
+    register_error_handlers(app)
+
+    # Register database health checks with HealthService
+    from app import database as _database_module
+
+    health_service = container.health_service()
+
+    def _check_db_readiness() -> dict:
+        # Look up functions via module to allow test patching
+        connected = _database_module.check_db_connection()
+        if not connected:
+            return {"connected": False, "ok": False}
+        pending = _database_module.get_pending_migrations()
+        return {
+            "connected": True,
+            "migrations_pending": len(pending),
+            "ok": not pending,
+        }
+
+    health_service.register_readyz("database", _check_db_readiness)
+
+    # Register main API blueprint (includes auth hooks and auth_bp)
     from app.api import api_bp
+
+    # --- Hook 3: App-specific blueprint registrations ---
+    from app.startup import register_blueprints
+
+    register_blueprints(api_bp, app)
 
     app.register_blueprint(api_bp)
 
-    # Register metrics blueprint (at root, not under /api)
+    # Register template blueprints directly on the app (not under /api)
+    # These are for internal cluster use only and should not be publicly proxied
+    from app.api.health import health_bp
     from app.api.metrics import metrics_bp
 
+    app.register_blueprint(health_bp)
     app.register_blueprint(metrics_bp)
 
-    # Initialize singletons that register with the lifecycle coordinator.
-    # LogSinkService subscribes to MQTT and starts its background writer thread
-    # upon receiving the STARTUP lifecycle event.
-    container.logsink_service()
+    # Register testing auth endpoints (runtime check handles access control)
+    from app.api.testing_auth import testing_auth_bp
+    app.register_blueprint(testing_auth_bp)
 
-    # Fire STARTUP lifecycle event to all registered services
-    container.lifecycle_coordinator().fire_startup()
-
-    # Request teardown handler for database session management
     @app.teardown_request
     def close_session(exc: Exception | None) -> None:
-        """Close the database session after each request."""
+        """Close the database session after each request.
+
+        Roll back the session when either (a) Flask passes an unhandled
+        exception via ``exc``, or (b) an @app.errorhandler set the
+        ``g.needs_rollback`` flag.  Flask 3.x does NOT propagate the
+        original exception to teardown_request when an errorhandler
+        successfully returns a response, so the flag is the reliable
+        rollback signal for handled exceptions.
+        """
         try:
             db_session = container.db_session()
-            needs_rollback = db_session.info.get("needs_rollback", False)
 
-            if exc or needs_rollback:
+            needs_rollback = exc or getattr(g, "needs_rollback", False)
+            if needs_rollback:
                 db_session.rollback()
             else:
                 db_session.commit()
 
-            # Clear rollback flag after processing
-            db_session.info.pop("needs_rollback", None)
             db_session.close()
 
         finally:
             # Ensure the scoped session is removed after each request
             container.db_session.reset()
+
+    # Start background services only when not in CLI mode
+    if not skip_background_services:
+        # Start temp file manager cleanup thread during app creation
+        temp_file_manager = container.temp_file_manager()
+        temp_file_manager.start_cleanup_thread()
+
+        # Initialize request diagnostics if enabled
+        from app.services.diagnostics_service import DiagnosticsService
+        diagnostics_service = DiagnosticsService(settings)
+        with app.app_context():
+            diagnostics_service.init_app(app, db.engine)
+        app.diagnostics_service = diagnostics_service
+
+        # Signal that application startup is complete. Services that registered
+        # for STARTUP notifications will be invoked here.
+        container.lifecycle_coordinator().fire_startup()
 
     return app

@@ -2,7 +2,7 @@
 
 from unittest.mock import ANY, MagicMock, Mock, patch
 
-from app.config import Settings
+from app.app_config import AppSettings
 from app.services.mqtt_service import MqttService
 
 
@@ -11,51 +11,14 @@ def _make_test_settings(
     mqtt_username: str | None = None,
     mqtt_password: str | None = None,
     mqtt_client_id: str = "iotsupport-backend",
-) -> Settings:
+) -> AppSettings:
     """Create test settings with configurable MQTT settings."""
-    return Settings(
-        secret_key="test-secret",
-        flask_env="testing",
-        debug=True,
-        database_url="sqlite://",
-        assets_dir=None,
-        cors_origins=["http://localhost:3000"],
+    return AppSettings(
         mqtt_url=mqtt_url,
         device_mqtt_url=mqtt_url,
         mqtt_username=mqtt_username,
         mqtt_password=mqtt_password,
-        baseurl="http://localhost:3200",
-        device_baseurl="http://localhost:3200",
-        oidc_enabled=False,
-        oidc_issuer_url=None,
-        oidc_client_id=None,
-        oidc_client_secret=None,
-        oidc_scopes="openid profile email",
-        oidc_audience=None,
-        oidc_clock_skew_seconds=30,
-        oidc_cookie_name="access_token",
-        oidc_cookie_secure=False,
-        oidc_cookie_samesite="Lax",
-        oidc_refresh_cookie_name="refresh_token",
-        oidc_token_url=None,
-        keycloak_base_url=None,
-        keycloak_realm=None,
-        keycloak_admin_client_id=None,
-        keycloak_admin_client_secret=None,
-        keycloak_device_scope_name="iot-device-audience",
-        keycloak_admin_url=None,
-        keycloak_console_base_url=None,
-        wifi_ssid=None,
-        wifi_password=None,
-        rotation_cron=None,
-        rotation_timeout_seconds=300,
-        rotation_critical_threshold_days=None,
-        elasticsearch_url=None,
-        elasticsearch_username=None,
-        elasticsearch_password=None,
-        elasticsearch_index_pattern="logstash-http-*",
         mqtt_client_id=mqtt_client_id,
-        fernet_key="test-fernet-key-padded-to-32-bytes=",
     )
 
 

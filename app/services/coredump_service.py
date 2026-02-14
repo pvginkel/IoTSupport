@@ -22,7 +22,7 @@ from app.models.coredump import CoreDump, ParseStatus
 from app.utils.fs import atomic_write
 
 if TYPE_CHECKING:
-    from app.config import Settings
+    from app.app_config import AppSettings
     from app.services.container import ServiceContainer
     from app.services.firmware_service import FirmwareService
     from app.services.metrics_service import MetricsService
@@ -51,7 +51,7 @@ class CoredumpService:
     def __init__(
         self,
         coredumps_dir: Path | None,
-        config: "Settings",
+        config: "AppSettings",
         firmware_service: "FirmwareService",
         metrics_service: "MetricsService",
     ) -> None:

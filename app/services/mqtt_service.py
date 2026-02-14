@@ -23,7 +23,7 @@ from prometheus_client import Counter, Gauge, Histogram
 from app.utils.mqtt import parse_mqtt_url
 
 if TYPE_CHECKING:
-    from app.config import Settings
+    from app.app_config import AppSettings
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class MqttService:
 
     def __init__(
         self,
-        config: "Settings",
+        config: "AppSettings",
     ) -> None:
         """Initialize MQTT service with optional broker connection.
 
@@ -91,7 +91,7 @@ class MqttService:
         # We check flask_env='development' (not 'testing' or 'production') to avoid
         # affecting tests or production deployments.
         if (
-            config.flask_env == "development"
+            os.environ.get("FLASK_ENV") == "development"
             and os.environ.get("WERKZEUG_RUN_MAIN") != "true"
         ):
             logger.info("MQTT skipped in reloader parent process (development mode)")

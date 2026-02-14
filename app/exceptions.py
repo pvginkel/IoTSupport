@@ -1,4 +1,14 @@
-"""Domain-specific exceptions with user-ready messages for the IoT support system."""
+"""Base exceptions with user-ready messages.
+
+These are template-provided base exceptions that all apps need. Add
+app-specific exceptions below these base classes.
+"""
+
+
+class ConfigurationError(Exception):
+    """Raised when application configuration is invalid."""
+
+    pass
 
 
 class BusinessLogicException(Exception):
@@ -17,17 +27,17 @@ class BusinessLogicException(Exception):
 class RecordNotFoundException(BusinessLogicException):
     """Exception raised when a requested record is not found."""
 
-    def __init__(self, resource_type: str, identifier: str) -> None:
+    def __init__(self, resource_type: str, identifier: str | int) -> None:
         message = f"{resource_type} {identifier} was not found"
         super().__init__(message, error_code="RECORD_NOT_FOUND")
 
 
-class RecordExistsException(BusinessLogicException):
-    """Exception raised when attempting to create a record that already exists."""
+class ResourceConflictException(BusinessLogicException):
+    """Exception raised when attempting to create a resource that already exists."""
 
-    def __init__(self, resource_type: str, identifier: str) -> None:
-        message = f"{resource_type} for {identifier} already exists"
-        super().__init__(message, error_code="RECORD_EXISTS")
+    def __init__(self, resource_type: str, identifier: str | int) -> None:
+        message = f"A {resource_type.lower()} with {identifier} already exists"
+        super().__init__(message, error_code="RESOURCE_CONFLICT")
 
 
 class InvalidOperationException(BusinessLogicException):
@@ -40,11 +50,43 @@ class InvalidOperationException(BusinessLogicException):
         super().__init__(message, error_code="INVALID_OPERATION")
 
 
+class RouteNotAvailableException(BusinessLogicException):
+    """Exception raised when accessing endpoints that are not available in the current mode."""
+
+    def __init__(self, message: str = "This endpoint is only available when the server is running in testing mode") -> None:
+        super().__init__(message, error_code="ROUTE_NOT_AVAILABLE")
+
+
+class AuthenticationException(BusinessLogicException):
+    """Exception raised when authentication fails (missing, invalid, or expired token)."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, error_code="AUTHENTICATION_REQUIRED")
+
+
+class AuthorizationException(BusinessLogicException):
+    """Exception raised when the authenticated user lacks required permissions."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, error_code="AUTHORIZATION_FAILED")
+
+
 class ValidationException(BusinessLogicException):
-    """Exception raised when validation fails."""
+    """Exception raised for request validation failures (malformed input, invalid redirect, etc.)."""
 
     def __init__(self, message: str) -> None:
         super().__init__(message, error_code="VALIDATION_FAILED")
+
+
+# --- IoT-specific exceptions ---
+
+
+class RecordExistsException(BusinessLogicException):
+    """Exception raised when attempting to create a record that already exists."""
+
+    def __init__(self, resource_type: str, identifier: str) -> None:
+        message = f"{resource_type} for {identifier} already exists"
+        super().__init__(message, error_code="RECORD_EXISTS")
 
 
 class ExternalServiceException(BusinessLogicException):
@@ -75,24 +117,3 @@ class ProcessingException(BusinessLogicException):
         self.cause = cause
         message = f"Cannot {operation} because processing failed: {cause}"
         super().__init__(message, error_code="PROCESSING_ERROR")
-
-
-class AuthenticationException(BusinessLogicException):
-    """Exception raised when authentication fails."""
-
-    def __init__(self, message: str) -> None:
-        super().__init__(message, error_code="AUTHENTICATION_REQUIRED")
-
-
-class AuthorizationException(BusinessLogicException):
-    """Exception raised when authorization fails."""
-
-    def __init__(self, message: str) -> None:
-        super().__init__(message, error_code="AUTHORIZATION_FAILED")
-
-
-class RouteNotAvailableException(BusinessLogicException):
-    """Exception raised when a route is not available in the current environment."""
-
-    def __init__(self, message: str = "This route is not available") -> None:
-        super().__init__(message, error_code="ROUTE_NOT_AVAILABLE")

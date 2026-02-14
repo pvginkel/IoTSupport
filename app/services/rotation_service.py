@@ -22,7 +22,7 @@ from app.exceptions import ExternalServiceException
 from app.models.device import Device, RotationState
 
 if TYPE_CHECKING:
-    from app.config import Settings
+    from app.app_config import AppSettings
     from app.services.device_service import DeviceService
     from app.services.keycloak_admin_service import KeycloakAdminService
     from app.services.metrics_service import MetricsService
@@ -50,7 +50,7 @@ class RotationService:
     def __init__(
         self,
         db: Session,
-        config: "Settings",
+        config: "AppSettings",
         device_service: "DeviceService",
         keycloak_admin_service: "KeycloakAdminService",
         mqtt_service: "MqttService",

@@ -11,7 +11,7 @@ import httpx
 from app.exceptions import ExternalServiceException, ValidationException
 
 if TYPE_CHECKING:
-    from app.config import Settings
+    from app.app_config import AppSettings
     from app.services.metrics_service import MetricsService
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ class KeycloakAdminService:
 
     def __init__(
         self,
-        config: "Settings",
+        config: "AppSettings",
         metrics_service: "MetricsService",
     ) -> None:
         """Initialize Keycloak admin service.

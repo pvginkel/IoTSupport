@@ -16,6 +16,7 @@ from typing import Any
 from dependency_injector.wiring import Provide, inject
 from flask import Blueprint, Response, send_file
 
+from app.app_config import AppSettings
 from app.config import Settings
 from app.exceptions import AuthenticationException, ValidationException
 from app.models.device import RotationState
@@ -70,7 +71,6 @@ def get_config(
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     rotation_service: RotationService = Provide[ServiceContainer.rotation_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
-    config: Settings = Provide[ServiceContainer.config],
 ) -> Any:
     """Get raw JSON configuration for the device.
 
@@ -280,7 +280,7 @@ def get_provisioning_for_rotation(
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     keycloak_admin_service: KeycloakAdminService = Provide[ServiceContainer.keycloak_admin_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
-    app_config: Settings = Provide[ServiceContainer.config],
+    app_config: AppSettings = Provide[ServiceContainer.app_config],
 ) -> Any:
     """Get new provisioning data during rotation.
 

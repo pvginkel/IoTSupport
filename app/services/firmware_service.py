@@ -59,15 +59,19 @@ class FirmwareService:
     - Versioned ZIP: ASSETS_DIR/{model_code}/firmware-{version}.zip
     """
 
-    def __init__(self, assets_dir: Path) -> None:
+    def __init__(self, assets_dir: Path | None) -> None:
         """Initialize firmware service.
 
         Args:
-            assets_dir: Directory for storing firmware files
+            assets_dir: Directory for storing firmware files, or None if
+                firmware support is not configured.
         """
         self.assets_dir = assets_dir
-        self.assets_dir.mkdir(parents=True, exist_ok=True)
-        logger.info("FirmwareService initialized with assets_dir: %s", assets_dir)
+        if assets_dir is not None:
+            assets_dir.mkdir(parents=True, exist_ok=True)
+            logger.info("FirmwareService initialized with assets_dir: %s", assets_dir)
+        else:
+            logger.info("FirmwareService: assets_dir not configured, firmware operations disabled")
 
     def get_firmware_path(self, model_code: str) -> Path:
         """Get the legacy flat filesystem path for a model's firmware.

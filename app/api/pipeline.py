@@ -8,7 +8,7 @@ from dependency_injector.wiring import Provide, inject
 from flask import Blueprint, Response, request
 from spectree import Response as SpectreeResponse
 
-from app.config import Settings
+from app.app_config import AppSettings
 from app.exceptions import RecordNotFoundException
 from app.schemas.device_model import DeviceModelFirmwareResponseSchema
 from app.schemas.error import ErrorResponseSchema
@@ -121,7 +121,7 @@ def get_firmware_version(
 @public
 @inject
 def get_upload_script(
-    config: Settings = Provide[ServiceContainer.config],
+    config: AppSettings = Provide[ServiceContainer.app_config],
 ) -> Response:
     """Serve a shell script for uploading firmware from CI/CD pipelines.
 
@@ -164,7 +164,7 @@ def get_upload_script(
 @public
 @inject
 def get_upload_script_powershell(
-    config: Settings = Provide[ServiceContainer.config],
+    config: AppSettings = Provide[ServiceContainer.app_config],
 ) -> Response:
     """Serve a PowerShell script for uploading firmware from Windows CI/CD pipelines.
 

@@ -23,7 +23,6 @@ from app.utils.auth import (
     serialize_auth_state,
     validate_redirect_url,
 )
-from app.utils.error_handling import handle_api_errors
 from app.utils.spectree_config import api
 
 logger = logging.getLogger(__name__)
@@ -43,23 +42,19 @@ class UserInfoResponseSchema(BaseModel):
 @auth_bp.route("/self", methods=["GET"])
 @public
 @api.validate(resp=SpectreeResponse(HTTP_200=UserInfoResponseSchema))
-@handle_api_errors
 @inject
 def get_current_user(
-    auth_service: AuthService = Provide[ServiceContainer.auth_service],
     testing_service: TestingService = Provide[ServiceContainer.testing_service],
     config: Settings = Provide[ServiceContainer.config],
 ) -> tuple[dict[str, Any], int]:
     """Get current authenticated user information.
 
-    Returns user information from the validated JWT token in the cookie.
-
-    This endpoint is marked @public because it handles authentication
-    explicitly - it returns 401 if not authenticated rather than relying
-    on the before_request hook.
+    This endpoint is @public because it handles authentication explicitly:
+    in testing mode it checks test sessions and forced errors; otherwise
+    it validates tokens or returns a default local-user when OIDC is off.
 
     Returns:
-        200: User information from validated token
+        200: User information from validated token or test session
         401: No valid token provided or token invalid
     """
     # In testing mode, handle test sessions and forced errors
@@ -92,12 +87,11 @@ def get_current_user(
                 )
                 return user_info.model_dump(), 200
 
-        # No test session in testing mode - return 401
-        raise AuthenticationException("No valid test session provided")
+        # No test session — fall through to OIDC-enabled / disabled logic
+        # so existing tests without explicit sessions still get local-user.
 
-    # Check if OIDC is enabled (non-testing mode)
+    # When OIDC is disabled, return a default "local" user
     if not config.oidc_enabled:
-        # Return a default "admin" user when auth is disabled
         return UserInfoResponseSchema(
             subject="local-user",
             email="admin@local",
@@ -105,17 +99,10 @@ def get_current_user(
             roles=["admin"],
         ).model_dump(), 200
 
-    # Try to get auth context (manually validate token)
+    # OIDC enabled: try auth_context (set by before_request hook)
     auth_context = get_auth_context()
     if not auth_context:
-        # Auth context not set - try to validate token directly
-        from app.utils.auth import extract_token_from_request
-
-        token = extract_token_from_request(config)
-        if not token:
-            raise AuthenticationException("No valid token provided")
-
-        auth_context = auth_service.validate_token(token)
+        raise AuthenticationException("No valid token provided")
 
     # Return user information
     user_info = UserInfoResponseSchema(
@@ -136,7 +123,6 @@ def get_current_user(
 
 @auth_bp.route("/login", methods=["GET"])
 @public
-@handle_api_errors
 @inject
 def login(
     oidc_client_service: OidcClientService = Provide[ServiceContainer.oidc_client_service],
@@ -197,7 +183,6 @@ def login(
 
 @auth_bp.route("/callback", methods=["GET"])
 @public
-@handle_api_errors
 @inject
 def callback(
     oidc_client_service: OidcClientService = Provide[ServiceContainer.oidc_client_service],
@@ -276,9 +261,10 @@ def callback(
     if token_response.refresh_token:
         # Derive max_age from the refresh token's exp claim
         refresh_max_age = get_token_expiry_seconds(token_response.refresh_token)
-        # Fall back to access token expiry if refresh token is opaque
         if refresh_max_age is None:
-            refresh_max_age = token_response.expires_in
+            raise AuthenticationException(
+                "Refresh token missing 'exp' claim — cannot determine cookie lifetime"
+            )
 
         response.set_cookie(
             config.oidc_refresh_cookie_name,

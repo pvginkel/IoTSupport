@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from flask import Flask
 from flask.testing import FlaskClient
 
-from app.config import Settings
+from app.app_config import AppSettings
 from app.models.coredump import CoreDump, ParseStatus
 from app.services.container import ServiceContainer
 from tests.api.test_iot import create_test_device
@@ -41,7 +41,7 @@ def _create_coredump(
         session.flush()
 
         if write_file:
-            config = container.config()
+            config = container.app_config()
             if config.coredumps_dir is not None:
                 device_dir = config.coredumps_dir / device_key
                 device_dir.mkdir(parents=True, exist_ok=True)
@@ -236,7 +236,7 @@ class TestDeleteCoredump:
 
     def test_delete_coredump_success(
         self, app: Flask, client: FlaskClient, container: ServiceContainer,
-        test_settings: Settings,
+        test_app_settings: AppSettings,
     ) -> None:
         """Test deleting a single coredump removes record and file."""
         device_id, device_key, _ = create_test_device(app, container, model_code="del1")
@@ -263,8 +263,8 @@ class TestDeleteCoredump:
             assert result is None
 
         # Verify file deleted
-        assert test_settings.coredumps_dir is not None
-        assert not (test_settings.coredumps_dir / device_key / "coredump_del.dmp").exists()
+        assert test_app_settings.coredumps_dir is not None
+        assert not (test_app_settings.coredumps_dir / device_key / "coredump_del.dmp").exists()
 
     def test_delete_coredump_wrong_device(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
@@ -292,7 +292,7 @@ class TestDeleteAllCoredumps:
 
     def test_delete_all_coredumps_success(
         self, app: Flask, client: FlaskClient, container: ServiceContainer,
-        test_settings: Settings,
+        test_app_settings: AppSettings,
     ) -> None:
         """Test deleting all coredumps for a device."""
         device_id, device_key, _ = create_test_device(app, container, model_code="da1")
