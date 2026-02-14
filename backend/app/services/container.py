@@ -95,6 +95,7 @@ class ServiceContainer(containers.DeclarativeContainer):
     mqtt_service = providers.Singleton(
         MqttService,
         config=app_config,
+        flask_env=config.provided.flask_env,
     )
 
     # TestDataService - Factory creates new instance per request with database session
