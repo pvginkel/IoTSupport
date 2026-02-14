@@ -236,9 +236,34 @@ poetry run pytest          # Full test suite
 
 ## S3 Storage Consistency
 
-- Persist attachment rows (and cover updates) before hitting S3. Flush the session, then perform uploads so a failure rolls the transaction back instead of leaving orphaned blobs.
-- On deletes, remove the row, handle cover reassignment, flush, then attempt S3 deletion. Log and swallow storage errors because S3 cleanup is best-effort.
-- When copying attachments, create and flush the cloned row first, then copy the object in S3 and surface any failure as an `InvalidOperationException`.
+Every feature that stores data in both PostgreSQL and S3 **must** follow these two invariants. They guarantee that the database is always the source of truth and that the system never references S3 objects that don't exist.
+
+### Golden Rule 1 — Creates: S3 before commit
+
+When creating data, the S3 upload must succeed **before** the database transaction is committed.
+
+```
+1. flush()          — get the DB-generated ID (row is not yet visible to other transactions)
+2. s3 upload        — use the ID / known key; if this fails the transaction rolls back automatically
+3. commit()         — only now is the row visible; it is guaranteed to have a matching S3 object
+```
+
+A failed S3 upload aborts the request, the transaction rolls back, and no dangling DB row is created.
+
+### Golden Rule 2 — Deletes: commit before S3
+
+When deleting data, the database transaction must be committed **before** the S3 delete is initiated.
+
+```
+1. delete row + commit()   — the row is gone; no reader can reference the S3 object any more
+2. s3 delete (best-effort) — log and swallow errors; an orphaned S3 object is harmless
+```
+
+A failed S3 delete leaves an orphan blob that is invisible to the application. This is acceptable and can be cleaned up out-of-band. The alternative (deleting S3 first) risks the DB still referencing a missing object.
+
+### Corollary — Copies
+
+When copying a resource (e.g., cloning an attachment), create and flush the new DB row first, then copy the S3 object within the same request. Surface any S3 failure as an `InvalidOperationException` so the transaction rolls back.
 
 ## Development Workflow
 
