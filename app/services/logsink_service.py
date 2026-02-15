@@ -89,19 +89,28 @@ class LogSinkService:
         # Initialize HTTP client for Elasticsearch
         self._http_client = httpx.Client(timeout=30.0)
 
-        # Subscribe to log sink topic via shared MQTT service
-        mqtt_service.subscribe(
-            topic=self.LOGSINK_TOPIC,
-            qos=1,
-            callback=self._on_message,
-        )
-
         self.enabled = True
         self.logsink_enabled_gauge.set(1)
 
         # Register with lifecycle coordinator
         lifecycle_coordinator.register_lifecycle_notification(self._on_lifecycle_event)
         lifecycle_coordinator.register_shutdown_waiter("LogSinkService", self._wait_for_shutdown)
+
+    def startup(self) -> None:
+        """Subscribe to MQTT and start the background writer thread.
+
+        Called by the container's start_background_services(). No-op if the
+        service is disabled (MQTT or Elasticsearch not configured).
+        """
+        if not self.enabled:
+            return
+
+        # Subscribe to log sink topic via shared MQTT service
+        self.mqtt_service.subscribe(
+            topic=self.LOGSINK_TOPIC,
+            qos=1,
+            callback=self._on_message,
+        )
 
         # Start background writer thread
         self._writer_thread = threading.Thread(
@@ -112,7 +121,7 @@ class LogSinkService:
         self._writer_thread.start()
 
         logger.info(
-            "LogSinkService enabled - subscribed to %s via shared MQTT client",
+            "LogSinkService started - subscribed to %s via shared MQTT client",
             self.LOGSINK_TOPIC,
         )
 

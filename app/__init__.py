@@ -206,17 +206,10 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
 
     # Start background services only when not in CLI mode
     if not skip_background_services:
-        # Start temp file manager cleanup thread during app creation
-        temp_file_manager = container.temp_file_manager()
-        temp_file_manager.start_cleanup_thread()
-
-        # Ensure S3 bucket exists during startup
-        try:
-            s3_service = container.s3_service()
-            s3_service.ensure_bucket_exists()
-        except Exception as e:
-            # Log warning but don't fail startup - S3 might be optional
-            app.logger.warning(f"Failed to ensure S3 bucket exists: {e}")
+        # Eagerly instantiate and start all registered background services
+        # (MQTT connection, cleanup threads, log sink writer, etc.)
+        from app.services.container import start_background_services
+        start_background_services(container)
 
         # Initialize request diagnostics if enabled
         from app.services.diagnostics_service import DiagnosticsService
@@ -224,10 +217,6 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
         with app.app_context():
             diagnostics_service.init_app(app, db.engine)
         app.diagnostics_service = diagnostics_service
-
-        # Initialize FrontendVersionService singleton to register its observer callback
-        # with SSEConnectionManager. Must happen before fire_startup().
-        container.frontend_version_service()
 
         # Signal that application startup is complete. Services that registered
         # for STARTUP notifications will be invoked here.

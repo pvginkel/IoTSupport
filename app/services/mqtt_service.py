@@ -7,7 +7,6 @@ subscribing (with message callbacks).
 
 import atexit
 import logging
-import os
 import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -52,13 +51,15 @@ class MqttService:
     def __init__(
         self,
         config: "AppSettings",
-        flask_env: str = "production",
     ) -> None:
-        """Initialize MQTT service with optional broker connection.
+        """Initialize MQTT service state without connecting.
+
+        Connection is deferred to startup() which is called by the container's
+        start_background_services(). This prevents MQTT connections in CLI
+        commands, tests, and the Flask reloader parent process.
 
         Args:
             config: Application settings with MQTT configuration
-            flask_env: Flask environment (from infrastructure Settings)
         """
         self.config = config
 
@@ -79,32 +80,26 @@ class MqttService:
         # Initialize Prometheus metrics
         self._initialize_metrics()
 
-        # Skip connection if MQTT_URL not configured
-        if not config.mqtt_url:
-            logger.info("MQTT not configured (MQTT_URL is None), skipping connection")
-            self.mqtt_enabled_gauge.set(0)
+    def startup(self) -> None:
+        """Connect to the MQTT broker and start the network loop.
+
+        This is called by the container's start_background_services() and
+        should not be called directly. It is idempotent.
+        """
+        # Already connected (or no URL configured)
+        if self.client is not None:
             return
 
-        # Skip connection in Flask reloader parent process.
-        # Werkzeug's reloader runs the app twice: once in the parent (watching for changes)
-        # and once in the child (actually serving). Only connect in the child to avoid
-        # duplicate MQTT connections with the same client_id.
-        # The child process has WERKZEUG_RUN_MAIN='true'; parent doesn't have it set.
-        # We check flask_env='development' (not 'testing' or 'production') to avoid
-        # affecting tests or production deployments.
-        if (
-            flask_env == "development"
-            and os.environ.get("WERKZEUG_RUN_MAIN") != "true"
-        ):
-            logger.info("MQTT skipped in reloader parent process (development mode)")
+        if not self.config.mqtt_url:
+            logger.info("MQTT not configured (MQTT_URL is None), skipping connection")
             self.mqtt_enabled_gauge.set(0)
             return
 
         # Parse broker URL to extract host and port
         try:
-            host, port, use_tls = parse_mqtt_url(config.mqtt_url)
+            host, port, use_tls = parse_mqtt_url(self.config.mqtt_url)
         except Exception as e:
-            logger.error("Failed to parse MQTT_URL '%s': %s", config.mqtt_url, e)
+            logger.error("Failed to parse MQTT_URL '%s': %s", self.config.mqtt_url, e)
             self.mqtt_enabled_gauge.set(0)
             return
 
@@ -113,12 +108,12 @@ class MqttService:
             self.client = MqttClient(
                 callback_api_version=CallbackAPIVersion.VERSION2,
                 protocol=MQTTProtocolVersion.MQTTv5,
-                client_id=config.mqtt_client_id,
+                client_id=self.config.mqtt_client_id,
             )
 
             # Set credentials if provided
-            if config.mqtt_username and config.mqtt_password:
-                self.client.username_pw_set(config.mqtt_username, config.mqtt_password)
+            if self.config.mqtt_username and self.config.mqtt_password:
+                self.client.username_pw_set(self.config.mqtt_username, self.config.mqtt_password)
 
             # Configure TLS if using mqtts://
             if use_tls:
@@ -134,7 +129,7 @@ class MqttService:
                 "Connecting to MQTT broker at %s:%d with client_id=%s",
                 host,
                 port,
-                config.mqtt_client_id,
+                self.config.mqtt_client_id,
             )
 
             # Set session expiry interval for persistent sessions (MQTT v5).
@@ -154,7 +149,7 @@ class MqttService:
             # the async connection establishment window.
             self.mqtt_enabled_gauge.set(1)
 
-            # Register shutdown handlers for clean disconnect
+            # Register shutdown handler for clean disconnect
             atexit.register(self.shutdown)
 
         except Exception as e:
