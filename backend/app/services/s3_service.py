@@ -1,14 +1,18 @@
 """S3 service for file storage operations."""
 
+from __future__ import annotations
+
 import hashlib
 import logging
 from io import BytesIO
-from typing import Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
-from mypy_boto3_s3.client import S3Client
-from mypy_boto3_s3.type_defs import CopySourceTypeDef
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3.client import S3Client
+    from mypy_boto3_s3.type_defs import CopySourceTypeDef
 
 from app.config import Settings
 from app.exceptions import InvalidOperationException
