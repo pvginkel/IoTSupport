@@ -1,13 +1,14 @@
 """Tests for device models API endpoints."""
 
 import json
-import struct
 from unittest.mock import MagicMock, patch
 
 from flask import Flask
 from flask.testing import FlaskClient
 
 from app.services.container import ServiceContainer
+from tests.conftest import create_test_firmware
+from tests.services.test_firmware_service import _create_test_zip
 
 
 class TestDeviceModelsList:
@@ -173,34 +174,50 @@ class TestDeviceModelsDelete:
 class TestDeviceModelsFirmwareUpload:
     """Tests for POST /api/device-models/<id>/firmware."""
 
-    @staticmethod
-    def _create_test_firmware(version: bytes) -> bytes:
-        """Create a test firmware binary with valid ESP32 AppInfo header."""
-        # ESP32 image header (24 bytes)
-        image_header = bytes(24)
+    def test_upload_firmware_zip_success(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test uploading firmware as ZIP creates S3 objects and returns version."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="fw_zip", name="FW ZIP Test")
+            model_id = model.id
 
-        # Segment header (8 bytes)
-        segment_header = bytes(8)
+        zip_content = _create_test_zip("fw_zip", b"1.2.3")
 
-        # AppInfo structure (256 bytes)
-        magic = struct.pack("<I", 0xABCD5432)  # Magic word
-        secure_version = struct.pack("<I", 0)
-        reserved1 = bytes(8)
-        version_field = version.ljust(32, b"\x00")[:32]
-        project_name = b"test_project".ljust(32, b"\x00")
-        compile_time = b"12:00:00".ljust(16, b"\x00")
-        compile_date = b"Jan 01 2024".ljust(16, b"\x00")
-        idf_version = b"v5.0".ljust(32, b"\x00")
-        app_elf_sha256 = bytes(32)
-        reserved_rest = bytes(256 - 4 - 4 - 8 - 32 - 32 - 16 - 16 - 32 - 32)
-
-        app_info = (
-            magic + secure_version + reserved1 + version_field +
-            project_name + compile_time + compile_date + idf_version +
-            app_elf_sha256 + reserved_rest
+        response = client.post(
+            f"/api/device-models/{model_id}/firmware",
+            data=zip_content,
+            content_type="application/octet-stream",
         )
 
-        return image_header + segment_header + app_info
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["firmware_version"] == "1.2.3"
+
+        # Verify S3 objects exist
+        s3 = container.s3_service()
+        assert s3.file_exists("firmware/fw_zip/1.2.3/firmware.bin")
+        assert s3.file_exists("firmware/fw_zip/1.2.3/firmware.elf")
+
+    def test_upload_firmware_raw_bin_rejected(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that raw .bin upload is rejected (only ZIP accepted)."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="fw_raw", name="FW Raw Test")
+            model_id = model.id
+
+        firmware_content = create_test_firmware(b"1.0.0")
+
+        response = client.post(
+            f"/api/device-models/{model_id}/firmware",
+            data=firmware_content,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 400
 
     def test_upload_firmware_publishes_mqtt_for_each_device(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
@@ -231,14 +248,14 @@ class TestDeviceModelsFirmwareUpload:
             # Commit the session so devices are persisted for the firmware upload request
             container.db_session().commit()
 
-        # Upload firmware and verify MQTT publish
-        firmware_content = self._create_test_firmware(b"1.2.3")
+        # Upload firmware as ZIP and verify MQTT publish
+        zip_content = _create_test_zip("fw_mqtt", b"1.2.3")
         mqtt_service = app.container.mqtt_service()
 
         with patch.object(mqtt_service, "publish") as mock_publish:
             response = client.post(
                 f"/api/device-models/{model_id}/firmware",
-                data=firmware_content,
+                data=zip_content,
                 content_type="application/octet-stream",
             )
 
@@ -275,15 +292,52 @@ class TestDeviceModelsFirmwareUpload:
             model = model_service.create_device_model(code="fw_no_dev", name="No Devices")
             model_id = model.id
 
-        firmware_content = self._create_test_firmware(b"2.0.0")
+        zip_content = _create_test_zip("fw_no_dev", b"2.0.0")
         mqtt_service = app.container.mqtt_service()
 
         with patch.object(mqtt_service, "publish") as mock_publish:
             response = client.post(
                 f"/api/device-models/{model_id}/firmware",
-                data=firmware_content,
+                data=zip_content,
                 content_type="application/octet-stream",
             )
 
             assert response.status_code == 200
             mock_publish.assert_not_called()
+
+
+class TestDeviceModelsFirmwareDownload:
+    """Tests for GET /api/device-models/<id>/firmware."""
+
+    def test_download_firmware_success(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test downloading firmware .bin from S3."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="fw_dl", name="FW Download")
+            model_id = model.id
+
+            # Upload firmware via service
+            zip_content = _create_test_zip("fw_dl", b"3.0.0")
+            model_service.upload_firmware(model_id, zip_content)
+
+        response = client.get(f"/api/device-models/{model_id}/firmware")
+
+        assert response.status_code == 200
+        assert response.content_type == "application/octet-stream"
+        # Verify the downloaded data is valid firmware
+        assert len(response.data) > 0
+
+    def test_download_firmware_not_uploaded(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test downloading firmware when none uploaded returns 404."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="fw_nodl", name="No FW")
+            model_id = model.id
+
+        response = client.get(f"/api/device-models/{model_id}/firmware")
+
+        assert response.status_code == 404

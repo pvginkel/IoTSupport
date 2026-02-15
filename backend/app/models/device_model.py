@@ -9,6 +9,7 @@ from app.extensions import db
 
 if False:  # TYPE_CHECKING
     from app.models.device import Device
+    from app.models.firmware_version import FirmwareVersion
 
 
 class DeviceModel(db.Model):  # type: ignore[name-defined]
@@ -50,6 +51,13 @@ class DeviceModel(db.Model):  # type: ignore[name-defined]
     # Relationships
     devices: Mapped[list["Device"]] = relationship(
         "Device",
+        back_populates="device_model",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    firmware_versions: Mapped[list["FirmwareVersion"]] = relationship(
+        "FirmwareVersion",
         back_populates="device_model",
         cascade="all, delete-orphan",
         lazy="selectin",

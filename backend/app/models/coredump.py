@@ -30,8 +30,8 @@ class CoreDump(db.Model):  # type: ignore[name-defined]
 
     Each coredump is associated with a device and stores metadata about
     the crash dump binary, along with parsed output from the sidecar.
-    The binary .dmp file is stored on the filesystem under
-    COREDUMPS_DIR/{device_key}/.
+    The binary .dmp file is stored in S3 under
+    coredumps/{device_key}/{id}.dmp.
     """
 
     __tablename__ = "coredumps"
@@ -44,8 +44,8 @@ class CoreDump(db.Model):  # type: ignore[name-defined]
         ForeignKey("devices.id", ondelete="CASCADE"), nullable=False
     )
 
-    # Filename of the .dmp file on disk (e.g., coredump_20260211T143000_123456Z.dmp)
-    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Legacy filename column (nullable; S3 key is derived from device_key + id)
+    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Chip type (e.g., esp32, esp32s3)
     chip: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -87,5 +87,5 @@ class CoreDump(db.Model):  # type: ignore[name-defined]
         """Return string representation of CoreDump."""
         return (
             f"<CoreDump(id={self.id}, device_id={self.device_id}, "
-            f"filename='{self.filename}', status='{self.parse_status}')>"
+            f"status='{self.parse_status}')>"
         )

@@ -5,6 +5,7 @@ conftest_infrastructure.py. This file re-exports them and adds IoT-specific
 domain fixtures.
 """
 
+import os
 import struct
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -52,6 +53,13 @@ def test_settings() -> Settings:
         oidc_cookie_samesite="Lax",
         oidc_refresh_cookie_name="refresh_token",
         baseurl="http://localhost:3000",
+        # S3 configuration (from environment, matching infra conftest)
+        s3_endpoint_url=os.environ.get("S3_ENDPOINT_URL", "http://localhost:9000"),
+        s3_access_key_id=os.environ.get("S3_ACCESS_KEY_ID", "admin"),
+        s3_secret_access_key=os.environ.get("S3_SECRET_ACCESS_KEY", "password"),
+        s3_bucket_name=os.environ.get("S3_BUCKET_NAME", "test-app-test-attachments"),
+        s3_region=os.environ.get("S3_REGION", "us-east-1"),
+        s3_use_ssl=os.environ.get("S3_USE_SSL", "false").lower() == "true",
     )
 
 # ---------------------------------------------------------------------------
@@ -62,20 +70,13 @@ def test_settings() -> Settings:
 @pytest.fixture
 def test_app_settings(tmp_path: Path) -> AppSettings:
     """Create IoT-specific test app settings."""
-    assets_dir = tmp_path / "assets"
-    assets_dir.mkdir(exist_ok=True)
-
-    coredumps_dir = tmp_path / "coredumps"
-    coredumps_dir.mkdir(exist_ok=True)
-
     return AppSettings(
-        # Firmware storage
-        assets_dir=assets_dir,
-        # Coredump storage
-        coredumps_dir=coredumps_dir,
+        # Coredump parsing sidecar
         parse_sidecar_xfer_dir=None,
         parse_sidecar_url=None,
         max_coredumps=20,
+        # Firmware retention
+        max_firmwares=5,
         # MQTT settings
         mqtt_url="mqtt://mqtt.example.com:1883",
         device_mqtt_url="mqtt://mqtt.example.com:1883",
@@ -176,18 +177,6 @@ def make_device(container: ServiceContainer) -> Any:
         ):
             service = container.device_service()
             return service.create_device(device_model_id=device_model_id, config=config)
-
-    return _make
-
-
-@pytest.fixture
-def make_asset_file(test_app_settings: AppSettings) -> Any:
-    """Factory fixture for creating asset files."""
-
-    def _make(filename: str, content: bytes) -> Path:
-        file_path = test_app_settings.assets_dir / filename
-        file_path.write_bytes(content)
-        return file_path
 
     return _make
 

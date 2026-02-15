@@ -1,11 +1,11 @@
-"""Tests for coredump admin API endpoints."""
+"""Tests for coredump admin API endpoints (S3-backed storage)."""
 
 from datetime import UTC, datetime
+from io import BytesIO
 
 from flask import Flask
 from flask.testing import FlaskClient
 
-from app.app_config import AppSettings
 from app.models.coredump import CoreDump, ParseStatus
 from app.services.container import ServiceContainer
 from tests.api.test_iot import create_test_device
@@ -16,20 +16,18 @@ def _create_coredump(
     container: ServiceContainer,
     device_id: int,
     device_key: str,
-    filename: str = "coredump_test.dmp",
     chip: str = "esp32s3",
     firmware_version: str = "1.0.0",
     size: int = 256,
     parse_status: str = ParseStatus.PENDING.value,
     parsed_output: str | None = None,
-    write_file: bool = True,
+    upload_to_s3: bool = True,
 ) -> CoreDump:
-    """Helper to create a coredump DB record and optionally a .dmp file."""
+    """Helper to create a coredump DB record and optionally upload to S3."""
     with app.app_context():
         session = container.db_session()
         coredump = CoreDump(
             device_id=device_id,
-            filename=filename,
             chip=chip,
             firmware_version=firmware_version,
             size=size,
@@ -40,12 +38,14 @@ def _create_coredump(
         session.add(coredump)
         session.flush()
 
-        if write_file:
-            config = container.app_config()
-            if config.coredumps_dir is not None:
-                device_dir = config.coredumps_dir / device_key
-                device_dir.mkdir(parents=True, exist_ok=True)
-                (device_dir / filename).write_bytes(b"\x00" * size)
+        if upload_to_s3:
+            s3 = container.s3_service()
+            s3_key = f"coredumps/{device_key}/{coredump.id}.dmp"
+            s3.upload_file(
+                BytesIO(b"\x00" * size),
+                s3_key,
+                content_type="application/octet-stream",
+            )
 
         return coredump
 
@@ -61,13 +61,11 @@ class TestListCoredumps:
 
         _create_coredump(
             app, container, device_id, device_key,
-            filename="coredump_001.dmp",
             parse_status=ParseStatus.PARSED.value,
             parsed_output="crash info",
         )
         _create_coredump(
             app, container, device_id, device_key,
-            filename="coredump_002.dmp",
         )
 
         response = client.get(f"/api/devices/{device_id}/coredumps")
@@ -77,11 +75,10 @@ class TestListCoredumps:
         assert data["count"] == 2
         assert len(data["coredumps"]) == 2
 
-        # Summaries should not include parsed_output
+        # Summaries should not include parsed_output but should have id, chip, parse_status
         for summary in data["coredumps"]:
             assert "parsed_output" not in summary
             assert "id" in summary
-            assert "filename" in summary
             assert "chip" in summary
             assert "parse_status" in summary
 
@@ -118,7 +115,6 @@ class TestGetCoredump:
 
         coredump = _create_coredump(
             app, container, device_id, device_key,
-            filename="coredump_detail.dmp",
             parse_status=ParseStatus.PARSED.value,
             parsed_output="Guru Meditation Error: Core 0 panic'ed",
         )
@@ -130,7 +126,6 @@ class TestGetCoredump:
         assert response.status_code == 200
         data = response.get_json()
         assert data["id"] == coredump.id
-        assert data["filename"] == "coredump_detail.dmp"
         assert data["parse_status"] == "PARSED"
         assert data["parsed_output"] == "Guru Meditation Error: Core 0 panic'ed"
         assert data["chip"] == "esp32s3"
@@ -147,7 +142,6 @@ class TestGetCoredump:
 
         coredump = _create_coredump(
             app, container, device_id_a, device_key_a,
-            filename="coredump_wrong.dmp",
         )
 
         # Try to access coredump via device B
@@ -174,12 +168,11 @@ class TestDownloadCoredump:
     def test_download_coredump_success(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
     ) -> None:
-        """Test downloading a coredump binary."""
+        """Test downloading a coredump binary from S3."""
         device_id, device_key, _ = create_test_device(app, container, model_code="dc1")
 
         coredump = _create_coredump(
             app, container, device_id, device_key,
-            filename="coredump_dl.dmp",
             size=128,
         )
 
@@ -191,17 +184,16 @@ class TestDownloadCoredump:
         assert response.content_type == "application/octet-stream"
         assert len(response.data) == 128
 
-    def test_download_coredump_file_missing(
+    def test_download_coredump_s3_missing(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
     ) -> None:
-        """Test downloading when .dmp file is missing from disk."""
+        """Test downloading when S3 object is missing."""
         device_id, device_key, _ = create_test_device(app, container, model_code="dc2")
 
-        # Create record but no file on disk
+        # Create record but no S3 object
         coredump = _create_coredump(
             app, container, device_id, device_key,
-            filename="coredump_missing.dmp",
-            write_file=False,
+            upload_to_s3=False,
         )
 
         response = client.get(
@@ -221,7 +213,6 @@ class TestDownloadCoredump:
 
         coredump = _create_coredump(
             app, container, device_id_a, device_key_a,
-            filename="coredump_dl_wrong.dmp",
         )
 
         response = client.get(
@@ -236,14 +227,12 @@ class TestDeleteCoredump:
 
     def test_delete_coredump_success(
         self, app: Flask, client: FlaskClient, container: ServiceContainer,
-        test_app_settings: AppSettings,
     ) -> None:
-        """Test deleting a single coredump removes record and file."""
+        """Test deleting a single coredump removes record and S3 object."""
         device_id, device_key, _ = create_test_device(app, container, model_code="del1")
 
         coredump = _create_coredump(
             app, container, device_id, device_key,
-            filename="coredump_del.dmp",
         )
 
         response = client.delete(
@@ -262,9 +251,9 @@ class TestDeleteCoredump:
             ).scalar_one_or_none()
             assert result is None
 
-        # Verify file deleted
-        assert test_app_settings.coredumps_dir is not None
-        assert not (test_app_settings.coredumps_dir / device_key / "coredump_del.dmp").exists()
+        # Verify S3 object deleted
+        s3 = container.s3_service()
+        assert not s3.file_exists(f"coredumps/{device_key}/{coredump.id}.dmp")
 
     def test_delete_coredump_wrong_device(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
@@ -277,7 +266,6 @@ class TestDeleteCoredump:
 
         coredump = _create_coredump(
             app, container, device_id_a, device_key_a,
-            filename="coredump_del_wrong.dmp",
         )
 
         response = client.delete(
@@ -292,18 +280,15 @@ class TestDeleteAllCoredumps:
 
     def test_delete_all_coredumps_success(
         self, app: Flask, client: FlaskClient, container: ServiceContainer,
-        test_app_settings: AppSettings,
     ) -> None:
         """Test deleting all coredumps for a device."""
         device_id, device_key, _ = create_test_device(app, container, model_code="da1")
 
         _create_coredump(
             app, container, device_id, device_key,
-            filename="coredump_da1.dmp",
         )
         _create_coredump(
             app, container, device_id, device_key,
-            filename="coredump_da2.dmp",
         )
 
         response = client.delete(f"/api/devices/{device_id}/coredumps")

@@ -1,13 +1,20 @@
-"""Tests for FirmwareService ZIP support and versioned storage."""
+"""Tests for FirmwareService S3-based firmware storage and version tracking."""
 
 import json
 import zipfile
+from datetime import UTC, datetime
 from io import BytesIO
-from pathlib import Path
 
 import pytest
+from flask import Flask
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.exceptions import RecordNotFoundException, ValidationException
+from app.models.coredump import CoreDump, ParseStatus
+from app.models.device_model import DeviceModel
+from app.models.firmware_version import FirmwareVersion
+from app.services.container import ServiceContainer
 from app.services.firmware_service import FirmwareService, is_zip_content
 from tests.conftest import create_test_firmware
 
@@ -54,6 +61,14 @@ def _create_test_zip(model_code: str, version: bytes, extra_files: dict[str, byt
     return buf.getvalue()
 
 
+def _create_model(session: Session, code: str, name: str = "Test Model") -> DeviceModel:
+    """Helper to create a DeviceModel record directly."""
+    model = DeviceModel(code=code, name=name)
+    session.add(model)
+    session.flush()
+    return model
+
+
 class TestIsZipContent:
     """Tests for is_zip_content()."""
 
@@ -76,92 +91,97 @@ class TestIsZipContent:
         assert is_zip_content(b"PK") is False
 
 
-class TestFirmwareServiceZipSave:
-    """Tests for FirmwareService.save_firmware_zip()."""
+class TestFirmwareServiceSave:
+    """Tests for FirmwareService.save_firmware() with S3 storage."""
 
-    def test_save_firmware_zip_valid(self, tmp_path: Path) -> None:
-        """Test saving a valid firmware ZIP creates versioned ZIP and legacy .bin."""
-        service = FirmwareService(assets_dir=tmp_path)
+    def test_save_firmware_valid_zip(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """Test saving a valid firmware ZIP creates S3 objects and DB record."""
         model_code = "tempsensor"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
         zip_content = _create_test_zip(model_code, b"1.2.3")
 
-        version = service.save_firmware_zip(model_code, zip_content)
+        version = service.save_firmware(model_code, model.id, zip_content)
 
         assert version == "1.2.3"
 
-        # Versioned ZIP should exist
-        zip_path = tmp_path / model_code / "firmware-1.2.3.zip"
-        assert zip_path.exists()
+        # Verify firmware_versions DB record was created
+        stmt = select(FirmwareVersion).where(
+            FirmwareVersion.device_model_id == model.id,
+            FirmwareVersion.version == "1.2.3",
+        )
+        fv = session.execute(stmt).scalar_one()
+        assert fv.version == "1.2.3"
+        assert fv.uploaded_at is not None
 
-        # Legacy flat .bin should also be updated
-        legacy_path = tmp_path / f"firmware-{model_code}.bin"
-        assert legacy_path.exists()
+        # Verify S3 objects exist
+        s3 = container.s3_service()
+        assert s3.file_exists(f"firmware/{model_code}/1.2.3/firmware.bin")
+        assert s3.file_exists(f"firmware/{model_code}/1.2.3/firmware.elf")
+        assert s3.file_exists(f"firmware/{model_code}/1.2.3/firmware.map")
+        assert s3.file_exists(f"firmware/{model_code}/1.2.3/sdkconfig")
+        assert s3.file_exists(f"firmware/{model_code}/1.2.3/version.json")
 
-        # Verify the legacy .bin has valid ESP32 header
-        bin_data = legacy_path.read_bytes()
-        extracted_version = service.extract_version(bin_data)
-        assert extracted_version == "1.2.3"
+    def test_save_firmware_non_zip_rejected(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """Test that raw .bin content is rejected."""
+        model = _create_model(session, "rawbin")
+        service = container.firmware_service()
+        bin_content = create_test_firmware(b"1.0.0")
 
-    def test_save_firmware_zip_missing_elf(self, tmp_path: Path) -> None:
+        with pytest.raises(ValidationException, match="ZIP bundle"):
+            service.save_firmware("rawbin", model.id, bin_content)
+
+    def test_save_firmware_zip_missing_elf(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
         """Test that ZIP missing .elf file raises ValidationException."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
+        model_code = "noelf"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
         zip_content = _create_test_zip(model_code, b"1.0.0", omit_files={f"{model_code}.elf"})
 
         with pytest.raises(ValidationException, match="missing.*elf"):
-            service.save_firmware_zip(model_code, zip_content)
+            service.save_firmware(model_code, model.id, zip_content)
 
-    def test_save_firmware_zip_missing_map(self, tmp_path: Path) -> None:
+    def test_save_firmware_zip_missing_map(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
         """Test that ZIP missing .map file raises ValidationException."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
+        model_code = "nomap"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
         zip_content = _create_test_zip(model_code, b"1.0.0", omit_files={f"{model_code}.map"})
 
         with pytest.raises(ValidationException, match="missing.*map"):
-            service.save_firmware_zip(model_code, zip_content)
+            service.save_firmware(model_code, model.id, zip_content)
 
-    def test_save_firmware_zip_missing_sdkconfig(self, tmp_path: Path) -> None:
-        """Test that ZIP missing sdkconfig file raises ValidationException."""
-        service = FirmwareService(assets_dir=tmp_path)
-        zip_content = _create_test_zip("tempsensor", b"1.0.0", omit_files={"sdkconfig"})
-
-        with pytest.raises(ValidationException, match="missing.*sdkconfig"):
-            service.save_firmware_zip("tempsensor", zip_content)
-
-    def test_save_firmware_zip_missing_version_json(self, tmp_path: Path) -> None:
-        """Test that ZIP missing version.json raises ValidationException."""
-        service = FirmwareService(assets_dir=tmp_path)
-        zip_content = _create_test_zip("tempsensor", b"1.0.0", omit_files={"version.json"})
-
-        with pytest.raises(ValidationException, match="missing.*version.json"):
-            service.save_firmware_zip("tempsensor", zip_content)
-
-    def test_save_firmware_zip_missing_bin(self, tmp_path: Path) -> None:
-        """Test that ZIP missing .bin file raises ValidationException."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
-        zip_content = _create_test_zip(model_code, b"1.0.0", omit_files={f"{model_code}.bin"})
-
-        with pytest.raises(ValidationException, match="missing.*bin"):
-            service.save_firmware_zip(model_code, zip_content)
-
-    def test_save_firmware_zip_extra_files(self, tmp_path: Path) -> None:
+    def test_save_firmware_zip_extra_files(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
         """Test that ZIP with extra unexpected files raises ValidationException."""
-        service = FirmwareService(assets_dir=tmp_path)
+        model_code = "extrafiles"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
         zip_content = _create_test_zip(
-            "tempsensor", b"1.0.0",
+            model_code, b"1.0.0",
             extra_files={"unexpected.txt": b"oops"}
         )
 
         with pytest.raises(ValidationException, match="unexpected files.*unexpected.txt"):
-            service.save_firmware_zip("tempsensor", zip_content)
+            service.save_firmware(model_code, model.id, zip_content)
 
-    def test_save_firmware_zip_invalid_bin(self, tmp_path: Path) -> None:
+    def test_save_firmware_zip_invalid_bin(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
         """Test that ZIP with invalid .bin raises ValidationException."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
+        model_code = "badbin"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
 
-        # Build a ZIP with garbage in place of the .bin
         version_json = json.dumps({
             "git_commit": "abc123",
             "idf_version": "v5.0",
@@ -170,19 +190,22 @@ class TestFirmwareServiceZipSave:
 
         buf = BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
-            zf.writestr(f"{model_code}.bin", b"\x00" * 10)  # Invalid binary
+            zf.writestr(f"{model_code}.bin", b"\x00" * 10)
             zf.writestr(f"{model_code}.elf", b"\x7fELF")
             zf.writestr(f"{model_code}.map", b"map")
             zf.writestr("sdkconfig", b"config")
             zf.writestr("version.json", version_json)
 
         with pytest.raises(ValidationException, match="Invalid firmware"):
-            service.save_firmware_zip(model_code, buf.getvalue())
+            service.save_firmware(model_code, model.id, buf.getvalue())
 
-    def test_save_firmware_zip_invalid_version_json(self, tmp_path: Path) -> None:
+    def test_save_firmware_zip_invalid_version_json(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
         """Test that ZIP with malformed version.json raises ValidationException."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
+        model_code = "badvjson"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
         bin_content = create_test_firmware(b"1.0.0")
 
         buf = BytesIO()
@@ -194,15 +217,17 @@ class TestFirmwareServiceZipSave:
             zf.writestr("version.json", b"not json")
 
         with pytest.raises(ValidationException, match="version.json is not valid JSON"):
-            service.save_firmware_zip(model_code, buf.getvalue())
+            service.save_firmware(model_code, model.id, buf.getvalue())
 
-    def test_save_firmware_zip_version_json_missing_fields(self, tmp_path: Path) -> None:
+    def test_save_firmware_zip_version_json_missing_fields(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
         """Test that version.json missing required fields raises ValidationException."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
+        model_code = "missfld"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
         bin_content = create_test_firmware(b"1.0.0")
 
-        # version.json missing git_commit
         version_json = json.dumps({
             "idf_version": "v5.0",
             "firmware_version": "1.0.0",
@@ -217,41 +242,54 @@ class TestFirmwareServiceZipSave:
             zf.writestr("version.json", version_json)
 
         with pytest.raises(ValidationException, match="version.json missing fields.*git_commit"):
-            service.save_firmware_zip(model_code, buf.getvalue())
+            service.save_firmware(model_code, model.id, buf.getvalue())
 
-    def test_save_firmware_zip_not_a_zip(self, tmp_path: Path) -> None:
+    def test_save_firmware_zip_not_a_zip(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
         """Test that non-ZIP content raises ValidationException."""
-        service = FirmwareService(assets_dir=tmp_path)
+        model = _create_model(session, "notzip")
+        service = container.firmware_service()
 
-        with pytest.raises(ValidationException, match="Invalid firmware ZIP"):
-            service.save_firmware_zip("tempsensor", b"not a zip file at all")
+        with pytest.raises(ValidationException, match="ZIP bundle"):
+            service.save_firmware("notzip", model.id, b"not a zip file at all")
 
-    def test_save_firmware_zip_overwrites_same_version(self, tmp_path: Path) -> None:
-        """Test that re-uploading the same version overwrites the ZIP."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
+    def test_save_firmware_zip_overwrites_same_version(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """Test that re-uploading the same version updates the record and S3."""
+        model_code = "overwrite"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
 
         zip1 = _create_test_zip(model_code, b"1.0.0")
         zip2 = _create_test_zip(model_code, b"1.0.0")
 
-        service.save_firmware_zip(model_code, zip1)
-        service.save_firmware_zip(model_code, zip2)
+        service.save_firmware(model_code, model.id, zip1)
+        service.save_firmware(model_code, model.id, zip2)
 
-        # Should still exist without error
-        zip_path = tmp_path / model_code / "firmware-1.0.0.zip"
-        assert zip_path.exists()
+        # Should still have exactly one firmware_versions record
+        stmt = select(FirmwareVersion).where(
+            FirmwareVersion.device_model_id == model.id
+        )
+        versions = session.execute(stmt).scalars().all()
+        assert len(versions) == 1
+        assert versions[0].version == "1.0.0"
 
 
 class TestFirmwareServiceGetStream:
-    """Tests for FirmwareService.get_firmware_stream() with ZIP fallback."""
+    """Tests for FirmwareService.get_firmware_stream() from S3."""
 
-    def test_get_stream_from_versioned_zip(self, tmp_path: Path) -> None:
-        """Test that get_firmware_stream extracts .bin from versioned ZIP when available."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
+    def test_get_stream_from_s3(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """Test that get_firmware_stream downloads .bin from S3."""
+        model_code = "dlmodel"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
         zip_content = _create_test_zip(model_code, b"2.0.0")
 
-        version = service.save_firmware_zip(model_code, zip_content)
+        version = service.save_firmware(model_code, model.id, zip_content)
 
         stream = service.get_firmware_stream(model_code, firmware_version=version)
         bin_data = stream.read()
@@ -260,53 +298,20 @@ class TestFirmwareServiceGetStream:
         extracted_version = service.extract_version(bin_data)
         assert extracted_version == "2.0.0"
 
-    def test_get_stream_falls_back_to_legacy_bin(self, tmp_path: Path) -> None:
-        """Test that get_firmware_stream falls back to legacy .bin when no ZIP exists."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
-
-        # Save only a legacy .bin (no ZIP)
-        bin_content = create_test_firmware(b"1.0.0")
-        service.save_firmware(model_code, bin_content)
-
-        # Request with a version that has no ZIP
-        stream = service.get_firmware_stream(model_code, firmware_version="1.0.0")
-        data = stream.read()
-        assert data == bin_content
-
-    def test_get_stream_no_version_uses_legacy(self, tmp_path: Path) -> None:
-        """Test that get_firmware_stream with no firmware_version uses legacy .bin."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
-
-        bin_content = create_test_firmware(b"1.0.0")
-        service.save_firmware(model_code, bin_content)
-
-        stream = service.get_firmware_stream(model_code)
-        assert stream.read() == bin_content
-
-    def test_get_stream_neither_zip_nor_legacy_raises(self, tmp_path: Path) -> None:
-        """Test that RecordNotFoundException is raised when no firmware exists."""
-        service = FirmwareService(assets_dir=tmp_path)
+    def test_get_stream_no_version_raises(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """Test that get_firmware_stream without version raises."""
+        service = container.firmware_service()
 
         with pytest.raises(RecordNotFoundException):
             service.get_firmware_stream("nonexistent")
 
-    def test_get_stream_version_provided_no_zip_falls_back(self, tmp_path: Path) -> None:
-        """Test fallback when firmware_version is given but no ZIP exists."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
-
-        # Only legacy .bin, no ZIP for this version
-        bin_content = create_test_firmware(b"1.0.0")
-        service.save_firmware(model_code, bin_content)
-
-        stream = service.get_firmware_stream(model_code, firmware_version="999.0.0")
-        assert stream.read() == bin_content
-
-    def test_get_stream_version_provided_no_zip_no_legacy_raises(self, tmp_path: Path) -> None:
-        """Test that error is raised when version given but neither ZIP nor legacy exist."""
-        service = FirmwareService(assets_dir=tmp_path)
+    def test_get_stream_nonexistent_raises(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """Test that RecordNotFoundException is raised when firmware not in S3."""
+        service = container.firmware_service()
 
         with pytest.raises(RecordNotFoundException):
             service.get_firmware_stream("nonexistent", firmware_version="1.0.0")
@@ -315,73 +320,242 @@ class TestFirmwareServiceGetStream:
 class TestFirmwareServiceDelete:
     """Tests for FirmwareService.delete_firmware()."""
 
-    def test_delete_firmware_removes_legacy_bin(self, tmp_path: Path) -> None:
-        """Test that delete_firmware removes the legacy .bin file."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
-
-        bin_content = create_test_firmware(b"1.0.0")
-        service.save_firmware(model_code, bin_content)
-        assert service.get_firmware_path(model_code).exists()
-
-        service.delete_firmware(model_code)
-        assert not service.get_firmware_path(model_code).exists()
-
-    def test_delete_firmware_removes_versioned_zip_directory(self, tmp_path: Path) -> None:
-        """Test that delete_firmware removes the versioned ZIP directory."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
-
+    def test_delete_firmware_removes_s3_and_db(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """Test that delete_firmware removes S3 objects and DB records."""
+        model_code = "delmodel"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
         zip_content = _create_test_zip(model_code, b"1.0.0")
-        service.save_firmware_zip(model_code, zip_content)
 
-        # Both legacy and versioned should exist
-        assert service.get_firmware_path(model_code).exists()
-        model_dir = tmp_path / model_code
-        assert model_dir.exists()
+        service.save_firmware(model_code, model.id, zip_content)
 
-        service.delete_firmware(model_code)
+        # Verify firmware exists
+        s3 = container.s3_service()
+        assert s3.file_exists(f"firmware/{model_code}/1.0.0/firmware.bin")
 
-        # Both should be gone
-        assert not service.get_firmware_path(model_code).exists()
-        assert not model_dir.exists()
+        service.delete_firmware(model_code, model.id)
 
-    def test_delete_firmware_no_file_no_error(self, tmp_path: Path) -> None:
+        # Verify DB records deleted
+        stmt = select(FirmwareVersion).where(
+            FirmwareVersion.device_model_id == model.id
+        )
+        assert session.execute(stmt).scalar_one_or_none() is None
+
+        # Verify S3 objects deleted
+        assert not s3.file_exists(f"firmware/{model_code}/1.0.0/firmware.bin")
+
+    def test_delete_firmware_no_firmware_no_error(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
         """Test that deleting non-existent firmware does not raise."""
-        service = FirmwareService(assets_dir=tmp_path)
-        service.delete_firmware("nonexistent")  # Should not raise
+        model = _create_model(session, "nofwdel")
+        service = container.firmware_service()
+        service.delete_firmware("nofwdel", model.id)  # Should not raise
 
 
 class TestFirmwareServiceExists:
     """Tests for FirmwareService.firmware_exists()."""
 
-    def test_firmware_exists_legacy_only(self, tmp_path: Path) -> None:
-        """Test firmware_exists returns True when only legacy .bin exists."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
+    def test_firmware_exists_after_upload(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """Test firmware_exists returns True after upload."""
+        model_code = "existchk"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
 
-        bin_content = create_test_firmware(b"1.0.0")
-        service.save_firmware(model_code, bin_content)
+        assert service.firmware_exists(model_code) is False
 
-        assert service.firmware_exists(model_code) is True
-
-    def test_firmware_exists_versioned_zip_only(self, tmp_path: Path) -> None:
-        """Test firmware_exists returns True when only versioned ZIP exists (no legacy)."""
-        service = FirmwareService(assets_dir=tmp_path)
-        model_code = "tempsensor"
-
-        # Manually create only the versioned ZIP (no legacy .bin)
         zip_content = _create_test_zip(model_code, b"1.0.0")
-        service.save_firmware_zip(model_code, zip_content)
+        service.save_firmware(model_code, model.id, zip_content)
 
-        # Remove the legacy .bin to simulate a ZIP-only scenario
-        service.get_firmware_path(model_code).unlink()
-        assert not service.get_firmware_path(model_code).exists()
-
-        # firmware_exists should still return True via the versioned ZIP
         assert service.firmware_exists(model_code) is True
 
-    def test_firmware_exists_nothing(self, tmp_path: Path) -> None:
+    def test_firmware_exists_nothing(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
         """Test firmware_exists returns False when no firmware exists."""
-        service = FirmwareService(assets_dir=tmp_path)
+        service = container.firmware_service()
         assert service.firmware_exists("nonexistent") is False
+
+
+class TestFirmwareRetention:
+    """Tests for firmware version retention (MAX_FIRMWARES)."""
+
+    def test_retention_prunes_oldest(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """Test that exceeding MAX_FIRMWARES prunes the oldest version."""
+        model_code = "retprune"
+        model = _create_model(session, model_code)
+
+        # Create firmware service with max_firmwares=3
+        s3_service = container.s3_service()
+        service = FirmwareService(db=session, s3_service=s3_service, max_firmwares=3)
+
+        # Upload 4 versions (oldest should be pruned)
+        for i in range(4):
+            version = f"1.0.{i}"
+            zip_content = _create_test_zip(model_code, version.encode())
+            service.save_firmware(model_code, model.id, zip_content)
+
+        # Should have exactly 3 firmware_versions records
+        stmt = select(FirmwareVersion).where(
+            FirmwareVersion.device_model_id == model.id
+        )
+        versions = session.execute(stmt).scalars().all()
+        assert len(versions) == 3
+
+        # The oldest (1.0.0) should be gone
+        version_strings = {v.version for v in versions}
+        assert "1.0.0" not in version_strings
+        assert "1.0.1" in version_strings
+        assert "1.0.2" in version_strings
+        assert "1.0.3" in version_strings
+
+        # S3 objects for pruned version should be gone
+        assert not s3_service.file_exists(f"firmware/{model_code}/1.0.0/firmware.bin")
+
+    def test_retention_protects_pending_coredumps(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """Test that versions referenced by PENDING coredumps are not pruned.
+
+        With max_firmwares=2, we upload 2 versions, create a PENDING coredump
+        referencing 2.0.0, then upload a 3rd version. Retention finds 1 excess
+        (2.0.0) but skips it due to the PENDING coredump. Then we upload a 4th
+        version: retention now has 2 excess (2.0.0, 2.0.1). 2.0.0 is still
+        protected, so only 2.0.1 is pruned.
+        """
+        from app.models.device import Device
+
+        model_code = "retpend"
+        model = _create_model(session, model_code)
+
+        # Create a device directly in the test session for the coredump FK
+        device = Device(
+            key="retpend1",
+            device_model_id=model.id,
+            config="{}",
+            rotation_state="OK",
+        )
+        session.add(device)
+        session.flush()
+
+        s3_service = container.s3_service()
+        service = FirmwareService(db=session, s3_service=s3_service, max_firmwares=2)
+
+        # Upload 2 versions (within limit, no retention triggers)
+        for i in range(2):
+            version = f"2.0.{i}"
+            zip_content = _create_test_zip(model_code, version.encode())
+            service.save_firmware(model_code, model.id, zip_content)
+
+        # Create a PENDING coredump referencing 2.0.0 BEFORE exceeding the limit
+        coredump = CoreDump(
+            device_id=device.id,
+            chip="esp32s3",
+            firmware_version="2.0.0",
+            size=256,
+            parse_status=ParseStatus.PENDING.value,
+            uploaded_at=datetime.now(UTC),
+        )
+        session.add(coredump)
+        session.flush()
+
+        # Upload 3rd version -- retention has 1 excess: 2.0.0, but it is
+        # protected by the PENDING coredump. All 3 remain.
+        zip_content = _create_test_zip(model_code, b"2.0.2")
+        service.save_firmware(model_code, model.id, zip_content)
+
+        # Upload 4th version -- retention has 2 excess: 2.0.0 and 2.0.1.
+        # 2.0.0 is protected, so only 2.0.1 is pruned.
+        zip_content = _create_test_zip(model_code, b"2.0.3")
+        service.save_firmware(model_code, model.id, zip_content)
+
+        # Should have 3 versions (2.0.1 was pruned; 2.0.0 was protected)
+        stmt = select(FirmwareVersion).where(
+            FirmwareVersion.device_model_id == model.id
+        )
+        versions = session.execute(stmt).scalars().all()
+        version_strings = {v.version for v in versions}
+
+        # 2.0.0 is protected (PENDING coredump), 2.0.1 is pruned
+        assert "2.0.0" in version_strings
+        assert "2.0.1" not in version_strings
+        assert "2.0.2" in version_strings
+        assert "2.0.3" in version_strings
+
+    def test_retention_all_protected_no_prune(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """Test that no versions are pruned when all excess have PENDING coredumps."""
+        from app.models.device import Device
+
+        model_code = "retall"
+        model = _create_model(session, model_code)
+
+        # Create a device directly in the test session for coredump FK
+        device = Device(
+            key="retall01",
+            device_model_id=model.id,
+            config="{}",
+            rotation_state="OK",
+        )
+        session.add(device)
+        session.flush()
+
+        s3_service = container.s3_service()
+        service = FirmwareService(db=session, s3_service=s3_service, max_firmwares=2)
+
+        # Upload 2 versions
+        for i in range(2):
+            version = f"3.0.{i}"
+            zip_content = _create_test_zip(model_code, version.encode())
+            service.save_firmware(model_code, model.id, zip_content)
+
+        # Create PENDING coredumps for both versions
+        for v in ["3.0.0", "3.0.1"]:
+            coredump = CoreDump(
+                device_id=device.id,
+                chip="esp32",
+                firmware_version=v,
+                size=100,
+                parse_status=ParseStatus.PENDING.value,
+                uploaded_at=datetime.now(UTC),
+            )
+            session.add(coredump)
+        session.flush()
+
+        # Upload a 3rd version -- should try to prune but all are protected
+        zip_content = _create_test_zip(model_code, b"3.0.2")
+        service.save_firmware(model_code, model.id, zip_content)
+
+        # All 3 versions should remain (both excess are protected)
+        stmt = select(FirmwareVersion).where(
+            FirmwareVersion.device_model_id == model.id
+        )
+        versions = session.execute(stmt).scalars().all()
+        assert len(versions) == 3
+
+    def test_retention_within_limit_no_prune(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """Test that no pruning occurs when version count is within limit."""
+        model_code = "retok"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
+
+        # Upload 2 versions (default limit is 5)
+        for i in range(2):
+            version = f"4.0.{i}"
+            zip_content = _create_test_zip(model_code, version.encode())
+            service.save_firmware(model_code, model.id, zip_content)
+
+        stmt = select(FirmwareVersion).where(
+            FirmwareVersion.device_model_id == model.id
+        )
+        versions = session.execute(stmt).scalars().all()
+        assert len(versions) == 2

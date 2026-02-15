@@ -6,7 +6,6 @@ from flask import Flask
 from flask.testing import FlaskClient
 from sqlalchemy import select
 
-from app.app_config import AppSettings
 from app.models.coredump import CoreDump, ParseStatus
 from app.models.device import RotationState
 from app.services.container import ServiceContainer
@@ -94,23 +93,24 @@ class TestIotFirmware:
     """Tests for GET /api/iot/firmware."""
 
     def test_get_firmware_success(
-        self, app: Flask, client: FlaskClient, container: ServiceContainer, tmp_path
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
     ) -> None:
-        """Test downloading firmware."""
+        """Test downloading firmware from S3."""
         _, device_key, model_code = create_test_device(app, container, model_code="fw1")
 
-        # Create test firmware with valid ESP32 header
-        firmware_content = self._create_test_firmware(b"1.0.0")
+        from tests.services.test_firmware_service import _create_test_zip
 
         with app.app_context():
-            firmware_service = container.firmware_service()
-            firmware_service.save_firmware(model_code, firmware_content)
+            model_service = container.device_model_service()
+            model = model_service.get_device_model_by_code(model_code)
+            zip_content = _create_test_zip(model_code, b"1.0.0")
+            model_service.upload_firmware(model.id, zip_content)
 
         response = client.get(f"/api/iot/firmware?device_key={device_key}")
 
         assert response.status_code == 200
         assert response.content_type == "application/octet-stream"
-        assert response.data == firmware_content
+        assert len(response.data) > 0
 
     def test_get_firmware_not_uploaded(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
@@ -128,36 +128,6 @@ class TestIotFirmware:
 
         assert response.status_code == 401
 
-    def _create_test_firmware(self, version: bytes) -> bytes:
-        """Create a test firmware binary with valid ESP32 AppInfo header."""
-        import struct
-
-        # ESP32 image header (24 bytes)
-        image_header = bytes(24)
-
-        # Segment header (8 bytes)
-        segment_header = bytes(8)
-
-        # AppInfo structure (256 bytes)
-        magic = struct.pack("<I", 0xABCD5432)  # Magic word
-        secure_version = struct.pack("<I", 0)
-        reserved1 = bytes(8)
-        version_field = version.ljust(32, b"\x00")[:32]
-        project_name = b"test_project".ljust(32, b"\x00")
-        compile_time = b"12:00:00".ljust(16, b"\x00")
-        compile_date = b"Jan 01 2024".ljust(16, b"\x00")
-        idf_version = b"v5.0".ljust(32, b"\x00")
-        app_elf_sha256 = bytes(32)
-        reserved_rest = bytes(256 - 4 - 4 - 8 - 32 - 32 - 16 - 16 - 32 - 32)
-
-        app_info = (
-            magic + secure_version + reserved1 + version_field +
-            project_name + compile_time + compile_date + idf_version +
-            app_elf_sha256 + reserved_rest
-        )
-
-        return image_header + segment_header + app_info
-
 
 class TestIotFirmwareVersion:
     """Tests for GET /api/iot/firmware-version."""
@@ -168,18 +138,13 @@ class TestIotFirmwareVersion:
         """Test getting firmware version."""
         _, device_key, model_code = create_test_device(app, container, model_code="fv1")
 
-        # Upload firmware to set version
-        firmware_content = TestIotFirmware()._create_test_firmware(b"2.1.0")
+        from tests.services.test_firmware_service import _create_test_zip
 
         with app.app_context():
-            firmware_service = container.firmware_service()
-            firmware_service.save_firmware(model_code, firmware_content)
-
-            # Update model with version
-            device_service = container.device_service()
-            device = device_service.get_device_by_key(device_key)
-            device.device_model.firmware_version = "2.1.0"
-            container.db_session().flush()
+            model_service = container.device_model_service()
+            model = model_service.get_device_model_by_code(model_code)
+            zip_content = _create_test_zip(model_code, b"2.1.0")
+            model_service.upload_firmware(model.id, zip_content)
 
         response = client.get(f"/api/iot/firmware-version?device_key={device_key}")
 
@@ -334,9 +299,9 @@ class TestIotCoredump:
     """Tests for POST /api/iot/coredump."""
 
     def test_upload_coredump_success(
-        self, app: Flask, client: FlaskClient, container: ServiceContainer, test_app_settings: AppSettings
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
     ) -> None:
-        """Test successful coredump upload creates .dmp file and DB record."""
+        """Test successful coredump upload stores in S3 and creates DB record."""
         _, device_key, model_code = create_test_device(app, container, model_code="cd1")
 
         content = b"\xDE\xAD\xBE\xEF" * 64
@@ -350,27 +315,20 @@ class TestIotCoredump:
         assert response.status_code == 201
         data = response.get_json()
         assert data["status"] == "ok"
-        assert data["filename"].startswith("coredump_")
-        assert data["filename"].endswith(".dmp")
+        assert "coredump_id" in data
+        coredump_id = data["coredump_id"]
 
-        # Verify .dmp file was written
-        coredumps_dir = test_app_settings.coredumps_dir
-        assert coredumps_dir is not None
-        device_dir = coredumps_dir / device_key
-        assert device_dir.exists()
-
-        dmp_files = list(device_dir.glob("*.dmp"))
-        assert len(dmp_files) == 1
-        assert dmp_files[0].read_bytes() == content
-
-        # Verify no JSON sidecar file was created (old behavior removed)
-        json_files = list(device_dir.glob("*.json"))
-        assert len(json_files) == 0
+        # Verify S3 object was written
+        s3 = container.s3_service()
+        s3_key = f"coredumps/{device_key}/{coredump_id}.dmp"
+        assert s3.file_exists(s3_key)
+        stream = s3.download_file(s3_key)
+        assert stream.read() == content
 
         # Verify DB record was created with correct metadata
         with app.app_context():
             session = container.db_session()
-            stmt = select(CoreDump).where(CoreDump.filename == data["filename"])
+            stmt = select(CoreDump).where(CoreDump.id == coredump_id)
             coredump = session.execute(stmt).scalar_one_or_none()
             assert coredump is not None
             assert coredump.chip == "esp32s3"

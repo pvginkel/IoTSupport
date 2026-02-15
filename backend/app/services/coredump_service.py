@@ -1,11 +1,15 @@
-"""Coredump storage and parsing service for ESP32 device crash dumps."""
+"""Coredump storage and parsing service for ESP32 device crash dumps.
+
+Stores coredump binaries in S3 under coredumps/{device_key}/{db_id}.dmp
+and tracks metadata in the database. Background parsing is orchestrated
+via a sidecar container with files exchanged through a shared xfer directory.
+"""
 
 import logging
-import shutil
 import threading
 import time
-import zipfile
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -14,18 +18,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.exceptions import (
-    InvalidOperationException,
     RecordNotFoundException,
     ValidationException,
 )
 from app.models.coredump import CoreDump, ParseStatus
-from app.utils.fs import atomic_write
 
 if TYPE_CHECKING:
     from app.app_config import AppSettings
     from app.services.container import ServiceContainer
-    from app.services.firmware_service import FirmwareService
     from app.services.metrics_service import MetricsService
+    from app.services.s3_service import S3Service
 
 logger = logging.getLogger(__name__)
 
@@ -42,26 +44,25 @@ MAX_PARSE_RETRIES = 3
 class CoredumpService:
     """Service for saving, parsing, and managing ESP32 coredump files.
 
-    This is a singleton service that manages coredump storage on the filesystem,
+    This is a singleton service that manages coredump storage in S3,
     creates database records for tracking, and orchestrates background parsing
     via a sidecar container. Uses the container pattern for DB session management
     since it is a singleton (not per-request).
+
+    S3 key layout: coredumps/{device_key}/{coredump_id}.dmp
     """
 
     def __init__(
         self,
-        coredumps_dir: Path | None,
+        s3_service: "S3Service",
         config: "AppSettings",
-        firmware_service: "FirmwareService",
         metrics_service: "MetricsService",
     ) -> None:
         """Initialize coredump service.
 
         Args:
-            coredumps_dir: Directory for storing coredump files, or None
-                if coredump support is not configured.
+            s3_service: S3 service for coredump binary storage.
             config: Application settings (for sidecar URL, xfer dir, max coredumps).
-            firmware_service: Service for firmware ZIP operations (ELF extraction).
             metrics_service: Service for recording operational metrics.
 
         Note:
@@ -69,17 +70,24 @@ class CoredumpService:
             providers.Self() resolves to None during Singleton construction.
             The container is needed for DB session access via the singleton pattern.
         """
-        self.coredumps_dir = coredumps_dir
+        self.s3_service = s3_service
         self.config = config
         self.container: ServiceContainer | None = None
-        self.firmware_service = firmware_service
         self.metrics_service = metrics_service
 
-        if coredumps_dir is not None:
-            coredumps_dir.mkdir(parents=True, exist_ok=True)
-            logger.info("CoredumpService initialized with coredumps_dir: %s", coredumps_dir)
-        else:
-            logger.info("CoredumpService initialized without coredumps_dir (uploads disabled)")
+        logger.info("CoredumpService initialized with S3 storage")
+
+    def _s3_key(self, device_key: str, coredump_id: int) -> str:
+        """Build the S3 key for a coredump binary.
+
+        Args:
+            device_key: Device key (directory component).
+            coredump_id: Database ID of the coredump record.
+
+        Returns:
+            S3 key string: coredumps/{device_key}/{coredump_id}.dmp
+        """
+        return f"coredumps/{device_key}/{coredump_id}.dmp"
 
     def _get_session(self) -> Session:
         """Get a DB session from the container.
@@ -109,34 +117,26 @@ class CoredumpService:
         chip: str,
         firmware_version: str,
         content: bytes,
-    ) -> tuple[str, int]:
-        """Save a coredump binary and create a DB record.
+    ) -> int:
+        """Save a coredump binary to S3 and create a DB record.
 
-        The coredump is written atomically to the filesystem, a DB record
-        is created with parse_status=PENDING, and retention is enforced.
-        This method must be called within a request-scoped session.
+        Golden rule: flush DB first (to get the ID for the S3 key), then
+        upload to S3. If S3 upload fails, the transaction rolls back.
 
         Args:
             device_id: Database ID of the device.
-            device_key: 8-character device key (determines subdirectory).
+            device_key: 8-character device key (part of S3 key).
             model_code: Device model code.
             chip: Chip type (e.g., 'esp32s3').
             firmware_version: Firmware version running on the device.
             content: Raw coredump binary data.
 
         Returns:
-            Tuple of (filename, coredump_id).
+            coredump_id (database ID of the created record).
 
         Raises:
-            InvalidOperationException: If COREDUMPS_DIR is not configured.
             ValidationException: If content is empty, exceeds 1MB, or device key is invalid.
         """
-        # Guard: coredumps_dir must be configured
-        if self.coredumps_dir is None:
-            raise InvalidOperationException(
-                "upload coredump", "COREDUMPS_DIR is not configured"
-            )
-
         # Validate content
         if not content:
             raise ValidationException("No coredump content provided")
@@ -148,24 +148,12 @@ class CoredumpService:
         if not device_key.isalnum():
             raise ValidationException("Invalid device key format")
 
-        # Create per-device directory
-        device_dir = self.coredumps_dir / device_key
-        device_dir.mkdir(parents=True, exist_ok=True)
-
-        # Generate filename with microsecond precision to avoid collisions
         now = datetime.now(UTC)
-        timestamp = now.strftime("%Y%m%dT%H%M%S") + f"_{now.microsecond:06d}Z"
-        dmp_filename = f"coredump_{timestamp}.dmp"
-        dmp_path = device_dir / dmp_filename
 
-        # Write coredump binary atomically
-        atomic_write(dmp_path, content, device_dir)
-
-        # Create DB record via the request-scoped session (obtained from container)
+        # Step 1: Create DB record and flush to get the ID (golden rule)
         session = self._get_session()
         coredump = CoreDump(
             device_id=device_id,
-            filename=dmp_filename,
             chip=chip,
             firmware_version=firmware_version,
             size=len(content),
@@ -176,20 +164,28 @@ class CoredumpService:
         session.flush()  # Get the ID immediately
         coredump_id = coredump.id
 
-        # Enforce per-device retention limit
+        # Step 2: Upload to S3 using the DB-assigned ID
+        s3_key = self._s3_key(device_key, coredump_id)
+        self.s3_service.upload_file(
+            BytesIO(content),
+            s3_key,
+            content_type="application/octet-stream",
+        )
+
+        # Step 3: Enforce per-device retention limit
         self._enforce_retention(session, device_id, device_key)
 
         logger.info(
-            "Saved coredump for device %s (id=%d, model=%s, chip=%s, fw=%s): %s",
+            "Saved coredump for device %s (id=%d, model=%s, chip=%s, fw=%s): s3://%s",
             device_key,
             coredump_id,
             model_code,
             chip,
             firmware_version,
-            dmp_filename,
+            s3_key,
         )
 
-        return dmp_filename, coredump_id
+        return coredump_id
 
     def _enforce_retention(
         self,
@@ -199,10 +195,13 @@ class CoredumpService:
     ) -> None:
         """Delete oldest coredumps if per-device limit is exceeded.
 
+        DB records are deleted first (flushed), then S3 objects are
+        deleted best-effort.
+
         Args:
             session: SQLAlchemy session (request-scoped).
             device_id: Device ID to check retention for.
-            device_key: Device key for filesystem path resolution.
+            device_key: Device key for S3 key construction.
         """
         max_coredumps = self.config.max_coredumps
 
@@ -219,12 +218,21 @@ class CoredumpService:
 
         # Delete the oldest records beyond the limit
         excess = len(coredumps) - max_coredumps
-        for coredump in coredumps[:excess]:
-            # Best-effort file deletion
-            self._delete_coredump_file(device_key, coredump.filename)
+        excess_records = coredumps[:excess]
+
+        for coredump in excess_records:
             session.delete(coredump)
 
         session.flush()
+
+        # Best-effort S3 deletion after DB flush
+        for coredump in excess_records:
+            s3_key = self._s3_key(device_key, coredump.id)
+            try:
+                self.s3_service.delete_file(s3_key)
+            except Exception as e:
+                logger.warning("Failed to delete S3 coredump %s: %s", s3_key, e)
+
         logger.info(
             "Retention enforced for device %s: deleted %d oldest coredumps (limit=%d)",
             device_key,
@@ -243,7 +251,6 @@ class CoredumpService:
         model_code: str,
         chip: str,
         firmware_version: str,
-        filename: str,
     ) -> None:
         """Spawn a background thread to parse the coredump if sidecar is configured.
 
@@ -255,11 +262,10 @@ class CoredumpService:
 
         Args:
             coredump_id: Database ID of the coredump record.
-            device_key: Device key for filesystem path.
-            model_code: Device model code (for ELF lookup in firmware ZIP).
+            device_key: Device key (for S3 key construction).
+            model_code: Device model code (for ELF lookup in S3).
             chip: Chip type.
-            firmware_version: Firmware version (for ZIP path).
-            filename: Name of the .dmp file.
+            firmware_version: Firmware version (for S3 ELF path).
         """
         if not self.config.parse_sidecar_url or not self.config.parse_sidecar_xfer_dir:
             logger.debug(
@@ -269,7 +275,7 @@ class CoredumpService:
 
         thread = threading.Thread(
             target=self._parse_coredump_thread,
-            args=(coredump_id, device_key, model_code, chip, firmware_version, filename),
+            args=(coredump_id, device_key, model_code, chip, firmware_version),
             daemon=True,
             name=f"coredump-parse-{coredump_id}",
         )
@@ -282,21 +288,17 @@ class CoredumpService:
         model_code: str,
         chip: str,
         firmware_version: str,
-        filename: str,
     ) -> None:
         """Background thread that parses a coredump via the sidecar.
 
-        Extracts the .elf from the firmware ZIP, copies it and the .dmp
-        to the xfer directory, calls the sidecar, and updates the DB record.
+        Downloads the .dmp from S3, downloads the .elf from S3, copies
+        both to the xfer directory, calls the sidecar, and updates the DB record.
         Retries up to MAX_PARSE_RETRIES times on failure.
 
         All arguments are passed in so no DB read is needed at the start.
         """
         # Brief pause to allow the request-scoped session to commit via
-        # teardown_request before this thread touches the DB. The thread is
-        # spawned inside the request handler (before teardown commits), so
-        # without this delay the record might not yet be visible to the
-        # thread's own session.
+        # teardown_request before this thread touches the DB.
         time.sleep(0.5)
 
         start_time = time.perf_counter()
@@ -310,35 +312,42 @@ class CoredumpService:
         xfer_dmp_path: Path | None = None
         xfer_elf_path: Path | None = None
 
+        # Use the coredump ID as a unique filename in the xfer directory
+        dmp_filename = f"coredump_{coredump_id}.dmp"
+        elf_filename = f"{model_code}.elf"
+
         try:
-            # Step 1: Locate the .dmp file
-            assert self.coredumps_dir is not None
-            dmp_source = self.coredumps_dir / device_key / filename
-            if not dmp_source.exists():
+            # Step 1: Download .dmp from S3
+            dmp_s3_key = self._s3_key(device_key, coredump_id)
+            try:
+                dmp_stream = self.s3_service.download_file(dmp_s3_key)
+                dmp_bytes = dmp_stream.read()
+            except Exception as e:
                 self._update_parse_status(
                     coredump_id,
                     ParseStatus.ERROR,
-                    f"Unable to parse coredump: .dmp file not found at {dmp_source}",
+                    f"Unable to parse coredump: .dmp file not found in S3 at {dmp_s3_key}: {e}",
                 )
                 return
 
-            # Step 2: Extract .elf from firmware ZIP
-            elf_name = f"{model_code}.elf"
-            elf_bytes = self._extract_elf_from_firmware(model_code, firmware_version)
-            if elf_bytes is None:
-                # Error already logged; set ERROR status without retries
+            # Step 2: Download .elf from S3 (firmware artifacts)
+            elf_s3_key = f"firmware/{model_code}/{firmware_version}/firmware.elf"
+            try:
+                elf_stream = self.s3_service.download_file(elf_s3_key)
+                elf_bytes = elf_stream.read()
+            except Exception as e:
                 self._update_parse_status(
                     coredump_id,
                     ParseStatus.ERROR,
-                    f"Unable to parse coredump: firmware ZIP not found for {model_code} version {firmware_version}",
+                    f"Unable to parse coredump: firmware ELF not found in S3 for {model_code} version {firmware_version}: {e}",
                 )
                 return
 
             # Step 3: Copy files to xfer directory
             xfer_dir.mkdir(parents=True, exist_ok=True)
-            xfer_dmp_path = xfer_dir / filename
-            xfer_elf_path = xfer_dir / elf_name
-            shutil.copy2(dmp_source, xfer_dmp_path)
+            xfer_dmp_path = xfer_dir / dmp_filename
+            xfer_elf_path = xfer_dir / elf_filename
+            xfer_dmp_path.write_bytes(dmp_bytes)
             xfer_elf_path.write_bytes(elf_bytes)
 
             # Step 4: Call sidecar with retries
@@ -348,11 +357,11 @@ class CoredumpService:
                     logger.info(
                         "Parsing coredump %d (attempt %d/%d): core=%s, elf=%s, chip=%s",
                         coredump_id, attempt, MAX_PARSE_RETRIES,
-                        filename, elf_name, chip,
+                        dmp_filename, elf_filename, chip,
                     )
                     resp = httpx.get(
                         f"{sidecar_url}/parse-coredump",
-                        params={"core": filename, "elf": elf_name, "chip": chip},
+                        params={"core": dmp_filename, "elf": elf_filename, "chip": chip},
                         timeout=SIDECAR_REQUEST_TIMEOUT,
                     )
                     resp.raise_for_status()
@@ -403,36 +412,6 @@ class CoredumpService:
         finally:
             # Best-effort cleanup of xfer directory files
             self._cleanup_xfer_files(xfer_dmp_path, xfer_elf_path)
-
-    def _extract_elf_from_firmware(
-        self, model_code: str, firmware_version: str
-    ) -> bytes | None:
-        """Extract the .elf file from a firmware ZIP.
-
-        Args:
-            model_code: Device model code.
-            firmware_version: Firmware version string.
-
-        Returns:
-            ELF file bytes, or None if ZIP or ELF not found.
-        """
-        zip_path = self.firmware_service.get_versioned_zip_path(model_code, firmware_version)
-        if not zip_path.exists():
-            logger.warning(
-                "Firmware ZIP not found for %s version %s at %s",
-                model_code, firmware_version, zip_path,
-            )
-            return None
-
-        elf_name = f"{model_code}.elf"
-        try:
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                return zf.read(elf_name)
-        except (zipfile.BadZipFile, KeyError) as e:
-            logger.warning(
-                "Failed to extract %s from %s: %s", elf_name, zip_path, e
-            )
-            return None
 
     def _update_parse_status(
         self, coredump_id: int, status: ParseStatus, output: str
@@ -526,79 +505,79 @@ class CoredumpService:
             raise RecordNotFoundException("Coredump", str(coredump_id))
         return coredump
 
-    def get_coredump_path(self, device_key: str, filename: str) -> Path:
-        """Get the filesystem path for a coredump .dmp file.
+    def get_coredump_stream(self, device_key: str, coredump_id: int) -> BytesIO:
+        """Download a coredump .dmp binary from S3 as a BytesIO stream.
 
         Args:
-            device_key: Device key for directory resolution.
-            filename: Coredump filename.
+            device_key: Device key (for S3 key construction).
+            coredump_id: Database ID of the coredump.
 
         Returns:
-            Path to the .dmp file.
+            BytesIO stream containing the coredump binary (seeked to 0).
 
         Raises:
-            RecordNotFoundException: If the file does not exist on disk.
-            InvalidOperationException: If COREDUMPS_DIR is not configured.
+            RecordNotFoundException: If the coredump file is not found in S3.
         """
-        if self.coredumps_dir is None:
-            raise InvalidOperationException(
-                "download coredump", "COREDUMPS_DIR is not configured"
-            )
-
-        path = self.coredumps_dir / device_key / filename
-        if not path.exists():
-            raise RecordNotFoundException("Coredump file", filename)
-        return path
+        s3_key = self._s3_key(device_key, coredump_id)
+        try:
+            return self.s3_service.download_file(s3_key)
+        except Exception as e:
+            raise RecordNotFoundException("Coredump file", str(coredump_id)) from e
 
     def delete_coredump(self, device_id: int, coredump_id: int, device_key: str) -> None:
-        """Delete a single coredump record and its file.
+        """Delete a single coredump record and its S3 object.
+
+        DB record is deleted first (flushed), then S3 object is deleted
+        best-effort.
 
         Args:
             device_id: ID of the device (ownership check).
             coredump_id: ID of the coredump to delete.
-            device_key: Device key for filesystem path.
+            device_key: Device key for S3 key construction.
 
         Raises:
             RecordNotFoundException: If coredump not found or does not belong to device.
         """
         coredump = self.get_coredump(device_id, coredump_id)
 
-        # Best-effort file deletion
-        self._delete_coredump_file(device_key, coredump.filename)
-
         session = self._get_session()
         session.delete(coredump)
         session.flush()
 
+        # Best-effort S3 deletion
+        s3_key = self._s3_key(device_key, coredump.id)
+        try:
+            self.s3_service.delete_file(s3_key)
+        except Exception as e:
+            logger.warning("Failed to delete S3 coredump %s: %s", s3_key, e)
+
         logger.info("Deleted coredump %d for device %s", coredump_id, device_key)
 
     def delete_all_coredumps(self, device_id: int, device_key: str) -> None:
-        """Delete all coredumps for a device (records and files).
+        """Delete all coredumps for a device (records and S3 objects).
+
+        DB records are deleted first (flushed), then S3 objects are deleted
+        best-effort.
 
         Args:
             device_id: ID of the device.
-            device_key: Device key for filesystem path.
+            device_key: Device key for S3 key construction.
         """
         coredumps = self.list_coredumps(device_id)
 
         session = self._get_session()
         for coredump in coredumps:
-            self._delete_coredump_file(device_key, coredump.filename)
             session.delete(coredump)
-
         session.flush()
+
+        # Best-effort S3 deletion for each coredump
+        for coredump in coredumps:
+            s3_key = self._s3_key(device_key, coredump.id)
+            try:
+                self.s3_service.delete_file(s3_key)
+            except Exception as e:
+                logger.warning("Failed to delete S3 coredump %s: %s", s3_key, e)
 
         logger.info(
             "Deleted all %d coredumps for device %s", len(coredumps), device_key
         )
-
-    def _delete_coredump_file(self, device_key: str, filename: str) -> None:
-        """Best-effort deletion of a coredump .dmp file from disk."""
-        if self.coredumps_dir is None:
-            return
-
-        path = self.coredumps_dir / device_key / filename
-        try:
-            path.unlink(missing_ok=True)
-        except OSError as e:
-            logger.warning("Failed to delete coredump file %s: %s", path, e)

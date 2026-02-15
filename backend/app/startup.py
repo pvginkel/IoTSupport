@@ -209,6 +209,72 @@ def register_cli_commands(cli: click.Group) -> None:
                 sys.exit(1)
 
 
+    @cli.command()
+    @click.option("--dry-run", is_flag=True, help="List files that would be migrated without uploading")
+    @click.pass_context
+    def migrate_to_s3(ctx: click.Context, dry_run: bool) -> None:
+        """Migrate firmware and coredump files from filesystem to S3.
+
+        One-time migration command for transitioning from ASSETS_DIR/COREDUMPS_DIR
+        filesystem storage to S3. Reads legacy paths from ASSETS_DIR and COREDUMPS_DIR
+        environment variables.
+
+        Firmware ZIPs are extracted and individual artifacts are uploaded to S3
+        under firmware/{model_code}/{version}/. Coredump .dmp files are uploaded
+        to S3 under coredumps/{device_key}/{db_id}.dmp.
+
+        This command is idempotent: re-running it re-uploads files that may
+        already exist in S3 (S3 PUT is inherently idempotent).
+        """
+        from app.services.migration_service import MigrationService
+
+        app = ctx.obj["app"]
+        with app.app_context():
+            if not check_db_connection():
+                print("Error: Cannot connect to database", file=sys.stderr)
+                sys.exit(1)
+
+            # Verify S3 connectivity
+            try:
+                s3_service = app.container.s3_service()
+                s3_service.ensure_bucket_exists()
+            except Exception as e:
+                print(f"Error: S3 is not reachable: {e}", file=sys.stderr)
+                sys.exit(1)
+
+            app_settings = app.container.app_config()
+            session = app.container.db_session()
+
+            migration = MigrationService(
+                s3_service=s3_service,
+                db=session,
+                assets_dir=app_settings.assets_dir,
+                coredumps_dir=app_settings.coredumps_dir,
+                dry_run=dry_run,
+            )
+
+            try:
+                summary = migration.run()
+                session.commit()
+            except Exception as e:
+                session.rollback()
+                print(f"Error: Migration failed: {e}", file=sys.stderr)
+                sys.exit(1)
+
+            # Print summary
+            mode = "[DRY RUN] " if dry_run else ""
+            print(f"\n{mode}Migration complete.")
+            print(f"  Firmware ZIPs migrated: {summary['firmware_zips']}")
+            print(f"  Firmware ZIPs skipped:  {summary['firmware_skipped']}")
+            print(f"  Coredumps migrated:     {summary['coredumps_migrated']}")
+            print(f"  Coredumps skipped:      {summary['coredumps_skipped']}")
+
+            if summary.get("warnings"):
+                print(f"\n  Warnings ({len(summary['warnings'])}):")
+                for warning in summary["warnings"]:
+                    print(f"    - {warning}")
+
+
 def post_migration_hook(app: Flask) -> None:
     """Run after database migrations (e.g., sync master data)."""
     pass
