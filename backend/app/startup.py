@@ -62,10 +62,6 @@ def register_blueprints(api_bp: Blueprint, app: Flask) -> None:
     container = app.container
     container.coredump_service().container = container
 
-    # Initialize LogSinkService singleton so it registers with the lifecycle
-    # coordinator for MQTT subscription on startup.
-    container.logsink_service()
-
 
 def register_error_handlers(app: Flask) -> None:
     """Register app-specific error handlers for IoT exceptions."""

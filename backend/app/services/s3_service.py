@@ -32,6 +32,17 @@ class S3Service:
         self._s3_client: S3Client | None = None
         self.settings = settings
 
+    def startup(self) -> None:
+        """Initialize S3 client and ensure bucket exists.
+
+        Called by the container's start_background_services(). Logs a warning
+        on failure rather than preventing app startup.
+        """
+        try:
+            self.ensure_bucket_exists()
+        except Exception as e:
+            logger.warning("Failed to ensure S3 bucket exists: %s", e)
+
     @property
     def s3_client(self) -> S3Client:
         """Get or create S3 client with lazy initialization."""

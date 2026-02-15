@@ -47,7 +47,7 @@ class AppEnvironment(BaseSettings):
     DEVICE_MQTT_URL: str | None = Field(default=None)
     MQTT_USERNAME: str | None = Field(default=None)
     MQTT_PASSWORD: str | None = Field(default=None)
-    MQTT_CLIENT_ID: str = Field(default="iotsupport-backend")
+    MQTT_CLIENT_ID: str | None = Field(default=None)
 
     # Keycloak Admin API Settings (for device provisioning)
     OIDC_TOKEN_URL: str | None = Field(default=None)
@@ -168,7 +168,7 @@ class AppSettings(BaseModel):
             device_mqtt_url=device_mqtt_url,
             mqtt_username=env.MQTT_USERNAME,
             mqtt_password=env.MQTT_PASSWORD,
-            mqtt_client_id=env.MQTT_CLIENT_ID,
+            mqtt_client_id=env.MQTT_CLIENT_ID or env.MQTT_USERNAME or "iotsupport-backend",
             oidc_token_url=strip_slashes(env.OIDC_TOKEN_URL),
             keycloak_base_url=keycloak_base_url,
             keycloak_realm=env.KEYCLOAK_REALM,

@@ -1,5 +1,8 @@
 """Dependency injection container for services."""
 
+from collections.abc import Callable
+from typing import Any
+
 from dependency_injector import containers, providers
 from sqlalchemy.orm import sessionmaker
 
@@ -30,6 +33,16 @@ from app.services.testing_service import TestingService
 from app.utils.lifecycle_coordinator import LifecycleCoordinator
 from app.utils.temp_file_manager import TempFileManager
 
+# Background service startup registry. Services register lambdas here
+# (co-located with their provider definitions) that are invoked by
+# start_background_services() during app startup.
+_background_starters: list[Callable[[Any], None]] = []
+
+
+def register_for_background_startup(fn: Callable[[Any], None]) -> None:
+    """Register a callable to be invoked during background service startup."""
+    _background_starters.append(fn)
+
 
 class ServiceContainer(containers.DeclarativeContainer):
     """Container for service dependency injection."""
@@ -44,6 +57,8 @@ class ServiceContainer(containers.DeclarativeContainer):
 
     # S3 storage services
     s3_service = providers.Factory(S3Service, settings=config)
+    register_for_background_startup(lambda c: c.s3_service().startup())
+
     cas_image_service = providers.Factory(
         CasImageService,
         s3_service=s3_service,
@@ -68,6 +83,7 @@ class ServiceContainer(containers.DeclarativeContainer):
         TempFileManager,
         lifecycle_coordinator=lifecycle_coordinator,
     )
+    register_for_background_startup(lambda c: c.temp_file_manager().start_cleanup_thread())
 
     # Metrics service - background thread for Prometheus metrics
     metrics_service = providers.Singleton(
@@ -99,6 +115,7 @@ class ServiceContainer(containers.DeclarativeContainer):
         task_timeout=config.provided.task_timeout_seconds,
         cleanup_interval=config.provided.task_cleanup_interval_seconds,
     )
+    register_for_background_startup(lambda c: c.task_service().startup())
 
     # Frontend version service - SSE version notifications
     frontend_version_service = providers.Singleton(
@@ -107,6 +124,7 @@ class ServiceContainer(containers.DeclarativeContainer):
         lifecycle_coordinator=lifecycle_coordinator,
         sse_connection_manager=sse_connection_manager,
     )
+    register_for_background_startup(lambda c: c.frontend_version_service())
 
     # --- IoT-specific services ---
 
@@ -114,8 +132,8 @@ class ServiceContainer(containers.DeclarativeContainer):
     mqtt_service = providers.Singleton(
         MqttService,
         config=app_config,
-        flask_env=config.provided.flask_env,
     )
+    register_for_background_startup(lambda c: c.mqtt_service().startup())
 
     # TestDataService - Factory creates new instance per request with database session
     test_data_service = providers.Factory(
@@ -156,6 +174,7 @@ class ServiceContainer(containers.DeclarativeContainer):
         mqtt_service=mqtt_service,
         lifecycle_coordinator=lifecycle_coordinator,
     )
+    register_for_background_startup(lambda c: c.logsink_service().startup())
 
     # FirmwareService - Factory for firmware management via S3 + DB
     firmware_service = providers.Factory(
@@ -201,3 +220,9 @@ class ServiceContainer(containers.DeclarativeContainer):
         mqtt_service=mqtt_service,
         metrics_service=metrics_service,
     )
+
+
+def start_background_services(container: Any) -> None:
+    """Eagerly instantiate and start all registered background services."""
+    for starter in _background_starters:
+        starter(container)

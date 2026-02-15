@@ -66,6 +66,7 @@ class TestLogSinkServiceInitialization:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             assert service.enabled is True
@@ -153,6 +154,7 @@ class TestLogSinkServiceMessageProcessing:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = json.dumps({"message": "Test log", "entity_id": "device-1"}).encode()
@@ -185,6 +187,7 @@ class TestLogSinkServiceMessageProcessing:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = json.dumps({
@@ -221,6 +224,7 @@ class TestLogSinkServiceMessageProcessing:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = json.dumps({
@@ -257,6 +261,7 @@ class TestLogSinkServiceMessageProcessing:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             before = datetime.now(UTC)
@@ -295,6 +300,7 @@ class TestLogSinkServiceMessageProcessing:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = json.dumps({"entity_id": "device-1", "level": "INFO"}).encode()
@@ -319,6 +325,7 @@ class TestLogSinkServiceMessageProcessing:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = b"not valid json"
@@ -348,6 +355,7 @@ class TestLogSinkServiceMessageProcessing:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = json.dumps({
@@ -391,6 +399,7 @@ class TestLogSinkServiceBatching:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = json.dumps({"message": "Single"}).encode()
@@ -434,6 +443,7 @@ class TestLogSinkServiceBatching:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             # Enqueue 5 messages while write is gated
@@ -473,6 +483,7 @@ class TestLogSinkServiceBatching:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = json.dumps({"message": "Test", "entity_id": "device-1"}).encode()
@@ -536,6 +547,7 @@ class TestLogSinkServiceBatching:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             # Enqueue messages — they may get different indices if we mock time,
@@ -584,6 +596,7 @@ class TestLogSinkServiceElasticsearchRetry:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = json.dumps({"message": "Test"}).encode()
@@ -614,6 +627,7 @@ class TestLogSinkServiceElasticsearchRetry:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = json.dumps({"message": "Test"}).encode()
@@ -646,6 +660,7 @@ class TestLogSinkServiceElasticsearchRetry:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = json.dumps({"message": "Test"}).encode()
@@ -672,6 +687,7 @@ class TestLogSinkServiceElasticsearchRetry:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         payload = json.dumps({"message": "Test"}).encode()
         service._on_message(payload)
@@ -705,6 +721,7 @@ class TestLogSinkServiceElasticsearchRetry:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = json.dumps({"message": "Test"}).encode()
@@ -788,6 +805,7 @@ class TestLogSinkServiceLifecycle:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         assert service._writer_thread is not None
         assert service._writer_thread.is_alive()
@@ -824,6 +842,7 @@ class TestLogSinkServiceLifecycle:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         # Enqueue messages while writer is blocked
         for i in range(3):
@@ -875,6 +894,7 @@ class TestLogSinkServiceMetrics:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             assert hasattr(service, "logsink_messages_received_total")
@@ -925,6 +945,7 @@ class TestLogSinkServiceNdjson:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             # NDJSON payload with 3 messages
@@ -972,6 +993,7 @@ class TestLogSinkServiceNdjson:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = b'{"message": "Log 1"}\n\n\n{"message": "Log 2"}\n'
@@ -1008,6 +1030,7 @@ class TestLogSinkServiceNdjson:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = b'{"message": "Log 1"}\nnot valid json\n{"message": "Log 3"}'
@@ -1044,6 +1067,7 @@ class TestLogSinkServiceNdjson:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = b'{"message": "Log 1"}\n   \n\t\n{"message": "Log 2"}'
@@ -1081,6 +1105,7 @@ class TestLogSinkServiceIndexNaming:
             config=settings, mqtt_service=mock_mqtt_service,
             lifecycle_coordinator=lifecycle,
         )
+        service.startup()
 
         try:
             payload = json.dumps({"message": "Test"}).encode()
