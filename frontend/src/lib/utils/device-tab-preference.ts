@@ -1,8 +1,8 @@
 const STORAGE_KEY = 'iot-support-device-tab'
 
-export type DeviceTab = 'configuration' | 'logs' | 'coredumps'
+export type DeviceTab = 'edit' | 'logs' | 'coredumps'
 
-const VALID_TABS: DeviceTab[] = ['configuration', 'logs', 'coredumps']
+const VALID_TABS: DeviceTab[] = ['edit', 'logs', 'coredumps']
 
 export function getDeviceTabPreference(): DeviceTab {
   try {
@@ -10,9 +10,9 @@ export function getDeviceTabPreference(): DeviceTab {
     if (stored && VALID_TABS.includes(stored as DeviceTab)) {
       return stored as DeviceTab
     }
-    return 'configuration'
+    return 'edit'
   } catch {
-    return 'configuration'
+    return 'edit'
   }
 }
 

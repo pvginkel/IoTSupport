@@ -114,16 +114,11 @@ export function useProvisioning(
   );
 
   /**
-   * Clean up resources (serial port, abort controller)
+   * Release the serial port: disconnect transport, close port, nullify refs.
+   * Shared teardown logic used by both success and error cleanup paths.
    */
-  const cleanup = useCallback(async () => {
-    // Abort any pending operations
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-
-    // Short grace period to let in-flight operations complete
+  const releasePort = useCallback(async () => {
+    // Short grace period to let in-flight operations settle
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Disconnect transport if connected
@@ -136,7 +131,7 @@ export function useProvisioning(
       transportRef.current = null;
     }
 
-    // Close serial port
+    // Close serial port (may already be closed by transport.disconnect())
     if (portRef.current) {
       try {
         await portRef.current.close();
@@ -146,6 +141,30 @@ export function useProvisioning(
       portRef.current = null;
     }
   }, []);
+
+  /**
+   * Disconnect the serial port without firing the abort controller.
+   * Used on the success path where no pending operations need aborting.
+   */
+  const disconnectPort = useCallback(async () => {
+    await releasePort();
+    // Nullify abort controller ref to prevent accidental reuse
+    abortControllerRef.current = null;
+  }, [releasePort]);
+
+  /**
+   * Clean up resources (serial port, abort controller).
+   * Fires the abort signal first — used on error/abort paths.
+   */
+  const cleanup = useCallback(async () => {
+    // Abort any pending operations
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
+    await releasePort();
+  }, [releasePort]);
 
   /**
    * Reset state to idle
@@ -481,9 +500,10 @@ export function useProvisioning(
         message: `Verification complete (MD5: ${md5sum.slice(0, 8)}...)`,
       });
 
-      // Success — release the serial port so the user doesn't have to
-      // disconnect manually via browser site settings.
-      await cleanup();
+      // Success — release the serial port without firing the abort controller.
+      // The abort signal must NOT fire on the success path because it can
+      // corrupt the transport's reader/writer lock teardown.
+      await disconnectPort();
 
       updateState({
         phase: 'success',
@@ -517,7 +537,7 @@ export function useProvisioning(
       instrumentation.trackError(currentPhase, errorMessage);
       onError?.(errorMessage);
     }
-  }, [deviceId, instrumentation, updateState, cleanup, reset, fetchNvsData, onComplete, onError]);
+  }, [deviceId, instrumentation, updateState, disconnectPort, cleanup, reset, fetchNvsData, onComplete, onError]);
 
   return {
     state,

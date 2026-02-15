@@ -20,13 +20,18 @@ export function DeviceDetailHeader({ device }: DeviceDetailHeaderProps) {
 
   // Persist the active tab so it can be restored on next device visit.
   // Catches direct-URL navigation, back-button, etc.
+  // Persist the active tab so the index route redirect can restore it.
+  // Only write when we're on a device detail path — ignore navigations
+  // away (e.g. back to /devices list) which would clobber the preference.
   const location = useLocation()
+  const devicePrefix = `/devices/${device.id}/`
   useEffect(() => {
-    let tab: DeviceTab = 'configuration'
+    if (!location.pathname.startsWith(devicePrefix)) return
+    let tab: DeviceTab = 'edit'
     if (location.pathname.includes('/logs')) tab = 'logs'
     else if (location.pathname.includes('/coredumps')) tab = 'coredumps'
     setDeviceTabPreference(tab)
-  }, [location.pathname])
+  }, [location.pathname, devicePrefix])
 
   // Title: prefer name, then entity ID, then key
   const displayTitle = (device.deviceName && device.deviceName.trim())
@@ -105,10 +110,9 @@ export function DeviceDetailHeader({ device }: DeviceDetailHeaderProps) {
       {/* Tab bar */}
       <nav className="flex gap-0 px-4" data-testid="devices.detail.tabs">
         <TabLink
-          to="/devices/$deviceId"
+          to="/devices/$deviceId/edit"
           params={{ deviceId: String(device.id) }}
-          exact
-          tab="configuration"
+          tab="edit"
           testId="devices.detail.tab.configuration"
         >
           Configuration
@@ -143,14 +147,12 @@ export function DeviceDetailHeader({ device }: DeviceDetailHeaderProps) {
 function TabLink({
   to,
   params,
-  exact,
   tab,
   testId,
   children,
 }: {
   to: string
   params: Record<string, string>
-  exact?: boolean
   tab: DeviceTab
   testId: string
   children: React.ReactNode
@@ -159,7 +161,6 @@ function TabLink({
     <Link
       to={to}
       params={params}
-      activeOptions={exact ? { exact: true } : undefined}
       className="relative px-4 py-2.5 text-sm font-medium transition-colors text-muted-foreground hover:text-foreground [&.active]:text-foreground"
       activeProps={{
         className: 'active',

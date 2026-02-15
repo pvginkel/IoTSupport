@@ -5,16 +5,25 @@ test.describe('Device Tab Navigation', () => {
   test('configuration tab is active by default', async ({ page, devices }) => {
     const device = await devices.create();
 
+    // Clear any stored tab preference so the default (edit) applies
+    await page.goto('/devices');
+    await page.evaluate(() => localStorage.removeItem('iot-support-device-tab'));
+
     const devicesPage = new DevicesPage(page);
     await devicesPage.gotoEdit(device.id);
-    await devicesPage.waitForEditorLoaded();
 
-    // Configuration tab should be active
+    // Bare route should redirect to /edit and show the configuration tab
+    await expect(page).toHaveURL(`/devices/${device.id}/edit`);
+    await devicesPage.waitForEditorLoaded();
     await expect(devicesPage.tabConfiguration).toHaveAttribute('aria-current', 'page');
   });
 
   test('tab navigation changes URL correctly', async ({ page, devices }) => {
     const device = await devices.create();
+
+    // Clear any stored tab preference so we start on configuration
+    await page.goto('/devices');
+    await page.evaluate(() => localStorage.removeItem('iot-support-device-tab'));
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.gotoEdit(device.id);
@@ -32,7 +41,7 @@ test.describe('Device Tab Navigation', () => {
 
     // Navigate back to Configuration tab
     await devicesPage.clickTab('configuration');
-    await expect(page).toHaveURL(`/devices/${device.id}`);
+    await expect(page).toHaveURL(`/devices/${device.id}/edit`);
     await expect(devicesPage.tabConfiguration).toHaveAttribute('aria-current', 'page');
   });
 
@@ -72,8 +81,8 @@ test.describe('Device Tab Navigation', () => {
     await devicesPage.gotoCoredumps(device.id);
     await expect(devicesPage.tabCoredumps).toHaveAttribute('aria-current', 'page');
 
-    // Direct navigate to configuration tab (index)
-    await devicesPage.gotoEdit(device.id);
+    // Direct navigate to configuration/edit tab
+    await page.goto(`/devices/${device.id}/edit`);
     await expect(devicesPage.tabConfiguration).toHaveAttribute('aria-current', 'page');
   });
 
@@ -105,5 +114,61 @@ test.describe('Device Tab Navigation', () => {
     await expect(devicesPage.headerDeviceModel).toBeVisible();
     await expect(devicesPage.headerRotationBadge).toBeVisible();
     await expect(devicesPage.headerOtaBadge).toContainText('Enabled');
+  });
+});
+
+test.describe('Device Tab Persistence', () => {
+  test('logs tab preference persists across device navigation', async ({ page, devices }) => {
+    const deviceA = await devices.create({ deviceName: 'Tab Persist A' });
+    const deviceB = await devices.create({ deviceName: 'Tab Persist B' });
+
+    // Clear any stored tab preference
+    await page.goto('/devices');
+    await page.evaluate(() => localStorage.removeItem('iot-support-device-tab'));
+
+    const devicesPage = new DevicesPage(page);
+
+    // Open device A and navigate to the Logs tab
+    await devicesPage.gotoEdit(deviceA.id);
+    await devicesPage.waitForEditorLoaded();
+    await devicesPage.clickTab('logs');
+    await expect(page).toHaveURL(`/devices/${deviceA.id}/logs`);
+    await expect(devicesPage.tabLogs).toHaveAttribute('aria-current', 'page');
+
+    // Navigate back to device list and open device B
+    await devicesPage.goto();
+    await devicesPage.waitForListLoaded();
+    await devicesPage.editDeviceById(deviceB.id);
+
+    // The Logs tab should be active on device B because the preference persisted
+    await expect(page).toHaveURL(`/devices/${deviceB.id}/logs`);
+    await expect(devicesPage.tabLogs).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('coredumps tab preference persists across device navigation', async ({ page, devices }) => {
+    const deviceA = await devices.create({ deviceName: 'Tab Persist C' });
+    const deviceB = await devices.create({ deviceName: 'Tab Persist D' });
+
+    // Clear any stored tab preference
+    await page.goto('/devices');
+    await page.evaluate(() => localStorage.removeItem('iot-support-device-tab'));
+
+    const devicesPage = new DevicesPage(page);
+
+    // Open device A and navigate to the Core Dumps tab
+    await devicesPage.gotoEdit(deviceA.id);
+    await devicesPage.waitForEditorLoaded();
+    await devicesPage.clickTab('coredumps');
+    await expect(page).toHaveURL(`/devices/${deviceA.id}/coredumps`);
+    await expect(devicesPage.tabCoredumps).toHaveAttribute('aria-current', 'page');
+
+    // Navigate back to device list and open device B
+    await devicesPage.goto();
+    await devicesPage.waitForListLoaded();
+    await devicesPage.editDeviceById(deviceB.id);
+
+    // The Core Dumps tab should be active on device B because the preference persisted
+    await expect(page).toHaveURL(`/devices/${deviceB.id}/coredumps`);
+    await expect(devicesPage.tabCoredumps).toHaveAttribute('aria-current', 'page');
   });
 });

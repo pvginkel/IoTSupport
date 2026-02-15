@@ -79,8 +79,8 @@ test.describe('Device List', () => {
     await devicesPage.waitForListLoaded();
     await devicesPage.editDeviceByKey(device.key);
 
-    // URL now uses device ID
-    await expect(page).toHaveURL(`/devices/${device.id}`);
+    // Bare route redirects to the edit tab
+    await expect(page).toHaveURL(`/devices/${device.id}/edit`);
     await expect(devicesPage.editor).toBeVisible();
     // In edit mode, device key is shown in the header
     await expect(devicesPage.headerDeviceKey).toContainText(device.key);
@@ -172,12 +172,9 @@ test.describe('Edit Device', () => {
     // Save
     await devicesPage.save();
 
-    // Wait for navigation
-    await expect(page).toHaveURL('/devices');
-    await devicesPage.waitForListLoaded();
-
-    // Verify updated name appears
-    await expect(devicesPage.rowByKey(device.key)).toContainText('Updated Name');
+    // After saving in edit mode, the user is taken to the device's logs tab
+    await expect(page).toHaveURL(`/devices/${device.id}/logs`);
+    await expect(devicesPage.tabLogs).toHaveAttribute('aria-current', 'page');
   });
 
   test('shows duplicate button in edit mode', async ({ page, devices }) => {
@@ -354,9 +351,9 @@ test.describe('Unsaved Changes', () => {
     // Confirmation dialog should appear
     await expect(devicesPage.unsavedChangesDialog).toBeVisible();
 
-    // Cancel the discard - stay on page
+    // Cancel the discard - stay on edit page
     await devicesPage.cancelDiscard();
-    await expect(page).toHaveURL(`/devices/${device.id}`);
+    await expect(page).toHaveURL(`/devices/${device.id}/edit`);
 
     // Try again and confirm discard
     await devicesPage.cancel();
