@@ -31,14 +31,16 @@ class AppEnvironment(BaseSettings):
         extra="ignore",
     )
 
-    # Firmware storage directory
-    ASSETS_DIR: Path | None = Field(default=None)
-    # Coredump storage directory
-    COREDUMPS_DIR: Path | None = Field(default=None)
     # Coredump parsing sidecar settings
     PARSE_SIDECAR_XFER_DIR: Path | None = Field(default=None)
     PARSE_SIDECAR_URL: str | None = Field(default=None)
     MAX_COREDUMPS: int = Field(default=20)
+    # Firmware version retention per model
+    MAX_FIRMWARES: int = Field(default=5)
+
+    # Legacy filesystem paths (used only by CLI migrate-to-s3 command)
+    ASSETS_DIR: Path | None = Field(default=None)
+    COREDUMPS_DIR: Path | None = Field(default=None)
 
     # MQTT settings
     MQTT_URL: str | None = Field(default=None)
@@ -79,13 +81,16 @@ class AppSettings(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    # Firmware storage
-    assets_dir: Path | None = None
-    # Coredump storage
-    coredumps_dir: Path | None = None
+    # Coredump parsing sidecar
     parse_sidecar_xfer_dir: Path | None = None
     parse_sidecar_url: str | None = None
     max_coredumps: int = 20
+    # Firmware version retention per model
+    max_firmwares: int = 5
+
+    # Legacy filesystem paths (used only by CLI migrate-to-s3 command)
+    assets_dir: Path | None = None
+    coredumps_dir: Path | None = None
 
     # MQTT settings
     mqtt_url: str | None = None

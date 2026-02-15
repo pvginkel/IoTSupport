@@ -3,6 +3,7 @@
 from app.models.coredump import CoreDump, ParseStatus
 from app.models.device import Device, RotationState
 from app.models.device_model import DeviceModel
+from app.models.firmware_version import FirmwareVersion
 from app.models.setting import Setting
 
-__all__ = ["CoreDump", "Device", "DeviceModel", "ParseStatus", "RotationState", "Setting"]
+__all__ = ["CoreDump", "Device", "DeviceModel", "FirmwareVersion", "ParseStatus", "RotationState", "Setting"]

@@ -1,6 +1,5 @@
-"""Tests for CoredumpService."""
+"""Tests for CoredumpService (S3-backed storage)."""
 
-import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -10,22 +9,19 @@ from flask import Flask
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.app_config import AppSettings
 from app.exceptions import (
-    InvalidOperationException,
     RecordNotFoundException,
     ValidationException,
 )
 from app.models.coredump import CoreDump, ParseStatus
 from app.services.container import ServiceContainer
-from app.services.coredump_service import MAX_COREDUMP_SIZE, CoredumpService
+from app.services.coredump_service import MAX_COREDUMP_SIZE
 from tests.api.test_iot import create_test_device
 
 
 def _create_coredump_record(
     session: Session,
     device_id: int,
-    filename: str = "coredump_test.dmp",
     chip: str = "esp32s3",
     firmware_version: str = "1.0.0",
     size: int = 256,
@@ -36,7 +32,6 @@ def _create_coredump_record(
     """Helper to create a CoreDump record directly in the DB."""
     coredump = CoreDump(
         device_id=device_id,
-        filename=filename,
         chip=chip,
         firmware_version=firmware_version,
         size=size,
@@ -52,15 +47,15 @@ def _create_coredump_record(
 class TestCoredumpServiceSave:
     """Tests for CoredumpService.save_coredump()."""
 
-    def test_save_coredump_creates_file_and_record(
+    def test_save_coredump_creates_s3_object_and_record(
         self, app: Flask, session: Session, container: ServiceContainer
     ) -> None:
-        """Test that save_coredump creates a .dmp file and a DB record."""
+        """Test that save_coredump uploads to S3 and creates a DB record."""
         device_id, device_key, _ = create_test_device(app, container, model_code="sv1")
         service = container.coredump_service()
         content = b"\x00" * 256
 
-        filename, coredump_id = service.save_coredump(
+        coredump_id = service.save_coredump(
             device_id=device_id,
             device_key=device_key,
             model_code="sv1",
@@ -69,32 +64,25 @@ class TestCoredumpServiceSave:
             content=content,
         )
 
-        # Verify filename format
-        assert filename.startswith("coredump_")
-        assert filename.endswith(".dmp")
-
-        # Verify .dmp file exists
-        config = container.app_config()
-        assert config.coredumps_dir is not None
-        dmp_path = config.coredumps_dir / device_key / filename
-        assert dmp_path.exists()
-        assert dmp_path.read_bytes() == content
-
-        # Verify no JSON sidecar file was created
-        json_files = list((config.coredumps_dir / device_key).glob("*.json"))
-        assert len(json_files) == 0
-
         # Verify DB record
         stmt = select(CoreDump).where(CoreDump.id == coredump_id)
         coredump = session.execute(stmt).scalar_one()
         assert coredump.device_id == device_id
-        assert coredump.filename == filename
         assert coredump.chip == "esp32s3"
         assert coredump.firmware_version == "1.2.3"
         assert coredump.size == 256
         assert coredump.parse_status == ParseStatus.PENDING.value
         assert coredump.parsed_output is None
         assert coredump.uploaded_at is not None
+
+        # Verify S3 object exists
+        s3 = container.s3_service()
+        s3_key = f"coredumps/{device_key}/{coredump_id}.dmp"
+        assert s3.file_exists(s3_key)
+
+        # Verify S3 content matches
+        stream = s3.download_file(s3_key)
+        assert stream.read() == content
 
     def test_save_coredump_empty_content_raises(
         self, app: Flask, session: Session, container: ServiceContainer
@@ -139,7 +127,7 @@ class TestCoredumpServiceSave:
         service = container.coredump_service()
         content = b"\x00" * MAX_COREDUMP_SIZE
 
-        filename, _ = service.save_coredump(
+        coredump_id = service.save_coredump(
             device_id=device_id,
             device_key=device_key,
             model_code="sv4",
@@ -148,30 +136,7 @@ class TestCoredumpServiceSave:
             content=content,
         )
 
-        assert filename.endswith(".dmp")
-
-    def test_save_coredump_no_coredumps_dir_raises(
-        self, app: Flask, session: Session, container: ServiceContainer
-    ) -> None:
-        """Test that saving when coredumps_dir is None raises InvalidOperationException."""
-        # Create a service with None coredumps_dir
-        service = CoredumpService(
-            coredumps_dir=None,
-            config=container.app_config(),
-            firmware_service=container.firmware_service(),
-            metrics_service=container.metrics_service(),
-        )
-        service.container = container
-
-        with pytest.raises(InvalidOperationException, match="COREDUMPS_DIR is not configured"):
-            service.save_coredump(
-                device_id=1,
-                device_key="abc12345",
-                model_code="test",
-                chip="esp32",
-                firmware_version="1.0.0",
-                content=b"\x00" * 10,
-            )
+        assert coredump_id > 0
 
     def test_save_coredump_invalid_device_key_raises(
         self, app: Flask, session: Session, container: ServiceContainer
@@ -189,16 +154,16 @@ class TestCoredumpServiceSave:
                 content=b"\x00" * 10,
             )
 
-    def test_save_coredump_unique_filenames(
+    def test_save_coredump_unique_ids(
         self, app: Flask, session: Session, container: ServiceContainer
     ) -> None:
-        """Test that consecutive saves produce unique filenames."""
+        """Test that consecutive saves produce unique coredump IDs."""
         device_id, device_key, _ = create_test_device(app, container, model_code="sv5")
         service = container.coredump_service()
 
-        filenames = set()
+        ids = set()
         for _ in range(5):
-            filename, _ = service.save_coredump(
+            coredump_id = service.save_coredump(
                 device_id=device_id,
                 device_key=device_key,
                 model_code="sv5",
@@ -206,9 +171,9 @@ class TestCoredumpServiceSave:
                 firmware_version="1.0.0",
                 content=b"\x00",
             )
-            filenames.add(filename)
+            ids.add(coredump_id)
 
-        assert len(filenames) == 5
+        assert len(ids) == 5
 
 
 class TestCoredumpServiceRetention:
@@ -217,7 +182,7 @@ class TestCoredumpServiceRetention:
     def test_retention_deletes_oldest_when_exceeded(
         self, app: Flask, session: Session, container: ServiceContainer,
     ) -> None:
-        """Test that exceeding MAX_COREDUMPS deletes the oldest records and files."""
+        """Test that exceeding MAX_COREDUMPS deletes the oldest records and S3 objects."""
         device_id, device_key, _ = create_test_device(app, container, model_code="ret1")
 
         service = container.coredump_service()
@@ -228,9 +193,9 @@ class TestCoredumpServiceRetention:
         config.max_coredumps = 3
 
         # Create 3 coredumps (at the limit)
-        created_filenames = []
+        created_ids = []
         for i in range(3):
-            filename, _ = service.save_coredump(
+            coredump_id = service.save_coredump(
                 device_id=device_id,
                 device_key=device_key,
                 model_code="ret1",
@@ -238,10 +203,10 @@ class TestCoredumpServiceRetention:
                 firmware_version="1.0.0",
                 content=b"\x00" * (i + 1),
             )
-            created_filenames.append(filename)
+            created_ids.append(coredump_id)
 
         # Adding one more should delete the oldest
-        filename_new, _ = service.save_coredump(
+        new_id = service.save_coredump(
             device_id=device_id,
             device_key=device_key,
             model_code="ret1",
@@ -255,12 +220,14 @@ class TestCoredumpServiceRetention:
         remaining = session.execute(stmt).scalars().all()
         assert len(remaining) == 3
 
-        # The oldest file should be gone from disk
-        assert config.coredumps_dir is not None
-        assert not (config.coredumps_dir / device_key / created_filenames[0]).exists()
+        # The oldest S3 object should be gone
+        s3 = container.s3_service()
+        oldest_key = f"coredumps/{device_key}/{created_ids[0]}.dmp"
+        assert not s3.file_exists(oldest_key)
 
         # The newest should exist
-        assert (config.coredumps_dir / device_key / filename_new).exists()
+        newest_key = f"coredumps/{device_key}/{new_id}.dmp"
+        assert s3.file_exists(newest_key)
 
         # Restore original
         config.max_coredumps = original_max
@@ -300,12 +267,10 @@ class TestCoredumpServiceCRUD:
         # Create records with different uploaded_at times
         _create_coredump_record(
             session, device_id,
-            filename="old.dmp",
             uploaded_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
-        _create_coredump_record(
+        newer = _create_coredump_record(
             session, device_id,
-            filename="new.dmp",
             uploaded_at=datetime(2026, 2, 1, tzinfo=UTC),
         )
 
@@ -313,8 +278,7 @@ class TestCoredumpServiceCRUD:
         result = service.list_coredumps(device_id)
 
         assert len(result) == 2
-        assert result[0].filename == "new.dmp"  # Newest first
-        assert result[1].filename == "old.dmp"
+        assert result[0].id == newer.id  # Newest first
 
     def test_get_coredump_success(
         self, app: Flask, session: Session, container: ServiceContainer
@@ -324,7 +288,6 @@ class TestCoredumpServiceCRUD:
 
         record = _create_coredump_record(
             session, device_id,
-            filename="get_test.dmp",
             parsed_output="crash info",
             parse_status=ParseStatus.PARSED.value,
         )
@@ -333,7 +296,6 @@ class TestCoredumpServiceCRUD:
         coredump = service.get_coredump(device_id, record.id)
 
         assert coredump.id == record.id
-        assert coredump.filename == "get_test.dmp"
         assert coredump.parsed_output == "crash info"
 
     def test_get_coredump_wrong_device_raises(
@@ -343,7 +305,7 @@ class TestCoredumpServiceCRUD:
         device_id_a, _, _ = create_test_device(app, container, model_code="cr3a")
         device_id_b, _, _ = create_test_device(app, container, model_code="cr3b")
 
-        record = _create_coredump_record(session, device_id_a, filename="wrong_dev.dmp")
+        record = _create_coredump_record(session, device_id_a)
 
         service = container.coredump_service()
         with pytest.raises(RecordNotFoundException):
@@ -359,68 +321,74 @@ class TestCoredumpServiceCRUD:
         with pytest.raises(RecordNotFoundException):
             service.get_coredump(device_id, 99999)
 
-    def test_get_coredump_path_success(
+    def test_get_coredump_stream_success(
         self, app: Flask, session: Session, container: ServiceContainer
     ) -> None:
-        """Test getting the filesystem path for a coredump file."""
+        """Test downloading a coredump from S3 as a stream."""
         device_id, device_key, _ = create_test_device(app, container, model_code="cr5")
-
-        # Create file on disk
-        config = container.app_config()
-        assert config.coredumps_dir is not None
-        device_dir = config.coredumps_dir / device_key
-        device_dir.mkdir(parents=True, exist_ok=True)
-        (device_dir / "test.dmp").write_bytes(b"\x00")
-
         service = container.coredump_service()
-        path = service.get_coredump_path(device_key, "test.dmp")
-        assert path == device_dir / "test.dmp"
+        content = b"\xDE\xAD\xBE\xEF" * 32
 
-    def test_get_coredump_path_file_missing_raises(
+        coredump_id = service.save_coredump(
+            device_id=device_id,
+            device_key=device_key,
+            model_code="cr5",
+            chip="esp32s3",
+            firmware_version="1.0.0",
+            content=content,
+        )
+
+        stream = service.get_coredump_stream(device_key, coredump_id)
+        assert stream.read() == content
+
+    def test_get_coredump_stream_not_found_raises(
         self, app: Flask, session: Session, container: ServiceContainer
     ) -> None:
-        """Test that get_coredump_path raises when file not on disk."""
+        """Test that get_coredump_stream raises when S3 object not found."""
         service = container.coredump_service()
 
         with pytest.raises(RecordNotFoundException):
-            service.get_coredump_path("abc12345", "nonexistent.dmp")
+            service.get_coredump_stream("abc12345", 99999)
 
-    def test_delete_coredump_removes_record_and_file(
+    def test_delete_coredump_removes_record_and_s3(
         self, app: Flask, session: Session, container: ServiceContainer
     ) -> None:
-        """Test that delete_coredump removes both DB record and file."""
+        """Test that delete_coredump removes both DB record and S3 object."""
         device_id, device_key, _ = create_test_device(app, container, model_code="cr6")
-
-        # Create file on disk
-        config = container.app_config()
-        assert config.coredumps_dir is not None
-        device_dir = config.coredumps_dir / device_key
-        device_dir.mkdir(parents=True, exist_ok=True)
-        (device_dir / "del.dmp").write_bytes(b"\x00")
-
-        record = _create_coredump_record(session, device_id, filename="del.dmp")
-
         service = container.coredump_service()
-        service.delete_coredump(device_id, record.id, device_key)
+
+        coredump_id = service.save_coredump(
+            device_id=device_id,
+            device_key=device_key,
+            model_code="cr6",
+            chip="esp32s3",
+            firmware_version="1.0.0",
+            content=b"\x00" * 64,
+        )
+
+        service.delete_coredump(device_id, coredump_id, device_key)
 
         # Verify record deleted
         result = session.execute(
-            select(CoreDump).where(CoreDump.id == record.id)
+            select(CoreDump).where(CoreDump.id == coredump_id)
         ).scalar_one_or_none()
         assert result is None
 
-        # Verify file deleted
-        assert not (device_dir / "del.dmp").exists()
+        # Verify S3 object deleted
+        s3 = container.s3_service()
+        assert not s3.file_exists(f"coredumps/{device_key}/{coredump_id}.dmp")
 
-    def test_delete_coredump_file_already_missing(
+    def test_delete_coredump_s3_missing_succeeds(
         self, app: Flask, session: Session, container: ServiceContainer
     ) -> None:
-        """Test that deleting a coredump whose file is missing succeeds."""
+        """Test that deleting a coredump whose S3 object is missing succeeds."""
         device_id, device_key, _ = create_test_device(app, container, model_code="cr7")
-        record = _create_coredump_record(session, device_id, filename="already_gone.dmp")
+
+        # Create a DB record directly (no S3 upload)
+        record = _create_coredump_record(session, device_id)
 
         service = container.coredump_service()
-        # Should not raise even though file doesn't exist
+        # Should not raise even though S3 object doesn't exist
         service.delete_coredump(device_id, record.id, device_key)
 
         result = session.execute(
@@ -431,20 +399,22 @@ class TestCoredumpServiceCRUD:
     def test_delete_all_coredumps(
         self, app: Flask, session: Session, container: ServiceContainer
     ) -> None:
-        """Test that delete_all_coredumps removes all records and files for a device."""
+        """Test that delete_all_coredumps removes all records and S3 objects for a device."""
         device_id, device_key, _ = create_test_device(app, container, model_code="cr8")
-
-        config = container.app_config()
-        assert config.coredumps_dir is not None
-        device_dir = config.coredumps_dir / device_key
-        device_dir.mkdir(parents=True, exist_ok=True)
-
-        for i in range(5):
-            fname = f"bulk_del_{i}.dmp"
-            (device_dir / fname).write_bytes(b"\x00")
-            _create_coredump_record(session, device_id, filename=fname)
-
         service = container.coredump_service()
+
+        coredump_ids = []
+        for _ in range(5):
+            cid = service.save_coredump(
+                device_id=device_id,
+                device_key=device_key,
+                model_code="cr8",
+                chip="esp32",
+                firmware_version="1.0.0",
+                content=b"\x00" * 10,
+            )
+            coredump_ids.append(cid)
+
         service.delete_all_coredumps(device_id, device_key)
 
         # All records gone
@@ -453,9 +423,10 @@ class TestCoredumpServiceCRUD:
         ).scalars().all()
         assert len(remaining) == 0
 
-        # All files gone
-        dmp_files = list(device_dir.glob("*.dmp"))
-        assert len(dmp_files) == 0
+        # All S3 objects gone
+        s3 = container.s3_service()
+        for cid in coredump_ids:
+            assert not s3.file_exists(f"coredumps/{device_key}/{cid}.dmp")
 
 
 class TestCoredumpServiceParsing:
@@ -474,7 +445,6 @@ class TestCoredumpServiceParsing:
             model_code="test",
             chip="esp32",
             firmware_version="1.0.0",
-            filename="test.dmp",
         )
         # No thread should be started -- we just verify no exception
 
@@ -482,14 +452,14 @@ class TestCoredumpServiceParsing:
         self, app: Flask, session: Session, container: ServiceContainer,
         tmp_path: Path,
     ) -> None:
-        """Test successful parsing via sidecar."""
+        """Test successful parsing via sidecar (downloads from S3)."""
         device_id, device_key, _ = create_test_device(app, container, model_code="ps1")
         service = container.coredump_service()
         config = container.app_config()
 
-        # Save a coredump
+        # Save a coredump (goes to S3)
         content = b"\xDE\xAD" * 128
-        filename, coredump_id = service.save_coredump(
+        coredump_id = service.save_coredump(
             device_id=device_id,
             device_key=device_key,
             model_code="ps1",
@@ -499,13 +469,19 @@ class TestCoredumpServiceParsing:
         )
         session.commit()
 
-        # Create a firmware ZIP with an .elf file
-        xfer_dir = tmp_path / "xfer"
-        xfer_dir.mkdir()
-
-        self._create_firmware_zip(config, "ps1", "1.0.0")
+        # Upload a firmware ELF to S3 (so parsing can find it)
+        from io import BytesIO
+        s3 = container.s3_service()
+        elf_content = b"\x7fELF" + b"\x00" * 100
+        s3.upload_file(
+            BytesIO(elf_content),
+            "firmware/ps1/1.0.0/firmware.elf",
+            content_type="application/octet-stream",
+        )
 
         # Configure sidecar settings
+        xfer_dir = tmp_path / "xfer"
+        xfer_dir.mkdir()
         config.parse_sidecar_xfer_dir = xfer_dir
         config.parse_sidecar_url = "http://sidecar:8080"
 
@@ -523,7 +499,6 @@ class TestCoredumpServiceParsing:
                 model_code="ps1",
                 chip="esp32s3",
                 firmware_version="1.0.0",
-                filename=filename,
             )
 
         # Verify the DB record was updated
@@ -545,7 +520,7 @@ class TestCoredumpServiceParsing:
         service = container.coredump_service()
         config = container.app_config()
 
-        filename, coredump_id = service.save_coredump(
+        coredump_id = service.save_coredump(
             device_id=device_id,
             device_key=device_key,
             model_code="ps2",
@@ -555,10 +530,17 @@ class TestCoredumpServiceParsing:
         )
         session.commit()
 
+        # Upload ELF to S3
+        from io import BytesIO
+        s3 = container.s3_service()
+        s3.upload_file(
+            BytesIO(b"\x7fELF" + b"\x00" * 100),
+            "firmware/ps2/1.0.0/firmware.elf",
+            content_type="application/octet-stream",
+        )
+
         xfer_dir = tmp_path / "xfer"
         xfer_dir.mkdir()
-        self._create_firmware_zip(config, "ps2", "1.0.0")
-
         config.parse_sidecar_xfer_dir = xfer_dir
         config.parse_sidecar_url = "http://sidecar:8080"
 
@@ -584,7 +566,6 @@ class TestCoredumpServiceParsing:
                 model_code="ps2",
                 chip="esp32",
                 firmware_version="1.0.0",
-                filename=filename,
             )
 
         with app.app_context():
@@ -605,7 +586,7 @@ class TestCoredumpServiceParsing:
         service = container.coredump_service()
         config = container.app_config()
 
-        filename, coredump_id = service.save_coredump(
+        coredump_id = service.save_coredump(
             device_id=device_id,
             device_key=device_key,
             model_code="ps3",
@@ -615,10 +596,17 @@ class TestCoredumpServiceParsing:
         )
         session.commit()
 
+        # Upload ELF to S3
+        from io import BytesIO
+        s3 = container.s3_service()
+        s3.upload_file(
+            BytesIO(b"\x7fELF" + b"\x00" * 100),
+            "firmware/ps3/1.0.0/firmware.elf",
+            content_type="application/octet-stream",
+        )
+
         xfer_dir = tmp_path / "xfer"
         xfer_dir.mkdir()
-        self._create_firmware_zip(config, "ps3", "1.0.0")
-
         config.parse_sidecar_xfer_dir = xfer_dir
         config.parse_sidecar_url = "http://sidecar:8080"
 
@@ -632,7 +620,6 @@ class TestCoredumpServiceParsing:
                 model_code="ps3",
                 chip="esp32",
                 firmware_version="1.0.0",
-                filename=filename,
             )
 
         with app.app_context():
@@ -645,21 +632,21 @@ class TestCoredumpServiceParsing:
             assert "sidecar unreachable" in coredump.parsed_output  # type: ignore[operator]
             container.db_session.reset()
 
-    def test_parse_coredump_firmware_zip_not_found(
+    def test_parse_coredump_firmware_elf_not_found(
         self, app: Flask, session: Session, container: ServiceContainer,
         tmp_path: Path,
     ) -> None:
-        """Test that missing firmware ZIP sets ERROR without retrying."""
+        """Test that missing firmware ELF in S3 sets ERROR without retrying."""
         device_id, device_key, _ = create_test_device(app, container, model_code="ps4")
         service = container.coredump_service()
         config = container.app_config()
 
-        filename, coredump_id = service.save_coredump(
+        coredump_id = service.save_coredump(
             device_id=device_id,
             device_key=device_key,
             model_code="ps4",
             chip="esp32",
-            firmware_version="9.9.9",  # No ZIP exists for this version
+            firmware_version="9.9.9",  # No ELF exists for this version
             content=b"\x00" * 10,
         )
         session.commit()
@@ -675,7 +662,6 @@ class TestCoredumpServiceParsing:
             model_code="ps4",
             chip="esp32",
             firmware_version="9.9.9",
-            filename=filename,
         )
 
         with app.app_context():
@@ -684,7 +670,7 @@ class TestCoredumpServiceParsing:
                 select(CoreDump).where(CoreDump.id == coredump_id)
             ).scalar_one()
             assert coredump.parse_status == ParseStatus.ERROR.value
-            assert "firmware ZIP not found" in coredump.parsed_output  # type: ignore[operator]
+            assert "firmware ELF not found" in coredump.parsed_output  # type: ignore[operator]
             container.db_session.reset()
 
     def test_parse_coredump_cleans_up_xfer_files(
@@ -696,7 +682,7 @@ class TestCoredumpServiceParsing:
         service = container.coredump_service()
         config = container.app_config()
 
-        filename, coredump_id = service.save_coredump(
+        coredump_id = service.save_coredump(
             device_id=device_id,
             device_key=device_key,
             model_code="ps5",
@@ -706,10 +692,17 @@ class TestCoredumpServiceParsing:
         )
         session.commit()
 
+        # Upload ELF to S3
+        from io import BytesIO
+        s3 = container.s3_service()
+        s3.upload_file(
+            BytesIO(b"\x7fELF" + b"\x00" * 100),
+            "firmware/ps5/1.0.0/firmware.elf",
+            content_type="application/octet-stream",
+        )
+
         xfer_dir = tmp_path / "xfer"
         xfer_dir.mkdir()
-        self._create_firmware_zip(config, "ps5", "1.0.0")
-
         config.parse_sidecar_xfer_dir = xfer_dir
         config.parse_sidecar_url = "http://sidecar:8080"
 
@@ -725,61 +718,7 @@ class TestCoredumpServiceParsing:
                 model_code="ps5",
                 chip="esp32s3",
                 firmware_version="1.0.0",
-                filename=filename,
             )
 
         # Xfer files should be cleaned up
         assert len(list(xfer_dir.glob("*"))) == 0
-
-    def _create_firmware_zip(
-        self, settings: AppSettings, model_code: str, version: str
-    ) -> Path:
-        """Create a minimal firmware ZIP containing a dummy .elf file."""
-        assert settings.assets_dir is not None
-        model_dir = settings.assets_dir / model_code
-        model_dir.mkdir(parents=True, exist_ok=True)
-        zip_path = model_dir / f"firmware-{version}.zip"
-
-        with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr(f"{model_code}.elf", b"\x7fELF" + b"\x00" * 100)
-
-        return zip_path
-
-
-class TestCoredumpServiceInit:
-    """Tests for CoredumpService initialization."""
-
-    def test_init_creates_directory(self, tmp_path: Path) -> None:
-        """Test that initialization creates the coredumps directory."""
-        coredumps_dir = tmp_path / "new_coredumps"
-        assert not coredumps_dir.exists()
-
-        mock_config = MagicMock()
-        mock_config.parse_sidecar_xfer_dir = None
-        mock_config.parse_sidecar_url = None
-        mock_config.max_coredumps = 20
-
-        CoredumpService(
-            coredumps_dir=coredumps_dir,
-            config=mock_config,
-            firmware_service=MagicMock(),
-            metrics_service=MagicMock(),
-        )
-
-        assert coredumps_dir.exists()
-        assert coredumps_dir.is_dir()
-
-    def test_init_with_none_does_not_fail(self) -> None:
-        """Test that initialization with None coredumps_dir does not raise."""
-        mock_config = MagicMock()
-        mock_config.parse_sidecar_xfer_dir = None
-        mock_config.parse_sidecar_url = None
-        mock_config.max_coredumps = 20
-
-        service = CoredumpService(
-            coredumps_dir=None,
-            config=mock_config,
-            firmware_service=MagicMock(),
-            metrics_service=MagicMock(),
-        )
-        assert service.coredumps_dir is None

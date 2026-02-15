@@ -110,7 +110,7 @@ def download_coredump(
     coredump_service: CoredumpService = Provide[ServiceContainer.coredump_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
 ) -> Any:
-    """Download raw coredump .dmp binary."""
+    """Download raw coredump .dmp binary from S3."""
     start_time = time.perf_counter()
     status = "success"
 
@@ -118,17 +118,17 @@ def download_coredump(
         # Get the coredump record (verifies ownership)
         coredump = coredump_service.get_coredump(device_id, coredump_id)
 
-        # Resolve the device key for filesystem path
+        # Resolve the device key for S3 path
         device = device_service.get_device(device_id)
 
-        # Get file path (raises RecordNotFoundException if file missing)
-        path = coredump_service.get_coredump_path(device.key, coredump.filename)
+        # Download from S3 as a BytesIO stream
+        stream = coredump_service.get_coredump_stream(device.key, coredump.id)
 
         return send_file(  # type: ignore[call-arg]
-            path,
+            stream,
             mimetype="application/octet-stream",
             as_attachment=True,
-            download_name=coredump.filename,
+            download_name=f"coredump_{coredump.id}.dmp",
         )
 
     except Exception:

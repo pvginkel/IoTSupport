@@ -204,7 +204,7 @@ def get_firmware(
             model_code = device_ctx.model_code
             firmware_version = device.device_model.firmware_version
 
-        # Get firmware stream (tries versioned ZIP first, falls back to legacy .bin)
+        # Get firmware .bin from S3
         stream = firmware_service.get_firmware_stream(model_code, firmware_version)
 
         # Use send_file with BytesIO stream
@@ -364,9 +364,9 @@ def upload_coredump(
     Accepts raw binary body containing the ESP32 coredump data.
     Requires chip and firmware_version query parameters.
 
-    The coredump is stored in COREDUMPS_DIR/{device_key}/ with a DB record
-    tracking metadata and parse status. Background parsing is triggered
-    if the sidecar is configured.
+    The coredump is stored in S3 under coredumps/{device_key}/{id}.dmp
+    with a DB record tracking metadata and parse status. Background parsing
+    is triggered if the sidecar is configured.
     """
     start_time = time.perf_counter()
     status = "success"
@@ -403,8 +403,8 @@ def upload_coredump(
         # Read raw binary body
         content = request.get_data()
 
-        # Delegate to service: saves file, creates DB record, enforces retention
-        filename, coredump_id = coredump_service.save_coredump(
+        # Delegate to service: creates DB record, uploads to S3, enforces retention
+        coredump_id = coredump_service.save_coredump(
             device_id=device_id,
             device_key=device_key,
             model_code=model_code,
@@ -422,10 +422,9 @@ def upload_coredump(
             model_code=model_code,
             chip=chip,
             firmware_version=firmware_version,
-            filename=filename,
         )
 
-        return {"status": "ok", "filename": filename}, 201
+        return {"status": "ok", "coredump_id": coredump_id}, 201
 
     except Exception:
         status = "error"

@@ -97,10 +97,10 @@ def create_test_coredump(
     # Set parsed_at for terminal states (PARSED or ERROR)
     parsed_at = now if data.parse_status in (ParseStatus.PARSED.value, ParseStatus.ERROR.value) else None
 
-    # Create the coredump record with a placeholder filename
+    # Create the coredump record (no filename -- S3 key is derived from
+    # device_key + coredump id)
     coredump = CoreDump(
         device_id=data.device_id,
-        filename="placeholder.dmp",
         chip=data.chip,
         firmware_version=data.firmware_version,
         size=data.size,
@@ -112,10 +112,6 @@ def create_test_coredump(
 
     session = current_app.container.db_session()
     session.add(coredump)
-    session.flush()
-
-    # Update filename with the actual ID
-    coredump.filename = f"test_coredump_{coredump.id}.dmp"
     session.flush()
 
     logger.info("Created test coredump: id=%d device_id=%d status=%s", coredump.id, data.device_id, data.parse_status)

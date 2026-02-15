@@ -11,6 +11,7 @@ from flask.testing import FlaskClient
 from app.app_config import AppSettings
 from app.services.container import ServiceContainer
 from tests.conftest import create_test_firmware
+from tests.services.test_firmware_service import _create_test_zip
 
 
 class TestPipelineFirmwareUpload:
@@ -19,17 +20,17 @@ class TestPipelineFirmwareUpload:
     def test_upload_firmware_by_code_success(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
     ) -> None:
-        """Test uploading firmware using model code."""
+        """Test uploading firmware ZIP using model code."""
         with app.app_context():
             model_service = container.device_model_service()
             model_service.create_device_model(code="pipetest", name="Pipeline Test")
             container.db_session().commit()
 
-        firmware_content = create_test_firmware(b"1.0.0")
+        zip_content = _create_test_zip("pipetest", b"1.0.0")
 
         response = client.post(
             "/api/pipeline/models/pipetest/firmware",
-            data=firmware_content,
+            data=zip_content,
             content_type="application/octet-stream",
         )
 
@@ -38,15 +39,34 @@ class TestPipelineFirmwareUpload:
         assert data["firmware_version"] == "1.0.0"
         assert data["code"] == "pipetest"
 
+    def test_upload_firmware_raw_bin_rejected(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that raw .bin upload is rejected (only ZIP accepted)."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model_service.create_device_model(code="rawbin", name="Raw Bin Test")
+            container.db_session().commit()
+
+        firmware_content = create_test_firmware(b"1.0.0")
+
+        response = client.post(
+            "/api/pipeline/models/rawbin/firmware",
+            data=firmware_content,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 400
+
     def test_upload_firmware_model_not_found(
         self, client: FlaskClient
     ) -> None:
         """Test uploading firmware for non-existent model returns 404."""
-        firmware_content = create_test_firmware(b"1.0.0")
+        zip_content = _create_test_zip("nonexistent", b"1.0.0")
 
         response = client.post(
             "/api/pipeline/models/nonexistent/firmware",
-            data=firmware_content,
+            data=zip_content,
             content_type="application/octet-stream",
         )
 
@@ -80,13 +100,13 @@ class TestPipelineFirmwareUpload:
 
             container.db_session().commit()
 
-        firmware_content = create_test_firmware(b"2.0.0")
+        zip_content = _create_test_zip("mqtttest", b"2.0.0")
         mqtt_service = app.container.mqtt_service()
 
         with patch.object(mqtt_service, "publish") as mock_publish:
             response = client.post(
                 "/api/pipeline/models/mqtttest/firmware",
-                data=firmware_content,
+                data=zip_content,
                 content_type="application/octet-stream",
             )
 
@@ -124,24 +144,6 @@ class TestPipelineFirmwareUpload:
 class TestPipelineFirmwareZipUpload:
     """Tests for ZIP firmware upload via POST /api/pipeline/models/<code>/firmware."""
 
-    def _create_test_zip(self, model_code: str, version: bytes) -> bytes:
-        """Create a valid firmware ZIP for testing."""
-        bin_content = create_test_firmware(version)
-        version_json = json.dumps({
-            "git_commit": "a1b2c3d4e5f6",
-            "idf_version": "v5.2.1",
-            "firmware_version": version.decode("utf-8"),
-        }).encode("utf-8")
-
-        buf = BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr(f"{model_code}.bin", bin_content)
-            zf.writestr(f"{model_code}.elf", b"\x7fELF" + b"\x00" * 100)
-            zf.writestr(f"{model_code}.map", b"Memory Map\n")
-            zf.writestr("sdkconfig", b"CONFIG_IDF_TARGET=\"esp32s3\"\n")
-            zf.writestr("version.json", version_json)
-        return buf.getvalue()
-
     def test_upload_firmware_zip_success(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
     ) -> None:
@@ -152,7 +154,7 @@ class TestPipelineFirmwareZipUpload:
             model_service.create_device_model(code=model_code, name="ZIP Test")
             container.db_session().commit()
 
-        zip_content = self._create_test_zip(model_code, b"3.0.0")
+        zip_content = _create_test_zip(model_code, b"3.0.0")
 
         response = client.post(
             f"/api/pipeline/models/{model_code}/firmware",
@@ -189,17 +191,17 @@ class TestPipelineFirmwareZipUpload:
 
         assert response.status_code == 400
 
-    def test_upload_firmware_zip_creates_versioned_file(
-        self, app: Flask, client: FlaskClient, container: ServiceContainer, test_app_settings: AppSettings
+    def test_upload_firmware_zip_creates_s3_objects(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
     ) -> None:
-        """Test that ZIP upload creates versioned ZIP on disk."""
-        model_code = "zipfile"
+        """Test that ZIP upload creates artifacts in S3."""
+        model_code = "zips3"
         with app.app_context():
             model_service = container.device_model_service()
-            model_service.create_device_model(code=model_code, name="ZIP File Test")
+            model_service.create_device_model(code=model_code, name="ZIP S3 Test")
             container.db_session().commit()
 
-        zip_content = self._create_test_zip(model_code, b"4.1.0")
+        zip_content = _create_test_zip(model_code, b"4.1.0")
 
         response = client.post(
             f"/api/pipeline/models/{model_code}/firmware",
@@ -209,37 +211,10 @@ class TestPipelineFirmwareZipUpload:
 
         assert response.status_code == 200
 
-        # Verify versioned ZIP exists on disk
-        assets_dir = test_app_settings.assets_dir
-        assert assets_dir is not None
-        zip_path = assets_dir / model_code / "firmware-4.1.0.zip"
-        assert zip_path.exists()
-
-        # Verify legacy .bin also exists
-        legacy_path = assets_dir / f"firmware-{model_code}.bin"
-        assert legacy_path.exists()
-
-    def test_upload_plain_bin_still_works(
-        self, app: Flask, client: FlaskClient, container: ServiceContainer
-    ) -> None:
-        """Test that plain .bin upload still works alongside ZIP support."""
-        model_code = "bincompat"
-        with app.app_context():
-            model_service = container.device_model_service()
-            model_service.create_device_model(code=model_code, name="Binary Compat Test")
-            container.db_session().commit()
-
-        firmware_content = create_test_firmware(b"1.0.0")
-
-        response = client.post(
-            f"/api/pipeline/models/{model_code}/firmware",
-            data=firmware_content,
-            content_type="application/octet-stream",
-        )
-
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data["firmware_version"] == "1.0.0"
+        # Verify S3 artifacts exist
+        s3 = container.s3_service()
+        assert s3.file_exists(f"firmware/{model_code}/4.1.0/firmware.bin")
+        assert s3.file_exists(f"firmware/{model_code}/4.1.0/firmware.elf")
 
 
 class TestPipelineFirmwareVersion:

@@ -12,7 +12,6 @@ class CoredumpBaseSchema(BaseModel):
 
     id: int = Field(..., description="Coredump ID")
     device_id: int = Field(..., description="Device ID")
-    filename: str = Field(..., description="Filename of the .dmp file on disk")
     chip: str = Field(..., description="Chip type (e.g., esp32s3)")
     firmware_version: str = Field(..., description="Firmware version at time of crash")
     size: int = Field(..., description="Size of the coredump binary in bytes")

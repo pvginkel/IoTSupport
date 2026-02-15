@@ -157,18 +157,19 @@ class ServiceContainer(containers.DeclarativeContainer):
         lifecycle_coordinator=lifecycle_coordinator,
     )
 
-    # FirmwareService - Singleton for firmware file management
-    firmware_service = providers.Singleton(
+    # FirmwareService - Factory for firmware management via S3 + DB
+    firmware_service = providers.Factory(
         FirmwareService,
-        assets_dir=app_config.provided.assets_dir,
+        db=db_session,
+        s3_service=s3_service,
+        max_firmwares=app_config.provided.max_firmwares,
     )
 
-    # CoredumpService - Singleton for coredump file management + DB tracking + parsing
+    # CoredumpService - Singleton for coredump S3 storage + DB tracking + parsing
     coredump_service = providers.Singleton(
         CoredumpService,
-        coredumps_dir=app_config.provided.coredumps_dir,
+        s3_service=s3_service,
         config=app_config,
-        firmware_service=firmware_service,
         metrics_service=metrics_service,
     )
 

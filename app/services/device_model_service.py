@@ -175,7 +175,7 @@ class DeviceModelService:
     def delete_device_model(self, model_id: int) -> None:
         """Delete a device model.
 
-        Also deletes associated firmware file.
+        Also deletes associated firmware from DB and S3 (best-effort).
 
         Args:
             model_id: Device model ID
@@ -193,8 +193,8 @@ class DeviceModelService:
                 f"model has {model.device_count} associated device(s)"
             )
 
-        # Delete firmware file (best-effort)
-        self.firmware_service.delete_firmware(model.code)
+        # Delete firmware (DB records + best-effort S3 cleanup)
+        self.firmware_service.delete_firmware(model.code, model.id)
 
         # Delete the model
         self.db.delete(model)
@@ -205,31 +205,27 @@ class DeviceModelService:
     def upload_firmware(self, model_id: int, content: bytes) -> DeviceModel:
         """Upload firmware for a device model.
 
-        Accepts either a raw .bin or a ZIP bundle. Detects content type by
-        inspecting the first 4 bytes for ZIP magic. Extracts version, saves to
-        filesystem, and notifies all devices using this model via MQTT.
+        Only ZIP bundles are accepted. The ZIP is validated, artifacts are
+        uploaded to S3, and a firmware_versions DB record is created. All
+        devices using this model are notified via MQTT.
 
         Args:
             model_id: Device model ID
-            content: Firmware binary content (raw .bin or ZIP)
+            content: Firmware ZIP content
 
         Returns:
             Updated DeviceModel with firmware_version set
 
         Raises:
             RecordNotFoundException: If model doesn't exist
-            ValidationException: If firmware format is invalid
+            ValidationException: If firmware format is invalid or not a ZIP
         """
-        from app.services.firmware_service import is_zip_content
         from app.services.mqtt_service import MqttService
 
         model = self.get_device_model(model_id)
 
-        # Route to ZIP or .bin save based on content type
-        if is_zip_content(content):
-            version = self.firmware_service.save_firmware_zip(model.code, content)
-        else:
-            version = self.firmware_service.save_firmware(model.code, content)
+        # Save firmware (validates ZIP, uploads to S3, tracks version, prunes)
+        version = self.firmware_service.save_firmware(model.code, model.id, content)
 
         # Update model with version
         model.firmware_version = version
@@ -257,9 +253,8 @@ class DeviceModelService:
     def get_firmware_stream(self, model_id: int) -> tuple["BytesIO", str]:
         """Get firmware stream for a device model.
 
-        Returns a BytesIO for use with Flask's send_file. Passes the model's
-        firmware_version to FirmwareService so it can try the versioned ZIP
-        before falling back to the legacy flat .bin.
+        Returns a BytesIO for use with Flask's send_file. Downloads the
+        firmware binary from S3 for the model's current firmware version.
 
         Args:
             model_id: Device model ID

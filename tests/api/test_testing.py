@@ -533,7 +533,6 @@ class TestCreateTestCoredump:
         assert data["size"] == 131072
         assert data["parse_status"] == "PARSED"
         assert data["parsed_output"] == "Guru Meditation Error: Core 0 panic"
-        assert data["filename"] == f"test_coredump_{data['id']}.dmp"
         assert data["uploaded_at"] is not None
         assert data["parsed_at"] is not None
 
