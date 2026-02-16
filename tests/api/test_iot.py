@@ -119,11 +119,11 @@ class TestIotConfig:
         mock_ctx.device_key = device_key
         mock_ctx.token_iat = time_mod.time()  # Token issued now (after rotation attempt)
 
-        dls = container.device_log_stream_service()
+        rns = container.rotation_nudge_service()
         with patch(
             "app.api.iot.get_device_auth_context", return_value=mock_ctx
         ), patch.object(
-            dls, "broadcast_rotation_nudge", return_value=True
+            rns, "broadcast", return_value=True
         ) as mock_nudge:
             response = client.get(f"/api/iot/config?device_key={device_key}")
             assert response.status_code == 200

@@ -1,4 +1,4 @@
-"""Tests for SSEConnectionManager, focused on disconnect observer pattern."""
+"""Tests for SSEConnectionManager: disconnect observer pattern and identity binding."""
 
 from unittest.mock import MagicMock
 
@@ -110,3 +110,65 @@ class TestRegisterOnDisconnect:
         manager.on_disconnect("token-abc")
 
         disconnect_cb.assert_called_once_with("req-1")
+
+
+class TestIdentityBinding:
+    """Tests for bind_identity and get_connection_info."""
+
+    def test_bind_identity_stores_subject(self) -> None:
+        """bind_identity stores the subject for an active connection."""
+        manager = SSEConnectionManager(gateway_url="http://localhost:3001")
+        manager.on_connect("req-1", "token-abc", "http://example.com")
+
+        manager.bind_identity("req-1", "user-123")
+
+        info = manager.get_connection_info("req-1")
+        assert info is not None
+        assert info.subject == "user-123"
+
+    def test_bind_identity_no_connection_is_noop(self) -> None:
+        """bind_identity for a non-existent connection does not store anything."""
+        manager = SSEConnectionManager(gateway_url="http://localhost:3001")
+
+        manager.bind_identity("req-unknown", "user-123")
+
+        assert manager.get_connection_info("req-unknown") is None
+
+    def test_get_connection_info_without_identity(self) -> None:
+        """get_connection_info returns None subject when identity not bound."""
+        manager = SSEConnectionManager(gateway_url="http://localhost:3001")
+        manager.on_connect("req-1", "token-abc", "http://example.com")
+
+        info = manager.get_connection_info("req-1")
+        assert info is not None
+        assert info.request_id == "req-1"
+        assert info.subject is None
+
+    def test_get_connection_info_not_connected(self) -> None:
+        """get_connection_info returns None for unknown request_id."""
+        manager = SSEConnectionManager(gateway_url="http://localhost:3001")
+
+        assert manager.get_connection_info("req-unknown") is None
+
+    def test_disconnect_clears_identity(self) -> None:
+        """on_disconnect removes the identity mapping along with connection."""
+        manager = SSEConnectionManager(gateway_url="http://localhost:3001")
+        manager.on_connect("req-1", "token-abc", "http://example.com")
+        manager.bind_identity("req-1", "user-123")
+
+        manager.on_disconnect("token-abc")
+
+        assert manager.get_connection_info("req-1") is None
+        assert "req-1" not in manager._identity_map
+
+    def test_bind_identity_overwrite(self) -> None:
+        """Binding identity twice overwrites the previous subject."""
+        manager = SSEConnectionManager(gateway_url="http://localhost:3001")
+        manager.on_connect("req-1", "token-abc", "http://example.com")
+
+        manager.bind_identity("req-1", "user-A")
+        manager.bind_identity("req-1", "user-B")
+
+        info = manager.get_connection_info("req-1")
+        assert info is not None
+        assert info.subject == "user-B"

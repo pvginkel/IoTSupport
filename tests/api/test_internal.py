@@ -14,10 +14,8 @@ class TestRotationNudge:
         self, client: FlaskClient, container: ServiceContainer
     ) -> None:
         """Given active connections, when POST nudge, then 200 and broadcast is called."""
-        dls = container.device_log_stream_service()
-        with patch.object(
-            dls, "broadcast_rotation_nudge", return_value=True
-        ) as mock_nudge:
+        rns = container.rotation_nudge_service()
+        with patch.object(rns, "broadcast", return_value=True) as mock_nudge:
             response = client.post("/internal/rotation-nudge")
 
             assert response.status_code == 200
@@ -30,10 +28,8 @@ class TestRotationNudge:
         self, client: FlaskClient, container: ServiceContainer
     ) -> None:
         """Given no active connections, when POST nudge, then 200 (broadcast returns False)."""
-        dls = container.device_log_stream_service()
-        with patch.object(
-            dls, "broadcast_rotation_nudge", return_value=False
-        ) as mock_nudge:
+        rns = container.rotation_nudge_service()
+        with patch.object(rns, "broadcast", return_value=False) as mock_nudge:
             response = client.post("/internal/rotation-nudge")
 
             assert response.status_code == 200

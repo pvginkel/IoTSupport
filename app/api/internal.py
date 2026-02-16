@@ -13,7 +13,7 @@ from dependency_injector.wiring import Provide, inject
 from flask import Blueprint, jsonify
 
 from app.services.container import ServiceContainer
-from app.services.device_log_stream_service import DeviceLogStreamService
+from app.services.rotation_nudge_service import RotationNudgeService
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ internal_bp = Blueprint("internal", __name__, url_prefix="/internal")
 @internal_bp.route("/rotation-nudge", methods=["POST"])
 @inject
 def rotation_nudge(
-    device_log_stream_service: DeviceLogStreamService = Provide[ServiceContainer.device_log_stream_service],
+    rotation_nudge_service: RotationNudgeService = Provide[ServiceContainer.rotation_nudge_service],
 ) -> tuple[Any, int]:
     """Trigger a rotation-updated SSE broadcast.
 
@@ -33,7 +33,7 @@ def rotation_nudge(
 
     Returns 200 regardless of whether any clients received the broadcast.
     """
-    result = device_log_stream_service.broadcast_rotation_nudge(source="cronjob")
+    result = rotation_nudge_service.broadcast(source="cronjob")
 
     logger.info(
         "Internal rotation nudge triggered",
