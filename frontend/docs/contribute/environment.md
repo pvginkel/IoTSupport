@@ -7,7 +7,7 @@ This document captures the environment variables, port conventions, and configur
 | Variable | Default | Description |
 | --- | --- | --- |
 | `BACKEND_URL` | `http://localhost:5000` (dev) | Backend origin used by Node-side tooling and the Vite `/api` proxy. Managed automatically by Playwright fixtures. |
-| `SSE_GATEWAY_URL` | `http://localhost:3001` (dev) | SSE Gateway origin used by the Vite `/sse` proxy. Managed automatically by Playwright fixtures. |
+| `SSE_GATEWAY_URL` | `http://localhost:3001` (dev) | SSE Gateway origin used by the Vite `/api/sse` proxy. Managed automatically by Playwright fixtures. |
 | `FRONTEND_URL` | `http://localhost:3000` (dev) | Base URL for the frontend. Managed automatically by Playwright fixtures. |
 | `VITE_TEST_MODE` | `false` | Toggles frontend test instrumentation and test-event emission. Set to `true` automatically by Playwright fixtures. |
 | `SSE_GATEWAY_ROOT` | `../ssegateway` | Path to the SSE Gateway repository. Override if the gateway is not at the default location. |
@@ -25,7 +25,7 @@ This document captures the environment variables, port conventions, and configur
 ## Vite Proxy & Per-Worker Managed Services
 
 - **API Proxy**: Vite forwards browser requests matching `/api/**` to the backend. During regular development the proxy targets `http://localhost:5000` unless `BACKEND_URL` is set.
-- **SSE Proxy**: Vite forwards browser requests matching `/sse/**` to the SSE Gateway, stripping the `/sse` prefix. During regular development the proxy targets `http://localhost:3001` unless `SSE_GATEWAY_URL` is set.
+- **SSE Proxy**: Vite forwards browser requests matching `/api/sse/**` to the SSE Gateway. During regular development the proxy targets `http://localhost:3001` unless `SSE_GATEWAY_URL` is set. The `/api/sse` rule is listed before `/api` so the more-specific prefix wins.
 - **Per-Worker Services**: Each Playwright worker starts its own isolated backend, SSE Gateway, and frontend on dynamically allocated ports. This ensures test isolation and prevents cross-worker interference.
 - **Service Startup Order**: Backend → SSE Gateway → Frontend. The gateway receives the backend callback URL, and the frontend receives both backend and gateway URLs via environment variables.
 - Playwright waits for all three services to report healthy before running tests. See [CI & Execution](./testing/ci_and_execution.md) for health check details.

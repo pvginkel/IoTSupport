@@ -50,6 +50,7 @@ function backendProxyStatusPlugin(target: string): Plugin {
 }
 
 const backendProxyTarget = process.env.BACKEND_URL || 'http://localhost:3201'
+const gatewayProxyTarget = process.env.SSE_GATEWAY_URL || 'http://localhost:3001'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -74,6 +75,11 @@ export default defineConfig({
     port: 3200,
     allowedHosts: true,
     proxy: {
+      '/api/sse': {
+        target: gatewayProxyTarget,
+        changeOrigin: true,
+        secure: false,
+      },
       '/api': {
         target: backendProxyTarget,
         changeOrigin: true,
@@ -96,6 +102,11 @@ export default defineConfig({
   },
   preview: {
     proxy: {
+      '/api/sse': {
+        target: gatewayProxyTarget,
+        changeOrigin: true,
+        secure: false,
+      },
       '/api': {
         target: backendProxyTarget,
         changeOrigin: true,

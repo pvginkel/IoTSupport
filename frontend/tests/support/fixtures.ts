@@ -1,25 +1,36 @@
 /* eslint-disable react-hooks/rules-of-hooks, no-empty-pattern */
 import { test as base, expect } from '@playwright/test';
 import type { WorkerInfo } from '@playwright/test';
+import { existsSync } from 'node:fs';
 import { copyFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
-import { startBackend, startFrontend } from './process/servers';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+import { startBackend, startFrontend, startGateway } from './process/servers';
 import {
   createBackendLogCollector,
   createFrontendLogCollector,
+  createServiceLogCollector,
   type BackendLogCollector,
   type FrontendLogCollector,
+  type ServiceLogCollector,
 } from './process/backend-logs';
 import { DevicesFactory } from '../api/factories/devices';
 import { DeviceModelsFactory } from '../api/factories/device-models';
 import { AuthFactory } from '../api/factories/auth';
 
+type GatewayLogCollector = ServiceLogCollector;
+
 type ServiceManager = {
   frontendUrl: string;
   backendUrl: string;
+  gatewayUrl: string | null;
   backendLogs: BackendLogCollector;
+  gatewayLogs: GatewayLogCollector;
   frontendLogs: FrontendLogCollector;
   disposeServices(): Promise<void>;
 };
@@ -27,6 +38,7 @@ type ServiceManager = {
 type TestFixtures = {
   frontendUrl: string;
   backendLogs: BackendLogCollector;
+  gatewayLogs: GatewayLogCollector;
   frontendLogs: FrontendLogCollector;
   devices: DevicesFactory;
   deviceModels: DeviceModelsFactory;
@@ -71,6 +83,20 @@ async function cleanupKeycloakClients(backendUrl: string): Promise<void> {
   }
 }
 
+/**
+ * Check whether the SSE Gateway repository is available.
+ * Returns the resolved root path if found, null otherwise.
+ */
+function resolveGatewayRoot(): string | null {
+  const envRoot = process.env.SSE_GATEWAY_ROOT;
+  const candidate = envRoot
+    ? resolve(envRoot)
+    : resolve(__dirname, '../../../ssegateway');
+
+  const scriptPath = join(candidate, 'scripts', 'run-gateway.sh');
+  return existsSync(scriptPath) ? candidate : null;
+}
+
 export const test = base.extend<TestFixtures, InternalFixtures>({
   frontendUrl: async ({ _serviceManager }, use) => {
     await use(_serviceManager.frontendUrl);
@@ -81,6 +107,18 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
       const attachment = await _serviceManager.backendLogs.attachToTest(testInfo);
       try {
         await use(_serviceManager.backendLogs);
+      } finally {
+        await attachment.stop();
+      }
+    },
+    { auto: true },
+  ],
+
+  gatewayLogs: [
+    async ({ _serviceManager }, use, testInfo) => {
+      const attachment = await _serviceManager.gatewayLogs.attachToTest(testInfo);
+      try {
+        await use(_serviceManager.gatewayLogs);
       } finally {
         await attachment.stop();
       }
@@ -215,12 +253,19 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
   _serviceManager: [
     async ({}, use: (value: ServiceManager) => Promise<void>, workerInfo: WorkerInfo) => {
       const backendStreamLogs = process.env.PLAYWRIGHT_BACKEND_LOG_STREAM === 'true';
+      const gatewayStreamLogs = process.env.PLAYWRIGHT_GATEWAY_LOG_STREAM === 'true';
       const frontendStreamLogs = process.env.PLAYWRIGHT_FRONTEND_LOG_STREAM === 'true';
 
       // Create log collectors
       const backendLogs = createBackendLogCollector({
         workerIndex: workerInfo.workerIndex,
         streamToConsole: backendStreamLogs,
+      });
+      const gatewayLogs = createServiceLogCollector({
+        workerIndex: workerInfo.workerIndex,
+        streamToConsole: gatewayStreamLogs,
+        attachmentName: 'gateway.log',
+        serviceLabel: 'gateway',
       });
       const frontendLogs = createFrontendLogCollector({
         workerIndex: workerInfo.workerIndex,
@@ -233,6 +278,7 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
       const seedDbPath = process.env.PLAYWRIGHT_SEEDED_SQLITE_DB;
       if (!seedDbPath) {
         backendLogs.dispose();
+        gatewayLogs.dispose();
         frontendLogs.dispose();
         throw new Error(
           'PLAYWRIGHT_SEEDED_SQLITE_DB is not set. Ensure global setup initialized the test database.'
@@ -262,19 +308,24 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
         backendLogs.log(`Using SQLite database copy at ${workerDbPath}`);
       } catch (error) {
         backendLogs.dispose();
+        gatewayLogs.dispose();
         frontendLogs.dispose();
         await cleanupWorkerDb();
         throw error;
       }
 
+      // Reserve ports upfront so no two services collide
       const backendPort = await getPort();
-      const frontendPort = await getPort({ exclude: [backendPort] });
+      const gatewayPort = await getPort({ exclude: [backendPort] });
+      const frontendPort = await getPort({ exclude: [backendPort, gatewayPort] });
 
       let backend: Awaited<ReturnType<typeof startBackend>> | undefined;
+      let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
       let frontend: Awaited<ReturnType<typeof startFrontend>> | undefined;
+      let gatewayUrl: string | null = null;
 
       try {
-        // Start backend first with SQLite database
+        // 1. Start backend first with SQLite database
         backend = await startBackend(workerInfo.workerIndex, {
           streamLogs: backendStreamLogs,
           port: backendPort,
@@ -289,11 +340,34 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
         // Clean up any leftover Keycloak clients from previous test runs
         await cleanupKeycloakClients(backend.url);
 
-        // Start frontend with backend URL for the Vite proxy
+        // 2. Start SSE Gateway if repo is available
+        const gatewayRoot = resolveGatewayRoot();
+        if (gatewayRoot) {
+          gateway = await startGateway({
+            workerIndex: workerInfo.workerIndex,
+            backendUrl: backend.url,
+            excludePorts: [backend.port],
+            port: gatewayPort,
+            streamLogs: gatewayStreamLogs,
+          });
+
+          gatewayLogs.attachStream(gateway.process.stdout, 'stdout');
+          gatewayLogs.attachStream(gateway.process.stderr, 'stderr');
+          gatewayLogs.log(`Gateway listening on ${gateway.url}`);
+          gatewayUrl = gateway.url;
+        } else {
+          gatewayLogs.log(
+            'SSE Gateway repo not found; skipping gateway startup. ' +
+              'SSE features will not be available in tests.'
+          );
+        }
+
+        // 3. Start frontend with backend and gateway URLs for the Vite proxy
         frontend = await startFrontend({
           workerIndex: workerInfo.workerIndex,
           backendUrl: backend.url,
-          excludePorts: [backend.port],
+          gatewayUrl: gatewayUrl ?? undefined,
+          excludePorts: [backend.port, ...(gateway ? [gateway.port] : [])],
           port: frontendPort,
           streamLogs: frontendStreamLogs,
         });
@@ -307,10 +381,14 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
         if (frontend) {
           await frontend.dispose();
         }
+        if (gateway) {
+          await gateway.dispose();
+        }
         if (backend) {
           await backend.dispose();
         }
         backendLogs.dispose();
+        gatewayLogs.dispose();
         frontendLogs.dispose();
         await cleanupWorkerDb();
         throw error;
@@ -335,13 +413,23 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
           await cleanupKeycloakClients(backend.url);
         }
 
-        // Dispose in reverse order: frontend -> backend
+        // Dispose in reverse order: frontend -> gateway -> backend
         if (frontend) {
           try {
             await frontend.dispose();
           } catch (error) {
             console.warn(
               `[worker-${workerInfo.workerIndex}] Failed to dispose frontend:`,
+              error
+            );
+          }
+        }
+        if (gateway) {
+          try {
+            await gateway.dispose();
+          } catch (error) {
+            console.warn(
+              `[worker-${workerInfo.workerIndex}] Failed to dispose gateway:`,
               error
             );
           }
@@ -364,7 +452,9 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
       const serviceManager: ServiceManager = {
         frontendUrl: frontend.url,
         backendUrl: backend.url,
+        gatewayUrl,
         backendLogs,
+        gatewayLogs,
         frontendLogs,
         disposeServices,
       };
@@ -375,6 +465,7 @@ export const test = base.extend<TestFixtures, InternalFixtures>({
         await disposeServices();
         process.env.FRONTEND_URL = previousFrontend;
         backendLogs.dispose();
+        gatewayLogs.dispose();
         frontendLogs.dispose();
       }
     },

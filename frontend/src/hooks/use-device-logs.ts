@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback, useReducer } from 'react'
+import { useEffect, useCallback, useReducer } from 'react'
+import { useSseContext } from '@/contexts/sse-context'
 import { isTestMode } from '@/lib/config/test-mode'
 import { emitTestEvent } from '@/lib/test/event-emitter'
 import { TestEventKind, type ListLoadingTestEvent } from '@/types/test-events'
@@ -9,7 +10,7 @@ export interface LogEntry {
   timestamp: string
 }
 
-// API response shape (snake_case)
+// API response shape (snake_case) for the initial history fetch
 interface DeviceLogsApiResponse {
   logs: Array<{ message: string; timestamp: string }>
   has_more: boolean
@@ -17,124 +18,123 @@ interface DeviceLogsApiResponse {
   window_end: string | null
 }
 
+/**
+ * SSE event payload for device-logs events.
+ * The gateway sends `@timestamp` (with @ prefix) whereas the REST API uses `timestamp`.
+ */
+interface SseDeviceLogsPayload {
+  device_entity_id: string
+  logs: Array<{
+    entity_id: string
+    message: string
+    '@timestamp': string
+  }>
+}
+
 // Hook state interface
 export interface UseDeviceLogsState {
   logs: LogEntry[]
   isLoading: boolean
   hasEntityId: boolean
-  isPolling: boolean
-}
-
-// Hook actions interface
-export interface UseDeviceLogsActions {
-  startPolling: () => void
-  stopPolling: () => void
+  isStreaming: boolean
 }
 
 // Hook return type
-export type UseDeviceLogsResult = UseDeviceLogsState & UseDeviceLogsActions
+export type UseDeviceLogsResult = UseDeviceLogsState
 
-// Constants
-const POLL_INTERVAL_MS = 1000
-const MAX_BUFFER_SIZE = 1000
+// Buffer cap increased from 1000 to 5000 per plan
+const MAX_BUFFER_SIZE = 5000
 
-// Reducer for logs state management
+/**
+ * Combined state managed by a single reducer to avoid cascading setState calls.
+ * The reducer handles logs buffer, loading status, and streaming flag together.
+ */
+interface LogsState {
+  logs: LogEntry[]
+  isLoading: boolean
+  isStreaming: boolean
+}
+
 type LogsAction =
   | { type: 'RESET' }
+  | { type: 'START_LOADING' }
+  | { type: 'SET'; logs: LogEntry[] }
+  | { type: 'LOADED' }
   | { type: 'APPEND'; logs: LogEntry[] }
+  | { type: 'STREAMING' }
 
-function logsReducer(state: LogEntry[], action: LogsAction): LogEntry[] {
+const initialState: LogsState = {
+  logs: [],
+  isLoading: false,
+  isStreaming: false,
+}
+
+function logsReducer(state: LogsState, action: LogsAction): LogsState {
   switch (action.type) {
     case 'RESET':
-      return []
-    case 'APPEND': {
-      const combined = [...state, ...action.logs]
-      // FIFO eviction if over limit
-      if (combined.length > MAX_BUFFER_SIZE) {
-        return combined.slice(combined.length - MAX_BUFFER_SIZE)
-      }
-      return combined
+      return initialState
+    case 'START_LOADING':
+      return { ...state, isLoading: true, isStreaming: false }
+    case 'SET': {
+      // Atomic replace with cap enforcement
+      const logs = action.logs.length > MAX_BUFFER_SIZE
+        ? action.logs.slice(action.logs.length - MAX_BUFFER_SIZE)
+        : action.logs
+      return { ...state, logs }
     }
+    case 'LOADED':
+      return { ...state, isLoading: false }
+    case 'APPEND': {
+      const combined = [...state.logs, ...action.logs]
+      const logs = combined.length > MAX_BUFFER_SIZE
+        ? combined.slice(combined.length - MAX_BUFFER_SIZE)
+        : combined
+      return { ...state, logs }
+    }
+    case 'STREAMING':
+      return { ...state, isStreaming: true }
     default:
       return state
   }
 }
 
 interface UseDeviceLogsOptions {
-  /** Device ID for fetching logs */
+  /** Device ID for fetching logs and subscribing */
   deviceId: number | undefined
-  /** Device entity ID - logs are only fetched if this is set */
+  /** Device entity ID - logs are only available if this is set */
   deviceEntityId: string | undefined
-  /** Whether polling is enabled by default (default: true) */
-  defaultPolling?: boolean
 }
 
 /**
- * Custom hook for cursor-based polling of device logs from Elasticsearch.
+ * Custom hook for SSE-driven device log streaming.
  *
- * Key behaviors:
- * - Only fetches logs if deviceEntityId is provided
- * - Polls every 1 second when polling is enabled
- * - Uses cursor-based pagination (windowEnd from previous fetch becomes start for next)
- * - Immediately fetches again if hasMore is true (catching up)
- * - Pauses polling when tab is backgrounded
- * - Silent error handling (no toasts)
- * - Max buffer of 1000 entries with FIFO eviction
+ * Lifecycle:
+ * 1. Register SSE event listener for "device-logs" events (queue while loading).
+ * 2. Subscribe via POST /api/device-logs/subscribe.
+ * 3. Fetch initial history via GET /api/devices/{id}/logs (up to 1000 entries).
+ * 4. Render history atomically with SET action.
+ * 5. Flush queued SSE events newer than the last loaded timestamp.
+ * 6. Switch to direct-append streaming mode.
+ * 7. On unmount: remove listener, unsubscribe (best-effort).
  */
 export function useDeviceLogs({
   deviceId,
   deviceEntityId,
-  defaultPolling = true
 }: UseDeviceLogsOptions): UseDeviceLogsResult {
-  // State - use reducer for logs to allow dispatch without triggering the set-state-in-effect rule
-  const [logs, dispatchLogs] = useReducer(logsReducer, [])
-  const [isLoading, setIsLoading] = useState(false)
-  const [isPolling, setIsPolling] = useState(defaultPolling)
+  const [state, dispatch] = useReducer(logsReducer, initialState)
 
-  // Derived state
   const hasEntityId = Boolean(deviceEntityId && deviceEntityId.trim() !== '')
 
-  // Start polling
-  const startPolling = useCallback(() => {
-    setIsPolling(true)
-  }, [])
+  const { requestId, addEventListener } = useSseContext()
 
-  // Stop polling (will be enhanced in the effect)
-  const stopPollingRef = useRef<() => void>(() => {
-    setIsPolling(false)
-  })
-
-  const stopPolling = useCallback(() => {
-    stopPollingRef.current()
-  }, [])
-
-  // Reset logs when device changes - separate effect with dispatch
+  // Reset logs when device changes -- dispatching a single action avoids cascading renders
   useEffect(() => {
-    dispatchLogs({ type: 'RESET' })
+    dispatch({ type: 'RESET' })
   }, [deviceId])
 
-  // Main polling effect
-  useEffect(() => {
-    // Refs for managing async operations within this effect
-    let abortController: AbortController | null = null
-    let pollingTimeout: ReturnType<typeof setTimeout> | null = null
-    let cursor: string | null = null
-    let isInitialFetch = true
-    let hasEmittedReady = false
-    let isMounted = true
-
-    // Update stop polling to include cleanup
-    stopPollingRef.current = () => {
-      setIsPolling(false)
-      if (pollingTimeout) {
-        clearTimeout(pollingTimeout)
-        pollingTimeout = null
-      }
-      abortController?.abort()
-    }
-
-    // Emit instrumentation events in test mode
-    const emitLoadingEvent = (phase: 'loading' | 'ready', logCount: number) => {
+  // Emit instrumentation events in test mode
+  const emitLoadingEvent = useCallback(
+    (phase: 'loading' | 'ready', logCount: number) => {
       if (!isTestMode() || deviceId === undefined) return
 
       const payload: Omit<ListLoadingTestEvent, 'timestamp'> = {
@@ -144,175 +144,186 @@ export function useDeviceLogs({
         metadata: {
           deviceId,
           logCount,
-          isPolling
-        }
+        },
       }
       emitTestEvent(payload)
+    },
+    [deviceId]
+  )
+
+  // Main SSE subscription effect
+  useEffect(() => {
+    if (!hasEntityId || deviceId === undefined || !requestId) {
+      return
     }
 
-    // Fetch logs from the API
-    const fetchLogs = async (start?: string): Promise<{
-      newLogs: LogEntry[]
-      hasMore: boolean
+    let isMounted = true
+    let abortController: AbortController | null = null
+    // Queue for SSE events arriving before the initial fetch completes
+    const eventQueue: LogEntry[] = []
+    let isStreamingDirect = false
+    let cutoffTimestamp: string | null = null
+
+    // Track emitted ready to avoid duplicates
+    let hasEmittedReady = false
+
+    dispatch({ type: 'START_LOADING' })
+    emitLoadingEvent('loading', 0)
+
+    // 1. Register SSE event listener -- queue events until streaming switches on
+    const removeListener = addEventListener('device-logs', (data: unknown) => {
+      const payload = data as SseDeviceLogsPayload
+      // Only process events for our device
+      if (payload.device_entity_id !== deviceEntityId) return
+
+      const entries: LogEntry[] = payload.logs.map((log) => ({
+        message: log.message,
+        timestamp: log['@timestamp'],
+      }))
+
+      if (isStreamingDirect) {
+        // Direct append mode -- events go straight into the buffer
+        dispatch({ type: 'APPEND', logs: entries })
+      } else {
+        // Queuing mode -- buffer until history is loaded and flushed
+        eventQueue.push(...entries)
+      }
+    })
+
+    // 2. Subscribe to the device log stream on the backend
+    const subscribe = async (): Promise<boolean> => {
+      abortController = new AbortController()
+      try {
+        const response = await fetch('/api/device-logs/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ request_id: requestId, device_id: deviceId }),
+          signal: abortController.signal,
+          credentials: 'include',
+        })
+        return response.ok
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') return false
+        console.debug('[useDeviceLogs] Subscribe failed:', error)
+        return false
+      }
+    }
+
+    // 3. Fetch initial log history
+    const fetchHistory = async (): Promise<{
+      logs: LogEntry[]
       windowEnd: string | null
     } | null> => {
-      if (deviceId === undefined || !hasEntityId || !isMounted) {
-        return null
-      }
-
-      // Create new abort controller for this fetch
-      abortController?.abort()
       abortController = new AbortController()
-
       try {
-        // Build URL with query parameters
         const url = new URL(`/api/devices/${deviceId}/logs`, window.location.origin)
-        if (start) {
-          url.searchParams.set('start', start)
-        }
 
         const response = await fetch(url.toString(), {
           signal: abortController.signal,
-          credentials: 'include'
+          credentials: 'include',
         })
 
         if (!response.ok) {
-          // Silent error handling - just log to console for debugging
-          console.debug(`[useDeviceLogs] Fetch failed: ${response.status} ${response.statusText}`)
+          console.debug(`[useDeviceLogs] History fetch failed: ${response.status}`)
           return null
         }
 
         const data: DeviceLogsApiResponse = await response.json()
-
-        // Transform snake_case to camelCase
-        const newLogs: LogEntry[] = data.logs.map(log => ({
+        const historyLogs: LogEntry[] = data.logs.map((log) => ({
           message: log.message,
-          timestamp: log.timestamp
+          timestamp: log.timestamp,
         }))
 
-        return {
-          newLogs,
-          hasMore: data.has_more,
-          windowEnd: data.window_end
-        }
+        return { logs: historyLogs, windowEnd: data.window_end }
       } catch (error) {
-        // Ignore abort errors
-        if (error instanceof Error && error.name === 'AbortError') {
-          return null
-        }
-        // Silent error handling for other errors
-        console.debug('[useDeviceLogs] Fetch error:', error)
+        if (error instanceof Error && error.name === 'AbortError') return null
+        console.debug('[useDeviceLogs] History fetch error:', error)
         return null
       }
     }
 
-    // Main polling function
-    const poll = async () => {
+    // Orchestrate the subscribe -> fetch -> flush -> stream lifecycle
+    const run = async () => {
+      // Subscribe
+      const subscribed = await subscribe()
       if (!isMounted) return
 
-      // Clear any existing timeout
-      if (pollingTimeout) {
-        clearTimeout(pollingTimeout)
-        pollingTimeout = null
-      }
-
-      // Emit loading event for initial fetch
-      if (isInitialFetch) {
-        setIsLoading(true)
-        emitLoadingEvent('loading', 0)
-      }
-
-      // Fetch with cursor (or without for initial fetch)
-      const result = await fetchLogs(cursor ?? undefined)
-
-      if (!isMounted) return
-
-      if (result) {
-        const { newLogs, hasMore, windowEnd } = result
-
-        // Update cursor for next fetch
-        if (windowEnd) {
-          cursor = windowEnd
-        }
-
-        // Append new logs
-        if (newLogs.length > 0) {
-          dispatchLogs({ type: 'APPEND', logs: newLogs })
-        }
-
-        // If hasMore, immediately fetch again (catching up)
-        if (hasMore && isMounted) {
-          pollingTimeout = setTimeout(poll, 0)
-          return
-        }
-
-        // Emit ready event after initial fetch completes (only once)
-        if (isInitialFetch) {
-          setIsLoading(false)
-          isInitialFetch = false
-          if (!hasEmittedReady) {
-            hasEmittedReady = true
-            emitLoadingEvent('ready', newLogs.length)
-          }
-        }
-      } else if (isInitialFetch) {
-        // Initial fetch failed or was aborted
-        setIsLoading(false)
-        isInitialFetch = false
+      if (!subscribed) {
+        // Subscription failed -- show empty state
+        dispatch({ type: 'LOADED' })
         if (!hasEmittedReady) {
           hasEmittedReady = true
           emitLoadingEvent('ready', 0)
         }
+        return
       }
 
-      // Schedule next poll if still polling and mounted
-      if (isPolling && hasEntityId && isMounted) {
-        pollingTimeout = setTimeout(poll, POLL_INTERVAL_MS)
+      // Fetch initial history
+      const history = await fetchHistory()
+      if (!isMounted) return
+
+      const initialLogs = history?.logs ?? []
+      const windowEnd = history?.windowEnd ?? null
+
+      // 4. Atomically render history
+      dispatch({ type: 'SET', logs: initialLogs })
+
+      // Record the cutoff timestamp for deduplication during flush
+      if (initialLogs.length > 0) {
+        cutoffTimestamp = initialLogs[initialLogs.length - 1].timestamp
+      } else if (windowEnd) {
+        cutoffTimestamp = windowEnd
+      }
+
+      dispatch({ type: 'LOADED' })
+
+      // Emit ready event
+      if (!hasEmittedReady) {
+        hasEmittedReady = true
+        emitLoadingEvent('ready', initialLogs.length)
+      }
+
+      // 5. Flush queued SSE events that arrived during the loading phase
+      const queuedToFlush = cutoffTimestamp
+        ? eventQueue.filter((entry) => entry.timestamp > cutoffTimestamp!)
+        : [...eventQueue]
+
+      if (queuedToFlush.length > 0) {
+        dispatch({ type: 'APPEND', logs: queuedToFlush })
+      }
+
+      // 6. Switch to direct-append streaming mode
+      isStreamingDirect = true
+      if (isMounted) {
+        dispatch({ type: 'STREAMING' })
       }
     }
 
-    // Visibility change handler
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        // Pause polling when tab is hidden
-        if (pollingTimeout) {
-          clearTimeout(pollingTimeout)
-          pollingTimeout = null
-        }
-      } else if (document.visibilityState === 'visible' && isPolling && hasEntityId && isMounted) {
-        // Resume polling when tab becomes visible
-        poll()
-      }
-    }
+    run()
 
-    // Only start polling if we have entity ID and polling is enabled
-    if (!hasEntityId || !isPolling || deviceId === undefined) {
-      return
-    }
-
-    // Add visibility change listener
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    // Start polling
-    poll()
-
-    // Cleanup on unmount or dependency change
+    // 7. Cleanup: remove listener, unsubscribe (best-effort)
     return () => {
       isMounted = false
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      if (pollingTimeout) {
-        clearTimeout(pollingTimeout)
-      }
+      removeListener()
       abortController?.abort()
+
+      // Best-effort unsubscribe -- fire and forget
+      fetch('/api/device-logs/unsubscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_id: requestId, device_id: deviceId }),
+        credentials: 'include',
+        keepalive: true,
+      }).catch(() => {
+        // Swallow -- best-effort cleanup
+      })
     }
-  }, [deviceId, hasEntityId, isPolling])
+  }, [deviceId, deviceEntityId, hasEntityId, requestId, addEventListener, emitLoadingEvent])
 
   return {
-    logs,
-    isLoading,
+    logs: state.logs,
+    isLoading: state.isLoading,
     hasEntityId,
-    isPolling,
-    startPolling,
-    stopPolling
+    isStreaming: state.isStreaming,
   }
 }

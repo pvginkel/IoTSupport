@@ -10,6 +10,7 @@ import { Sidebar } from '@/components/layout/sidebar'
 import { TopBar } from '@/components/layout/top-bar'
 import { ToastProvider } from '@/contexts/toast-context'
 import { AuthProvider } from '@/contexts/auth-context'
+import { SseProvider } from '@/contexts/sse-context'
 import { AuthGate } from '@/components/auth/auth-gate'
 import { queryClient } from '@/lib/query-client'
 
@@ -24,6 +25,7 @@ export const Route = createRootRoute({
  * 2. ToastProvider - enables toast notifications
  * 3. AuthProvider - provides auth state and handles 401 redirects
  * 4. AuthGate - blocks rendering until authenticated
+ * 5. SseProvider - opens SSE connection (only when authenticated)
  */
 function RootLayout() {
   return (
@@ -31,7 +33,9 @@ function RootLayout() {
       <ToastProvider>
         <AuthProvider>
           <AuthGate>
-            <AppShellFrame />
+            <SseProvider>
+              <AppShellFrame />
+            </SseProvider>
           </AuthGate>
         </AuthProvider>
       </ToastProvider>

@@ -1,6 +1,42 @@
 {
   "components": {
     "schemas": {
+      "ContentHtmlQuerySchema.7ccab41": {
+        "description": "Query parameters for deterministic HTML content fixtures.",
+        "properties": {
+          "title": {
+            "description": "Title to embed in the rendered HTML fixture",
+            "examples": [
+              "Playwright Fixture Page"
+            ],
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "ContentHtmlQuerySchema",
+        "type": "object"
+      },
+      "ContentImageQuerySchema.7ccab41": {
+        "description": "Query parameters for deterministic testing image content.",
+        "properties": {
+          "text": {
+            "description": "Text to render on the generated PNG image",
+            "examples": [
+              "Playwright Test Image"
+            ],
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ContentImageQuerySchema",
+        "type": "object"
+      },
       "CoredumpDetailSchema.58985ac": {
         "description": "Detail schema for a single coredump (includes parsed_output).",
         "properties": {
@@ -19,11 +55,6 @@
             "description": "Device ID",
             "title": "Device Id",
             "type": "integer"
-          },
-          "filename": {
-            "description": "Filename of the .dmp file on disk",
-            "title": "Filename",
-            "type": "string"
           },
           "firmware_version": {
             "description": "Firmware version at time of crash",
@@ -88,7 +119,6 @@
         "required": [
           "id",
           "device_id",
-          "filename",
           "chip",
           "firmware_version",
           "size",
@@ -142,11 +172,6 @@
             "title": "Device Id",
             "type": "integer"
           },
-          "filename": {
-            "description": "Filename of the .dmp file on disk",
-            "title": "Filename",
-            "type": "string"
-          },
           "firmware_version": {
             "description": "Firmware version at time of crash",
             "title": "Firmware Version",
@@ -191,7 +216,6 @@
         "required": [
           "id",
           "device_id",
-          "filename",
           "chip",
           "firmware_version",
           "size",
@@ -516,6 +540,98 @@
           "rotation_state"
         ],
         "title": "DeviceSummarySchema",
+        "type": "object"
+      },
+      "DeviceLogSubscribeRequest.a423a82": {
+        "additionalProperties": false,
+        "description": "Request body for subscribing to a device's log stream.",
+        "properties": {
+          "device_id": {
+            "description": "Device ID to subscribe to",
+            "examples": [
+              42
+            ],
+            "title": "Device Id",
+            "type": "integer"
+          },
+          "request_id": {
+            "description": "SSE connection request ID",
+            "examples": [
+              "abc123"
+            ],
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "device_id"
+        ],
+        "title": "DeviceLogSubscribeRequest",
+        "type": "object"
+      },
+      "DeviceLogSubscribeResponse.a423a82": {
+        "additionalProperties": false,
+        "description": "Response body for a successful subscribe.",
+        "properties": {
+          "device_entity_id": {
+            "description": "Resolved device entity ID used for log matching",
+            "title": "Device Entity Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "subscribed",
+            "description": "Operation result",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_entity_id"
+        ],
+        "title": "DeviceLogSubscribeResponse",
+        "type": "object"
+      },
+      "DeviceLogUnsubscribeRequest.a423a82": {
+        "additionalProperties": false,
+        "description": "Request body for unsubscribing from a device's log stream.",
+        "properties": {
+          "device_id": {
+            "description": "Device ID to unsubscribe from",
+            "examples": [
+              42
+            ],
+            "title": "Device Id",
+            "type": "integer"
+          },
+          "request_id": {
+            "description": "SSE connection request ID",
+            "examples": [
+              "abc123"
+            ],
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "device_id"
+        ],
+        "title": "DeviceLogUnsubscribeRequest",
+        "type": "object"
+      },
+      "DeviceLogUnsubscribeResponse.a423a82": {
+        "additionalProperties": false,
+        "description": "Response body for a successful unsubscribe.",
+        "properties": {
+          "status": {
+            "default": "unsubscribed",
+            "description": "Operation result",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "DeviceLogUnsubscribeResponse",
         "type": "object"
       },
       "DeviceLogsQuerySchema.e6f48c9": {
@@ -1277,6 +1393,76 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "LogInjectRequestSchema.2e62f0a": {
+        "description": "Request body for POST /api/testing/devices/logs/inject.",
+        "properties": {
+          "device_entity_id": {
+            "description": "Device entity ID to target (matches the SSE subscription key)",
+            "examples": [
+              "sensor.living_room"
+            ],
+            "minLength": 1,
+            "title": "Device Entity Id",
+            "type": "string"
+          },
+          "logs": {
+            "description": "Log entries to forward into the SSE pipeline",
+            "items": {
+              "$ref": "#/components/schemas/LogInjectRequestSchema.2e62f0a.LogEntrySchema"
+            },
+            "minItems": 1,
+            "title": "Logs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "device_entity_id",
+          "logs"
+        ],
+        "title": "LogInjectRequestSchema",
+        "type": "object"
+      },
+      "LogInjectRequestSchema.2e62f0a.LogEntrySchema": {
+        "additionalProperties": true,
+        "description": "A single log entry to inject into the SSE pipeline.",
+        "properties": {
+          "message": {
+            "description": "Log line content",
+            "examples": [
+              "Temperature reading: 22.5C"
+            ],
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "LogEntrySchema",
+        "type": "object"
+      },
+      "LogInjectResponseSchema.2e62f0a": {
+        "description": "Response for POST /api/testing/devices/logs/inject.",
+        "properties": {
+          "forwarded": {
+            "description": "Number of log entries passed to DeviceLogStreamService.forward_logs()",
+            "title": "Forwarded",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Always 'accepted' on success",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "forwarded"
+        ],
+        "title": "LogInjectResponseSchema",
+        "type": "object"
+      },
       "LvglImageQuerySchema.bf1914b": {
         "additionalProperties": false,
         "description": "Query parameters for LVGL image proxy endpoint.",
@@ -1347,6 +1533,21 @@
           "url"
         ],
         "title": "LvglImageQuerySchema",
+        "type": "object"
+      },
+      "NudgeResponseSchema.2e62f0a": {
+        "description": "Response for POST /api/testing/rotation/nudge.",
+        "properties": {
+          "status": {
+            "description": "Always 'accepted' on success",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "NudgeResponseSchema",
         "type": "object"
       },
       "NvsProvisioningQuerySchema.d48fbce": {
@@ -1475,6 +1676,71 @@
           "queued_count"
         ],
         "title": "RotationTriggerResponseSchema",
+        "type": "object"
+      },
+      "SubscriptionsQuerySchema.2e62f0a": {
+        "description": "Query parameters for GET /api/testing/devices/logs/subscriptions.",
+        "properties": {
+          "device_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filter to subscriptions for this device entity ID. Omit to return all.",
+            "examples": [
+              "sensor.living_room"
+            ],
+            "title": "Device Entity Id"
+          }
+        },
+        "title": "SubscriptionsQuerySchema",
+        "type": "object"
+      },
+      "SubscriptionsResponseSchema.2e62f0a": {
+        "description": "Response for GET /api/testing/devices/logs/subscriptions.",
+        "properties": {
+          "subscriptions": {
+            "description": "Active SSE subscriptions, empty when none exist",
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionsResponseSchema.2e62f0a.SubscriptionEntrySchema"
+            },
+            "title": "Subscriptions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "subscriptions"
+        ],
+        "title": "SubscriptionsResponseSchema",
+        "type": "object"
+      },
+      "SubscriptionsResponseSchema.2e62f0a.SubscriptionEntrySchema": {
+        "description": "A single device subscription entry.",
+        "properties": {
+          "device_entity_id": {
+            "description": "Device entity ID with active subscriptions",
+            "title": "Device Entity Id",
+            "type": "string"
+          },
+          "request_ids": {
+            "description": "SSE connection request IDs subscribed to this device",
+            "items": {
+              "type": "string"
+            },
+            "title": "Request Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "device_entity_id",
+          "request_ids"
+        ],
+        "title": "SubscriptionEntrySchema",
         "type": "object"
       },
       "TestCoredumpCreateSchema.355d24f": {
@@ -1784,6 +2050,108 @@
           }
         },
         "summary": "Get current authenticated user information.",
+        "tags": []
+      }
+    },
+    "/api/cas/{hash_value}": {
+      "get": {
+        "description": "This endpoint is stateless - no database access. All metadata comes from URL params.\n\nQuery params:     content_type: MIME type (optional, defaults to application/octet-stream)     disposition: inline|attachment (optional, defaults to inline if filename set)     filename: filename for Content-Disposition header (optional)     thumbnail: pixel size for square thumbnail (mutually exclusive with content_type)\n\nReturns:     Binary content with Cache-Control: immutable header",
+        "operationId": "get__api_cas_{hash_value}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "hash_value",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Serve content from CAS storage with immutable caching.",
+        "tags": []
+      }
+    },
+    "/api/device-logs/subscribe": {
+      "post": {
+        "description": "Resolves device_id to device_entity_id, verifies identity, then registers the subscription. Idempotent for the same (request_id, device_id) pair.",
+        "operationId": "post__api_device-logs_subscribe",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceLogSubscribeRequest.a423a82"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceLogSubscribeResponse.a423a82"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Subscribe an SSE connection to a device's log stream.",
+        "tags": []
+      }
+    },
+    "/api/device-logs/unsubscribe": {
+      "post": {
+        "description": "Verifies identity before removing the subscription.",
+        "operationId": "post__api_device-logs_unsubscribe",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceLogUnsubscribeRequest.a423a82"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceLogUnsubscribeResponse.a423a82"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Unsubscribe an SSE connection from a device's log stream.",
         "tags": []
       }
     },
@@ -2595,7 +2963,7 @@
           }
         ],
         "responses": {},
-        "summary": "Download raw coredump .dmp binary.",
+        "summary": "Download raw coredump .dmp binary from S3.",
         "tags": []
       }
     },
@@ -3127,7 +3495,7 @@
     },
     "/api/iot/coredump": {
       "post": {
-        "description": "Accepts raw binary body containing the ESP32 coredump data. Requires chip and firmware_version query parameters.\n\nThe coredump is stored in COREDUMPS_DIR/{device_key}/ with a DB record tracking metadata and parse status. Background parsing is triggered if the sidecar is configured.",
+        "description": "Accepts raw binary body containing the ESP32 coredump data. Requires chip and firmware_version query parameters.\n\nThe coredump is stored in S3 under coredumps/{device_key}/{id}.dmp with a DB record tracking metadata and parse status. Background parsing is triggered if the sidecar is configured.",
         "operationId": "post__api_iot_coredump",
         "parameters": [],
         "responses": {},
@@ -3351,7 +3719,7 @@
     },
     "/api/rotation/trigger": {
       "post": {
-        "description": "Queues all devices with OK state for rotation and immediately starts rotating the first device. Chain rotation handles the rest.",
+        "description": "Queues all devices with OK state for rotation and immediately starts rotating the first device. Chain rotation handles the rest. Broadcasts a rotation-updated SSE event so dashboards refresh.",
         "operationId": "post__api_rotation_trigger",
         "parameters": [],
         "responses": {
@@ -3387,6 +3755,16 @@
           }
         },
         "summary": "Manually trigger fleet-wide rotation.",
+        "tags": []
+      }
+    },
+    "/api/sse/callback": {
+      "post": {
+        "description": "This endpoint receives callbacks from the SSE Gateway when clients connect or disconnect. It extracts the request_id from the callback URL and calls SSEConnectionManager, which then notifies observers.\n\nReturns:     200 on success     401 if authentication fails (production only)     400 if payload invalid or request_id missing",
+        "operationId": "post__api_sse_callback",
+        "parameters": [],
+        "responses": {},
+        "summary": "Handle SSE Gateway connect/disconnect callbacks.",
         "tags": []
       }
     },
@@ -3523,6 +3901,91 @@
         "tags": []
       }
     },
+    "/api/testing/content/html": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_testing_content_html",
+        "parameters": [
+          {
+            "description": "Title to embed in the rendered HTML fixture",
+            "in": "query",
+            "name": "title",
+            "required": true,
+            "schema": {
+              "description": "Title to embed in the rendered HTML fixture",
+              "examples": [
+                "Playwright Fixture Page"
+              ],
+              "title": "Title",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Return deterministic HTML content without deployment banner.",
+        "tags": []
+      }
+    },
+    "/api/testing/content/html-with-banner": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_testing_content_html-with-banner",
+        "parameters": [
+          {
+            "description": "Title to embed in the rendered HTML fixture",
+            "in": "query",
+            "name": "title",
+            "required": true,
+            "schema": {
+              "description": "Title to embed in the rendered HTML fixture",
+              "examples": [
+                "Playwright Fixture Page"
+              ],
+              "title": "Title",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Return deterministic HTML content that includes a deployment banner wrapper.",
+        "tags": []
+      }
+    },
+    "/api/testing/content/image": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_testing_content_image",
+        "parameters": [
+          {
+            "description": "Text to render on the generated PNG image",
+            "in": "query",
+            "name": "text",
+            "required": true,
+            "schema": {
+              "description": "Text to render on the generated PNG image",
+              "examples": [
+                "Playwright Test Image"
+              ],
+              "title": "Text",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Return a deterministic PNG image for Playwright fixtures.",
+        "tags": []
+      }
+    },
+    "/api/testing/content/pdf": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_testing_content_pdf",
+        "parameters": [],
+        "responses": {},
+        "summary": "Return the bundled deterministic PDF asset.",
+        "tags": []
+      }
+    },
     "/api/testing/coredumps": {
       "post": {
         "description": "Seeds a CoreDump row directly in the database without filesystem I/O or sidecar parsing. Used by Playwright tests to set up coredump UI scenarios.",
@@ -3564,6 +4027,111 @@
         "tags": []
       }
     },
+    "/api/testing/deployments/version": {
+      "post": {
+        "description": "Request body:     request_id: client request ID for pending version storage     version: version string to broadcast     changelog: optional changelog text",
+        "operationId": "post__api_testing_deployments_version",
+        "parameters": [],
+        "responses": {},
+        "summary": "Trigger a version event for integration testing.",
+        "tags": []
+      }
+    },
+    "/api/testing/devices/logs/inject": {
+      "post": {
+        "description": "Constructs documents matching the shape of real MQTT-sourced log events and forwards them to DeviceLogStreamService.forward_logs(). If no SSE client is subscribed to the target device, logs are silently dropped.",
+        "operationId": "post__api_testing_devices_logs_inject",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogInjectRequestSchema.2e62f0a"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogInjectResponseSchema.2e62f0a"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Inject log entries into the SSE device-log pipeline.",
+        "tags": []
+      }
+    },
+    "/api/testing/devices/logs/subscriptions": {
+      "get": {
+        "description": "Used by Playwright tests to poll-wait until a subscription is active before injecting logs.",
+        "operationId": "get__api_testing_devices_logs_subscriptions",
+        "parameters": [
+          {
+            "description": "Filter to subscriptions for this device entity ID. Omit to return all.",
+            "in": "query",
+            "name": "device_entity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter to subscriptions for this device entity ID. Omit to return all.",
+              "examples": [
+                "sensor.living_room"
+              ],
+              "title": "Device Entity Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionsResponseSchema.2e62f0a"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Return active SSE device-log subscriptions.",
+        "tags": []
+      }
+    },
     "/api/testing/keycloak-cleanup": {
       "post": {
         "description": "This endpoint is used by Playwright tests to clean up Keycloak clients created during test runs. The pattern is matched against client IDs.\n\nRequest Body:     pattern: Regular expression to match against client IDs (required, non-empty)\n\nReturns:     200: Cleanup completed with count and list of deleted client IDs",
@@ -3571,6 +4139,57 @@
         "parameters": [],
         "responses": {},
         "summary": "Delete Keycloak clients matching a regex pattern.",
+        "tags": []
+      }
+    },
+    "/api/testing/logs/stream": {
+      "get": {
+        "description": "Streams logs from all loggers at INFO level and above. Each log entry is formatted as structured JSON with correlation ID when available.\n\nEvent Types:     - log: Application log entries     - connection_open: Sent when client connects     - heartbeat: Sent every 30 seconds for keepalive     - connection_close: Sent when server shuts down",
+        "operationId": "get__api_testing_logs_stream",
+        "parameters": [],
+        "responses": {},
+        "summary": "SSE endpoint for streaming backend application logs in real-time.",
+        "tags": []
+      }
+    },
+    "/api/testing/rotation/nudge": {
+      "post": {
+        "description": "No rotation state is changed; this purely triggers the SSE-to-dashboard refresh path for Playwright testing.",
+        "operationId": "post__api_testing_rotation_nudge",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NudgeResponseSchema.2e62f0a"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Broadcast a rotation-updated SSE event to all connected clients.",
+        "tags": []
+      }
+    },
+    "/api/testing/tasks/start": {
+      "post": {
+        "description": "Request body:     task_type: \"demo_task\" or \"failing_task\"     params: dict of task parameters (steps, delay, error_message)",
+        "operationId": "post__api_testing_tasks_start",
+        "parameters": [],
+        "responses": {},
+        "summary": "Start a demo or failing task for integration testing.",
         "tags": []
       }
     },
@@ -3684,6 +4303,16 @@
           }
         },
         "summary": "Readiness probe endpoint for Kubernetes.",
+        "tags": []
+      }
+    },
+    "/internal/rotation-nudge": {
+      "post": {
+        "description": "Called by the CronJob rotation_job after processing rotation changes in a separate process. The CronJob has no SSE connections, so it delegates the broadcast to the web process via this endpoint.\n\nReturns 200 regardless of whether any clients received the broadcast.",
+        "operationId": "post__internal_rotation-nudge",
+        "parameters": [],
+        "responses": {},
+        "summary": "Trigger a rotation-updated SSE broadcast.",
         "tags": []
       }
     },

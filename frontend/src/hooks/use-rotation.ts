@@ -1,13 +1,13 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useGetRotationDashboard,
   useGetRotationStatus,
   usePostRotationTrigger,
   usePostDevicesRotateByDeviceId,
-  type DashboardResponseSchema_57872a8
 } from '@/lib/api/generated/hooks'
 import { useToast } from '@/contexts/toast-context'
+import { useSseContext } from '@/contexts/sse-context'
 
 // Dashboard device summary (camelCase)
 export interface RotationDashboardDevice {
@@ -69,22 +69,22 @@ function transformStatus(apiStatus: {
   }
 }
 
-// Polling interval for active rotation (30 seconds)
-const ROTATION_ACTIVE_POLLING_INTERVAL = 30_000
-
-// Hook to fetch rotation dashboard data
+// Hook to fetch rotation dashboard data.
+// Reacts to SSE "rotation-updated" nudge events instead of polling.
 export function useRotationDashboard() {
-  // Use refetchInterval as a function to dynamically enable polling when rotation is active
-  const query = useGetRotationDashboard(undefined, {
-    refetchInterval: (query) => {
-      const data = query.state.data as DashboardResponseSchema_57872a8 | undefined
-      const counts = data?.counts ?? {}
-      const pendingCount = counts['PENDING'] ?? 0
-      const queuedCount = counts['QUEUED'] ?? 0
-      const isActive = pendingCount > 0 || queuedCount > 0
-      return isActive ? ROTATION_ACTIVE_POLLING_INTERVAL : false
-    }
-  })
+  const queryClient = useQueryClient()
+  const { addEventListener } = useSseContext()
+
+  const query = useGetRotationDashboard()
+
+  // Listen for SSE rotation-updated events and invalidate queries
+  useEffect(() => {
+    const removeListener = addEventListener('rotation-updated', () => {
+      queryClient.invalidateQueries({ queryKey: ['getRotationDashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['getRotationStatus'] })
+    })
+    return removeListener
+  }, [addEventListener, queryClient])
 
   // Transform devices by category
   const healthy = useMemo(() => {

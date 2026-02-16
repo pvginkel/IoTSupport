@@ -21,7 +21,7 @@ const VIEWER_HEIGHT = '480px'
  *
  * Features:
  * - Terminal styling with dark background and monospace font
- * - Right-aligned checkbox to toggle live updates (default checked)
+ * - Connected/Disconnected status indicator for SSE streaming
  * - Auto-scroll only when already at bottom
  * - Hidden when device has no entity_id; shows "No logs available" when empty
  */
@@ -30,13 +30,10 @@ export function DeviceLogsViewer({ deviceId, deviceEntityId, fullHeight }: Devic
     logs,
     isLoading,
     hasEntityId,
-    isPolling,
-    startPolling,
-    stopPolling
+    isStreaming,
   } = useDeviceLogs({
     deviceId,
     deviceEntityId,
-    defaultPolling: true
   })
 
   // Track whether scroll is at bottom (for UI display via data attribute)
@@ -44,6 +41,10 @@ export function DeviceLogsViewer({ deviceId, deviceEntityId, fullHeight }: Devic
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   // Use a ref to track scroll position for auto-scroll decisions to avoid stale state
   const wasAtBottomRef = useRef(true)
+  // Guard flag: prevents onScroll events fired during programmatic scrollTop
+  // assignments from incorrectly clearing wasAtBottomRef when new content has
+  // already increased scrollHeight before the scroll event is delivered.
+  const isAutoScrollingRef = useRef(false)
 
   // Check if scroll is at bottom
   const checkIsAtBottom = useCallback(() => {
@@ -54,36 +55,33 @@ export function DeviceLogsViewer({ deviceId, deviceEntityId, fullHeight }: Devic
     return scrollHeight - scrollTop - clientHeight <= SCROLL_THRESHOLD_PX
   }, [])
 
-  // Handle scroll events to track position
+  // Handle scroll events to track position.
+  // Ignores events triggered by programmatic auto-scroll to avoid race
+  // conditions where rapid log batches increase scrollHeight between the
+  // scrollTop assignment and the scroll event delivery.
   const handleScroll = useCallback(() => {
+    if (isAutoScrollingRef.current) return
     const atBottom = checkIsAtBottom()
     setIsAtBottom(atBottom)
     wasAtBottomRef.current = atBottom
   }, [checkIsAtBottom])
 
   // Auto-scroll to bottom when new logs arrive (only if already at bottom)
-  // Uses ref to get fresh scroll position, avoiding stale state during rapid updates
   useEffect(() => {
     const container = scrollContainerRef.current
     if (!container) return
 
-    // Check scroll position directly to handle rapid log batches correctly
-    // The ref captures the position before new logs were appended
     if (wasAtBottomRef.current) {
+      isAutoScrollingRef.current = true
       container.scrollTop = container.scrollHeight
-      // Keep ref in sync - state will update via onScroll handler
-      wasAtBottomRef.current = true
+      // Clear the guard after scroll events from this update settle.
+      // requestAnimationFrame fires after any synchronously-dispatched scroll
+      // events and before the next frame, covering both delivery timings.
+      requestAnimationFrame(() => {
+        isAutoScrollingRef.current = false
+      })
     }
   }, [logs])
-
-  // Handle checkbox toggle
-  const handleLiveToggle = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.checked) {
-      startPolling()
-    } else {
-      stopPolling()
-    }
-  }, [startPolling, stopPolling])
 
   // Don't render if no entity ID
   if (!hasEntityId) {
@@ -92,21 +90,25 @@ export function DeviceLogsViewer({ deviceId, deviceEntityId, fullHeight }: Devic
 
   return (
     <div data-testid="devices.logs.viewer" className={fullHeight ? 'flex flex-col flex-1 min-h-0 gap-2' : 'space-y-2'}>
-      {/* Header with label and checkbox */}
+      {/* Header with label and streaming status */}
       <div className="flex items-center justify-between">
         <label className="block text-sm font-medium text-muted-foreground">
           Device Logs
         </label>
-        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-          <span>Live Updates</span>
-          <input
-            type="checkbox"
-            checked={isPolling}
-            onChange={handleLiveToggle}
-            className="h-4 w-4 rounded border-border bg-background text-primary focus:ring-primary focus:ring-offset-background"
-            data-testid="devices.logs.live-checkbox"
+        <span
+          className={`flex items-center gap-1.5 text-xs font-medium ${
+            isStreaming ? 'text-green-500' : 'text-muted-foreground'
+          }`}
+          data-testid="devices.logs.streaming-status"
+          data-streaming={isStreaming ? 'true' : 'false'}
+        >
+          <span
+            className={`inline-block h-2 w-2 rounded-full ${
+              isStreaming ? 'bg-green-500' : 'bg-muted-foreground'
+            }`}
           />
-        </label>
+          {isStreaming ? 'Connected' : 'Connecting...'}
+        </span>
       </div>
 
       {/* Log container with terminal styling */}

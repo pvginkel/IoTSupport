@@ -196,8 +196,8 @@ export class DevicesPage {
     return this.page.locator('[data-testid="devices.logs.viewer"]');
   }
 
-  get logsLiveCheckbox(): Locator {
-    return this.page.locator('[data-testid="devices.logs.live-checkbox"]');
+  get logsStreamingStatus(): Locator {
+    return this.page.locator('[data-testid="devices.logs.streaming-status"]');
   }
 
   get logsContainer(): Locator {
@@ -495,10 +495,6 @@ export class DevicesPage {
   }
 
   // Actions - Device Logs Viewer
-  async toggleLogsLiveUpdates(): Promise<void> {
-    await this.logsLiveCheckbox.click();
-  }
-
   async isLogsViewerVisible(): Promise<boolean> {
     return await this.logsViewer.isVisible();
   }

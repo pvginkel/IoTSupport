@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
@@ -6,8 +7,10 @@ import type { Readable } from 'node:stream';
 import split2 from 'split2';
 
 const BACKEND_READY_PATH = '/health/readyz';
+const GATEWAY_READY_PATH = '/readyz';
 const FRONTEND_READY_PATH = '/';
 const BACKEND_STARTUP_TIMEOUT_MS = 30_000;
+const GATEWAY_STARTUP_TIMEOUT_MS = 15_000;
 const FRONTEND_STARTUP_TIMEOUT_MS = 90_000;
 const POLL_INTERVAL_MS = 200;
 const HOSTNAME = '127.0.0.1';
@@ -20,6 +23,7 @@ type ServerHandle = {
 };
 
 export type BackendServerHandle = ServerHandle;
+export type GatewayServerHandle = ServerHandle;
 export type FrontendServerHandle = ServerHandle;
 
 export async function startBackend(
@@ -66,9 +70,56 @@ export async function startBackend(
   });
 }
 
+/**
+ * Start the SSE Gateway between the backend and frontend.
+ * The gateway script is expected at ../ssegateway/scripts/run-gateway.sh
+ * (or SSE_GATEWAY_ROOT override). If the script is missing the function
+ * throws with a clear message so CI failures are actionable.
+ */
+export async function startGateway(options: {
+  workerIndex: number;
+  backendUrl: string;
+  excludePorts?: number[];
+  streamLogs?: boolean;
+  port?: number;
+}): Promise<GatewayServerHandle> {
+  const port =
+    typeof options.port === 'number'
+      ? options.port
+      : await getPort({
+          exclude: options.excludePorts ?? [],
+        });
+
+  const gatewayRoot = getGatewayRepoRoot();
+  const scriptPath = resolve(gatewayRoot, './scripts/run-gateway.sh');
+
+  if (!existsSync(scriptPath)) {
+    throw new Error(
+      `${formatPrefix(options.workerIndex, 'gateway')} SSE Gateway script not found at ${scriptPath}. ` +
+        'Ensure the gateway repo is available at ../ssegateway or set SSE_GATEWAY_ROOT.'
+    );
+  }
+
+  return startService({
+    workerIndex: options.workerIndex,
+    port,
+    serviceLabel: 'gateway',
+    scriptPath,
+    args: ['--host', HOSTNAME, '--port', String(port)],
+    readinessPath: GATEWAY_READY_PATH,
+    startupTimeoutMs: GATEWAY_STARTUP_TIMEOUT_MS,
+    streamLogs: options.streamLogs === true,
+    env: {
+      ...process.env,
+      CALLBACK_URL: options.backendUrl,
+    },
+  });
+}
+
 export async function startFrontend(options: {
   workerIndex: number;
   backendUrl: string;
+  gatewayUrl?: string;
   excludePorts?: number[];
   streamLogs?: boolean;
   port?: number;
@@ -95,12 +146,14 @@ export async function startFrontend(options: {
     env: {
       ...process.env,
       BACKEND_URL: options.backendUrl,
+      // Pass SSE Gateway URL to the Vite proxy; falls back to default if not provided
+      ...(options.gatewayUrl ? { SSE_GATEWAY_URL: options.gatewayUrl } : {}),
       VITE_TEST_MODE: 'true',
     },
   });
 }
 
-type ServiceLabel = 'backend' | 'frontend';
+type ServiceLabel = 'backend' | 'gateway' | 'frontend';
 
 type StartServiceOptions = {
   workerIndex: number;
@@ -296,6 +349,9 @@ function serviceShouldLogLifecycle(serviceLabel: ServiceLabel): boolean {
   if (serviceLabel === 'backend') {
     return process.env.PLAYWRIGHT_BACKEND_LOG_STREAM === 'true';
   }
+  if (serviceLabel === 'gateway') {
+    return process.env.PLAYWRIGHT_GATEWAY_LOG_STREAM === 'true';
+  }
   if (serviceLabel === 'frontend') {
     return process.env.PLAYWRIGHT_FRONTEND_LOG_STREAM === 'true';
   }
@@ -327,6 +383,7 @@ async function waitForExit(
 
 let frontendRepoRootCache: string | undefined;
 let backendRepoRootCache: string | undefined;
+let gatewayRepoRootCache: string | undefined;
 
 function getFrontendRepoRoot(): string {
   if (!frontendRepoRootCache) {
@@ -341,6 +398,19 @@ function getBackendRepoRoot(): string {
     backendRepoRootCache = resolve(getFrontendRepoRoot(), '../backend');
   }
   return backendRepoRootCache;
+}
+
+function getGatewayRepoRoot(): string {
+  if (!gatewayRepoRootCache) {
+    // Allow override via environment variable
+    const envRoot = process.env.SSE_GATEWAY_ROOT;
+    if (envRoot) {
+      gatewayRepoRootCache = resolve(envRoot);
+    } else {
+      gatewayRepoRootCache = resolve(getFrontendRepoRoot(), '../ssegateway');
+    }
+  }
+  return gatewayRepoRootCache;
 }
 
 const activeChildren = new Set<ChildProcessWithoutNullStreams>();
