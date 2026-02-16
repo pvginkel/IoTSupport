@@ -21,6 +21,7 @@ from app.utils.lifecycle_coordinator import LifecycleCoordinatorProtocol, Lifecy
 
 if TYPE_CHECKING:
     from app.app_config import AppSettings
+    from app.services.device_log_stream_service import DeviceLogStreamService
     from app.services.mqtt_service import MqttService
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ class LogSinkService:
         config: "AppSettings",
         mqtt_service: "MqttService",
         lifecycle_coordinator: LifecycleCoordinatorProtocol,
+        device_log_stream_service: "DeviceLogStreamService | None" = None,
     ) -> None:
         """Initialize log sink service.
 
@@ -60,10 +62,12 @@ class LogSinkService:
             config: Application settings with Elasticsearch configuration
             mqtt_service: Shared MQTT service for subscription
             lifecycle_coordinator: Lifecycle coordinator for startup/shutdown
+            device_log_stream_service: Optional SSE forwarding service for real-time log streaming
         """
         self.config = config
         self.mqtt_service = mqtt_service
         self._lifecycle_coordinator = lifecycle_coordinator
+        self._device_log_stream_service = device_log_stream_service
 
         # Track service state
         self.enabled = False
@@ -176,10 +180,14 @@ class LogSinkService:
     def _on_message(self, payload: bytes) -> None:
         """Callback when a message is received on the log sink topic.
 
-        Processes the message as NDJSON (newline-delimited JSON) and enqueues
-        each document for batch writing to Elasticsearch.
+        Processes the message as NDJSON (newline-delimited JSON), enqueues
+        each document for batch writing to Elasticsearch, and forwards
+        parsed documents to the SSE device log stream service (if available).
         """
         text = payload.decode("utf-8")
+
+        # Collect parsed documents for SSE forwarding (parallel to ES enqueue)
+        parsed_documents: list[dict[str, Any]] = []
 
         # Split by newlines and process each non-empty line
         for line in text.splitlines():
@@ -188,7 +196,8 @@ class LogSinkService:
                 continue
 
             try:
-                self._process_line(line)
+                doc = self._process_line(line)
+                parsed_documents.append(doc)
                 self.logsink_messages_received_total.labels(status="success").inc()
             except json.JSONDecodeError as e:
                 # Invalid JSON - log and skip this line
@@ -209,18 +218,28 @@ class LogSinkService:
                     status="processing_error"
                 ).inc()
 
-    def _process_line(self, line: str) -> None:
+        # Forward parsed documents to SSE subscribers (parallel to ES write path)
+        if parsed_documents and self._device_log_stream_service is not None:
+            try:
+                self._device_log_stream_service.forward_logs(parsed_documents)
+            except Exception as e:
+                logger.warning("LogSinkService SSE forwarding error: %s", e)
+
+    def _process_line(self, line: str) -> dict[str, Any]:
         """Process a single NDJSON line and enqueue for batch writing.
 
         Args:
             line: Single JSON line from NDJSON payload
+
+        Returns:
+            Parsed and enriched document dict (for SSE forwarding)
 
         Raises:
             json.JSONDecodeError: If line is not valid JSON
             ShutDown: If the queue has been shut down
         """
         # Parse JSON line
-        data = json.loads(line)
+        data: dict[str, Any] = json.loads(line)
 
         # Strip ANSI codes from message field
         message = data.get("message", "")
@@ -241,6 +260,8 @@ class LogSinkService:
         # Enqueue for batch writing (blocks if queue is full)
         self._queue.put((index_name, data))
         self.logsink_queue_depth.set(self._queue.qsize())
+
+        return data
 
     def _writer_loop(self) -> None:
         """Background writer thread that drains the queue and writes batches to ES."""

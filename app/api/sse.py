@@ -13,6 +13,7 @@ from app.schemas.sse_gateway_schema import (
     SSEGatewayDisconnectCallback,
 )
 from app.services.container import ServiceContainer
+from app.services.device_log_stream_service import DeviceLogStreamService
 from app.services.sse_connection_manager import SSEConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ def _authenticate_callback(secret_from_query: str | None, settings: Settings) ->
 def handle_callback(
     sse_connection_manager: SSEConnectionManager = Provide[ServiceContainer.sse_connection_manager],
     settings: Settings = Provide[ServiceContainer.config],
+    device_log_stream_service: DeviceLogStreamService = Provide[ServiceContainer.device_log_stream_service],
 ) -> tuple[Response, int] | Response:
     """Handle SSE Gateway connect/disconnect callbacks.
 
@@ -107,6 +109,13 @@ def handle_callback(
                 request_id,
                 connect_callback.token,
                 connect_callback.request.url
+            )
+
+            # Bind OIDC identity from forwarded headers for subscription authorization.
+            # Done here (not via on_connect observer) because the observer callback
+            # only receives request_id, not the full payload with headers.
+            device_log_stream_service.bind_identity(
+                request_id, connect_callback.request.headers
             )
 
             # Return empty JSON response (SSE Gateway only checks status code)

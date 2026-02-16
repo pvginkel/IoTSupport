@@ -14,6 +14,7 @@ from app.schemas.rotation import (
     RotationTriggerResponseSchema,
 )
 from app.services.container import ServiceContainer
+from app.services.device_log_stream_service import DeviceLogStreamService
 from app.services.metrics_service import MetricsService
 from app.services.rotation_service import RotationService
 from app.utils.error_handling import handle_api_errors
@@ -62,11 +63,13 @@ def get_rotation_status(
 def trigger_fleet_rotation(
     rotation_service: RotationService = Provide[ServiceContainer.rotation_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+    device_log_stream_service: DeviceLogStreamService = Provide[ServiceContainer.device_log_stream_service],
 ) -> Any:
     """Manually trigger fleet-wide rotation.
 
     Queues all devices with OK state for rotation and immediately
     starts rotating the first device. Chain rotation handles the rest.
+    Broadcasts a rotation-updated SSE event so dashboards refresh.
     """
     start_time = time.perf_counter()
     status = "success"
@@ -77,6 +80,9 @@ def trigger_fleet_rotation(
         # Start rotating immediately instead of waiting for CRON job
         if queued_count > 0:
             rotation_service.rotate_next_queued_device()
+
+        # Notify connected dashboards that rotation state changed
+        device_log_stream_service.broadcast_rotation_nudge(source="web")
 
         return RotationTriggerResponseSchema(queued_count=queued_count).model_dump()
 
