@@ -8,12 +8,54 @@ from pathlib import Path
 
 import httpx
 from PIL import Image
+from prometheus_client import Counter, Histogram
 
 from app.exceptions import ExternalServiceException, ProcessingException
-from app.services.metrics_service import MetricsService
 from app.utils.lvgl import ColorFormat, CompressMethod, LVGLImage
 
 logger = logging.getLogger(__name__)
+
+# Image proxy Prometheus metrics (module-level)
+IMAGE_PROXY_OPERATIONS_TOTAL = Counter(
+    "iot_image_proxy_operations_total",
+    "Total image proxy operations",
+    ["status", "error_type"],
+)
+IMAGE_PROXY_OPERATION_DURATION = Histogram(
+    "iot_image_proxy_operation_duration_seconds",
+    "Duration of image proxy operations in seconds",
+)
+IMAGE_PROXY_FETCH_DURATION = Histogram(
+    "iot_image_proxy_external_fetch_duration_seconds",
+    "Duration of external image fetches in seconds",
+)
+IMAGE_PROXY_IMAGE_SIZE = Histogram(
+    "iot_image_proxy_image_size_bytes",
+    "Size of fetched images in bytes",
+)
+
+
+def record_image_proxy_operation(
+    status: str | None,
+    error_type: str | None,
+    operation_duration: float | None = None,
+    fetch_duration: float | None = None,
+    image_size: int | None = None,
+) -> None:
+    """Record an image proxy operation metric."""
+    try:
+        if status is not None and error_type is not None:
+            IMAGE_PROXY_OPERATIONS_TOTAL.labels(
+                status=status, error_type=error_type
+            ).inc()
+        if operation_duration is not None:
+            IMAGE_PROXY_OPERATION_DURATION.observe(operation_duration)
+        if fetch_duration is not None:
+            IMAGE_PROXY_FETCH_DURATION.observe(fetch_duration)
+        if image_size is not None:
+            IMAGE_PROXY_IMAGE_SIZE.observe(image_size)
+    except Exception as e:
+        logger.error("Error recording image proxy metric: %s", e)
 
 
 class ImageProxyService:
@@ -25,13 +67,8 @@ class ImageProxyService:
     - Converting images to LVGL binary format (ARGB8888)
     """
 
-    def __init__(self, metrics_service: MetricsService) -> None:
-        """Initialize the image proxy service.
-
-        Args:
-            metrics_service: Metrics service for recording operation metrics
-        """
-        self.metrics_service = metrics_service
+    def __init__(self) -> None:
+        """Initialize the image proxy service."""
 
     def fetch_and_convert_image(
         self,
@@ -89,8 +126,7 @@ class ImageProxyService:
         )
 
         # Record granular fetch metrics only (operation counter recorded by API layer)
-        # Pass None for status/error_type to skip counter increment
-        self.metrics_service.record_image_proxy_operation(
+        record_image_proxy_operation(
             status=None,  # Skip counter, only record histograms
             error_type=None,
             fetch_duration=fetch_duration,

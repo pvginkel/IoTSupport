@@ -15,8 +15,10 @@ from app.exceptions import (
 from app.schemas.error import ErrorResponseSchema
 from app.schemas.image_proxy import LvglImageQuerySchema
 from app.services.container import ServiceContainer
-from app.services.image_proxy_service import ImageProxyService
-from app.services.metrics_service import MetricsService
+from app.services.image_proxy_service import (
+    ImageProxyService,
+    record_image_proxy_operation,
+)
 from app.utils.error_handling import handle_api_errors
 from app.utils.spectree_config import api
 
@@ -39,7 +41,6 @@ def get_lvgl_image(
     image_proxy_service: ImageProxyService = Provide[
         ServiceContainer.image_proxy_service
     ],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
 ) -> Any:
     """Fetch and convert an image to LVGL binary format.
 
@@ -126,7 +127,7 @@ def get_lvgl_image(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_image_proxy_operation(
+        record_image_proxy_operation(
             status=status,
             error_type=error_type,
             operation_duration=duration,

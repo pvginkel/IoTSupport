@@ -22,11 +22,11 @@ from app.exceptions import (
     ValidationException,
 )
 from app.models.coredump import CoreDump, ParseStatus
+from app.utils.iot_metrics import record_operation
 
 if TYPE_CHECKING:
     from app.app_config import AppSettings
     from app.services.container import ServiceContainer
-    from app.services.metrics_service import MetricsService
     from app.services.s3_service import S3Service
 
 logger = logging.getLogger(__name__)
@@ -56,14 +56,12 @@ class CoredumpService:
         self,
         s3_service: "S3Service",
         config: "AppSettings",
-        metrics_service: "MetricsService",
     ) -> None:
         """Initialize coredump service.
 
         Args:
             s3_service: S3 service for coredump binary storage.
             config: Application settings (for sidecar URL, xfer dir, max coredumps).
-            metrics_service: Service for recording operational metrics.
 
         Note:
             The `container` attribute must be set post-init (in create_app) because
@@ -73,7 +71,6 @@ class CoredumpService:
         self.s3_service = s3_service
         self.config = config
         self.container: ServiceContainer | None = None
-        self.metrics_service = metrics_service
 
         logger.info("CoredumpService initialized with S3 storage")
 
@@ -372,9 +369,7 @@ class CoredumpService:
                         coredump_id, ParseStatus.PARSED, output
                     )
                     duration = time.perf_counter() - start_time
-                    self.metrics_service.record_operation(
-                        "coredump_parse", "success", duration
-                    )
+                    record_operation("coredump_parse", "success", duration)
                     logger.info(
                         "Successfully parsed coredump %d in %.2fs", coredump_id, duration
                     )
@@ -394,7 +389,7 @@ class CoredumpService:
                 f"Unable to parse coredump: {last_error}",
             )
             duration = time.perf_counter() - start_time
-            self.metrics_service.record_operation("coredump_parse", "error", duration)
+            record_operation("coredump_parse", "error", duration)
 
         except Exception as e:
             # Catch-all for unexpected errors in the thread
@@ -407,7 +402,7 @@ class CoredumpService:
                 f"Unable to parse coredump: {e}",
             )
             duration = time.perf_counter() - start_time
-            self.metrics_service.record_operation("coredump_parse", "error", duration)
+            record_operation("coredump_parse", "error", duration)
 
         finally:
             # Best-effort cleanup of xfer directory files

@@ -7,14 +7,26 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import httpx
+from prometheus_client import Counter, Histogram
 
 from app.exceptions import ExternalServiceException, ServiceUnavailableException
 
 if TYPE_CHECKING:
     from app.app_config import AppSettings
-    from app.services.metrics_service import MetricsService
 
 logger = logging.getLogger(__name__)
+
+# Elasticsearch Prometheus metrics (module-level)
+ES_OPERATIONS_TOTAL = Counter(
+    "iot_elasticsearch_operations_total",
+    "Total Elasticsearch operations",
+    ["operation", "status"],
+)
+ES_QUERY_DURATION = Histogram(
+    "iot_elasticsearch_query_duration_seconds",
+    "Duration of Elasticsearch queries in seconds",
+    ["operation"],
+)
 
 
 @dataclass
@@ -48,16 +60,13 @@ class ElasticsearchService:
     def __init__(
         self,
         config: "AppSettings",
-        metrics_service: "MetricsService",
     ) -> None:
         """Initialize Elasticsearch service.
 
         Args:
             config: Application settings containing Elasticsearch configuration
-            metrics_service: Metrics service for recording operations
         """
         self.config = config
-        self.metrics_service = metrics_service
 
         # HTTP client for API calls with connection pooling
         self._http_client = httpx.Client(timeout=10.0)
@@ -85,14 +94,17 @@ class ElasticsearchService:
 
     def _record_operation(self, operation: str, status: str) -> None:
         """Record an Elasticsearch operation metric."""
-        self.metrics_service.increment_counter(
-            "iot_elasticsearch_operations_total",
-            labels={"operation": operation, "status": status}
-        )
+        try:
+            ES_OPERATIONS_TOTAL.labels(operation=operation, status=status).inc()
+        except Exception as e:
+            logger.error("Error recording ES operation metric: %s", e)
 
     def _record_duration(self, operation: str, duration: float) -> None:
         """Record Elasticsearch query duration."""
-        self.metrics_service.record_elasticsearch_query(operation, duration)
+        try:
+            ES_QUERY_DURATION.labels(operation=operation).observe(duration)
+        except Exception as e:
+            logger.error("Error recording ES query metric: %s", e)
 
     def query_logs(
         self,

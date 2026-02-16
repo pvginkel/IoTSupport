@@ -26,7 +26,6 @@ from app.services.coredump_service import CoredumpService
 from app.services.device_service import DeviceService
 from app.services.firmware_service import FirmwareService
 from app.services.keycloak_admin_service import KeycloakAdminService
-from app.services.metrics_service import MetricsService
 from app.services.rotation_nudge_service import RotationNudgeService
 from app.services.rotation_service import RotationService
 from app.utils.auth import public
@@ -35,6 +34,7 @@ from app.utils.device_auth import (
     get_device_auth_context,
 )
 from app.utils.error_handling import handle_api_errors
+from app.utils.iot_metrics import record_operation
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,6 @@ def before_request_device_auth(
 def get_config(
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     rotation_service: RotationService = Provide[ServiceContainer.rotation_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
     rotation_nudge_service: RotationNudgeService = Provide[ServiceContainer.rotation_nudge_service],
 ) -> Any:
     """Get raw JSON configuration for the device.
@@ -122,7 +121,7 @@ def get_config(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("iot_get_config", status, duration)
+        record_operation("iot_get_config", status, duration)
 
 
 def _check_rotation_completion(
@@ -188,7 +187,6 @@ def _check_rotation_completion(
 def get_firmware(
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     firmware_service: FirmwareService = Provide[ServiceContainer.firmware_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
 ) -> Any:
     """Download firmware binary for the device's model.
 
@@ -232,7 +230,7 @@ def get_firmware(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("iot_get_firmware", status, duration)
+        record_operation("iot_get_firmware", status, duration)
 
 
 @iot_bp.route("/firmware-version", methods=["GET"])
@@ -241,7 +239,6 @@ def get_firmware(
 @inject
 def get_firmware_version(
     device_service: DeviceService = Provide[ServiceContainer.device_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
 ) -> Any:
     """Get the current firmware version for the device's model.
 
@@ -280,7 +277,7 @@ def get_firmware_version(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("iot_get_firmware_version", status, duration)
+        record_operation("iot_get_firmware_version", status, duration)
 
 
 @iot_bp.route("/provisioning", methods=["GET"])
@@ -290,7 +287,6 @@ def get_firmware_version(
 def get_provisioning_for_rotation(
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     keycloak_admin_service: KeycloakAdminService = Provide[ServiceContainer.keycloak_admin_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
     app_config: AppSettings = Provide[ServiceContainer.app_config],
 ) -> Any:
     """Get new provisioning data during rotation.
@@ -358,7 +354,7 @@ def get_provisioning_for_rotation(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("iot_get_provisioning", status, duration)
+        record_operation("iot_get_provisioning", status, duration)
 
 
 @iot_bp.route("/coredump", methods=["POST"])
@@ -368,7 +364,6 @@ def get_provisioning_for_rotation(
 def upload_coredump(
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     coredump_service: CoredumpService = Provide[ServiceContainer.coredump_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
 ) -> Any:
     """Upload a coredump from a device.
 
@@ -443,4 +438,4 @@ def upload_coredump(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("iot_upload_coredump", status, duration)
+        record_operation("iot_upload_coredump", status, duration)

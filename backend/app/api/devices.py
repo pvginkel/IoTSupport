@@ -28,9 +28,9 @@ from app.schemas.error import ErrorResponseSchema
 from app.services.container import ServiceContainer
 from app.services.device_service import DeviceService
 from app.services.elasticsearch_service import ElasticsearchService
-from app.services.metrics_service import MetricsService
 from app.services.rotation_service import RotationService
 from app.utils.error_handling import handle_api_errors
+from app.utils.iot_metrics import record_operation
 from app.utils.spectree_config import api
 
 devices_bp = Blueprint("devices", __name__, url_prefix="/devices")
@@ -42,7 +42,7 @@ devices_bp = Blueprint("devices", __name__, url_prefix="/devices")
 @inject
 def list_devices(
     device_service: DeviceService = Provide[ServiceContainer.device_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """List all devices with optional filtering."""
     start_time = time.perf_counter()
@@ -70,7 +70,7 @@ def list_devices(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("list_devices", status, duration)
+        record_operation("list_devices", status, duration)
 
 
 @devices_bp.route("", methods=["POST"])
@@ -87,7 +87,7 @@ def list_devices(
 @inject
 def create_device(
     device_service: DeviceService = Provide[ServiceContainer.device_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Create a new device with Keycloak client."""
     start_time = time.perf_counter()
@@ -108,7 +108,7 @@ def create_device(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("create_device", status, duration)
+        record_operation("create_device", status, duration)
 
 
 @devices_bp.route("/<int:device_id>", methods=["GET"])
@@ -123,7 +123,7 @@ def create_device(
 def get_device(
     device_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Get a device by ID."""
     start_time = time.perf_counter()
@@ -139,7 +139,7 @@ def get_device(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("get_device", status, duration)
+        record_operation("get_device", status, duration)
 
 
 @devices_bp.route("/<int:device_id>", methods=["PUT"])
@@ -156,7 +156,7 @@ def get_device(
 def update_device(
     device_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Update a device's configuration."""
     start_time = time.perf_counter()
@@ -174,7 +174,7 @@ def update_device(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("update_device", status, duration)
+        record_operation("update_device", status, duration)
 
 
 @devices_bp.route("/<int:device_id>", methods=["DELETE"])
@@ -190,7 +190,7 @@ def update_device(
 def delete_device(
     device_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Delete a device and its Keycloak client."""
     start_time = time.perf_counter()
@@ -206,7 +206,7 @@ def delete_device(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("delete_device", status, duration)
+        record_operation("delete_device", status, duration)
 
 
 @devices_bp.route("/<int:device_id>/provisioning", methods=["GET"])
@@ -223,7 +223,7 @@ def delete_device(
 def get_provisioning(
     device_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Get NVS provisioning package for a device.
 
@@ -249,7 +249,7 @@ def get_provisioning(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("get_provisioning", status, duration)
+        record_operation("get_provisioning", status, duration)
 
 
 @devices_bp.route("/<int:device_id>/rotate", methods=["POST"])
@@ -265,7 +265,7 @@ def trigger_device_rotation(
     device_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     rotation_service: RotationService = Provide[ServiceContainer.rotation_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Trigger rotation for a single device.
 
@@ -291,7 +291,7 @@ def trigger_device_rotation(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("trigger_device_rotation", status, duration)
+        record_operation("trigger_device_rotation", status, duration)
 
 
 @devices_bp.route("/<int:device_id>/keycloak-status", methods=["GET"])
@@ -307,7 +307,7 @@ def trigger_device_rotation(
 def get_keycloak_status(
     device_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Get Keycloak client status for a device.
 
@@ -328,7 +328,7 @@ def get_keycloak_status(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("get_keycloak_status", status, duration)
+        record_operation("get_keycloak_status", status, duration)
 
 
 @devices_bp.route("/<int:device_id>/keycloak-sync", methods=["POST"])
@@ -344,7 +344,7 @@ def get_keycloak_status(
 def sync_keycloak_client(
     device_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Create Keycloak client for a device if missing.
 
@@ -364,7 +364,7 @@ def sync_keycloak_client(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("sync_keycloak_client", status, duration)
+        record_operation("sync_keycloak_client", status, duration)
 
 
 @devices_bp.route("/<int:device_id>/logs", methods=["GET"])
@@ -382,7 +382,7 @@ def get_device_logs(
     device_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     elasticsearch_service: ElasticsearchService = Provide[ServiceContainer.elasticsearch_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Get logs for a device from Elasticsearch.
 
@@ -436,4 +436,4 @@ def get_device_logs(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("get_device_logs", status, duration)
+        record_operation("get_device_logs", status, duration)

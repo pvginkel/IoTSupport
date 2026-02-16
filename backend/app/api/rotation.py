@@ -14,10 +14,10 @@ from app.schemas.rotation import (
     RotationTriggerResponseSchema,
 )
 from app.services.container import ServiceContainer
-from app.services.metrics_service import MetricsService
 from app.services.rotation_nudge_service import RotationNudgeService
 from app.services.rotation_service import RotationService
 from app.utils.error_handling import handle_api_errors
+from app.utils.iot_metrics import record_operation
 from app.utils.spectree_config import api
 
 rotation_bp = Blueprint("rotation", __name__, url_prefix="/rotation")
@@ -29,7 +29,6 @@ rotation_bp = Blueprint("rotation", __name__, url_prefix="/rotation")
 @inject
 def get_rotation_status(
     rotation_service: RotationService = Provide[ServiceContainer.rotation_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
 ) -> Any:
     """Get current rotation status across all devices.
 
@@ -48,7 +47,7 @@ def get_rotation_status(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("get_rotation_status", status, duration)
+        record_operation("get_rotation_status", status, duration)
 
 
 @rotation_bp.route("/trigger", methods=["POST"])
@@ -62,7 +61,6 @@ def get_rotation_status(
 @inject
 def trigger_fleet_rotation(
     rotation_service: RotationService = Provide[ServiceContainer.rotation_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
     rotation_nudge_service: RotationNudgeService = Provide[ServiceContainer.rotation_nudge_service],
 ) -> Any:
     """Manually trigger fleet-wide rotation.
@@ -92,7 +90,7 @@ def trigger_fleet_rotation(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("trigger_fleet_rotation", status, duration)
+        record_operation("trigger_fleet_rotation", status, duration)
 
 
 @rotation_bp.route("/dashboard", methods=["GET"])
@@ -101,7 +99,6 @@ def trigger_fleet_rotation(
 @inject
 def get_dashboard(
     rotation_service: RotationService = Provide[ServiceContainer.rotation_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
 ) -> Any:
     """Get device dashboard grouped by health status.
 
@@ -123,4 +120,4 @@ def get_dashboard(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("get_dashboard", status, duration)
+        record_operation("get_dashboard", status, duration)

@@ -7,14 +7,21 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
+from prometheus_client import Counter
 
 from app.exceptions import ExternalServiceException, ValidationException
 
 if TYPE_CHECKING:
     from app.app_config import AppSettings
-    from app.services.metrics_service import MetricsService
 
 logger = logging.getLogger(__name__)
+
+# Keycloak Prometheus metrics (module-level)
+KEYCLOAK_OPERATIONS_TOTAL = Counter(
+    "iot_keycloak_operations_total",
+    "Total Keycloak admin operations",
+    ["operation", "status"],
+)
 
 
 @dataclass
@@ -35,16 +42,13 @@ class KeycloakAdminService:
     def __init__(
         self,
         config: "AppSettings",
-        metrics_service: "MetricsService",
     ) -> None:
         """Initialize Keycloak admin service.
 
         Args:
             config: Application settings containing Keycloak configuration
-            metrics_service: Metrics service for recording operations
         """
         self.config = config
-        self.metrics_service = metrics_service
 
         # Cache for admin access token
         self._access_token: str | None = None
@@ -122,10 +126,10 @@ class KeycloakAdminService:
 
     def _record_operation(self, operation: str, status: str) -> None:
         """Record a Keycloak operation metric."""
-        self.metrics_service.increment_counter(
-            "iot_keycloak_operations_total",
-            labels={"operation": operation, "status": status}
-        )
+        try:
+            KEYCLOAK_OPERATIONS_TOTAL.labels(operation=operation, status=status).inc()
+        except Exception as e:
+            logger.error("Error recording Keycloak operation metric: %s", e)
 
     def create_client(self, client_id: str) -> KeycloakClient:
         """Create a new Keycloak client for a device.
