@@ -69,10 +69,10 @@ export function CoredumpAccordionTable({ deviceId, expandedCoredumpId }: Coredum
     window.history.replaceState(window.history.state, '', path)
   }, [deviceId, expandedId])
 
-  const handleDelete = useCallback(async (coredumpId: number, filename: string) => {
+  const handleDelete = useCallback(async (coredumpId: number) => {
     const confirmed = await confirm({
       title: 'Delete Core Dump',
-      description: `Delete core dump "${filename}"? This action cannot be undone.`,
+      description: `Delete core dump #${coredumpId}? This action cannot be undone.`,
       confirmText: 'Delete',
       destructive: true
     })
@@ -158,7 +158,7 @@ export function CoredumpAccordionTable({ deviceId, expandedCoredumpId }: Coredum
                   isExpanded={isExpanded}
                   expandedRowRef={isExpanded ? expandedRowRef : undefined}
                   onToggle={() => toggleExpanded(coredump.id)}
-                  onDelete={() => handleDelete(coredump.id, coredump.filename)}
+                  onDelete={() => handleDelete(coredump.id)}
                 />
               )
             })}
@@ -270,7 +270,6 @@ function CoredumpExpansionPanel({ deviceId, coredumpId }: { deviceId: number; co
     <div className="p-6 space-y-4">
       {/* Metadata grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="coredumps.accordion.metadata">
-        <MetadataField label="Filename" value={coredump.filename} mono />
         <MetadataField label="Chip" value={coredump.chip} mono />
         <MetadataField label="Firmware Version" value={coredump.firmwareVersion} mono />
         <MetadataField label="Size" value={formatFileSize(coredump.size)} />

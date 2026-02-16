@@ -35,7 +35,6 @@ export interface CoredumpFactoryOptions {
 export interface CreatedCoredump {
   id: number;
   deviceId: number;
-  filename: string;
   chip: string;
   firmwareVersion: string;
   size: number;
@@ -220,7 +219,6 @@ export class DevicesFactory {
     return {
       id: data.id,
       deviceId: data.device_id,
-      filename: data.filename,
       chip: data.chip,
       firmwareVersion: data.firmware_version,
       size: data.size,

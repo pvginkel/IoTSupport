@@ -11,7 +11,6 @@ import { useToast } from '@/contexts/toast-context'
 export interface CoredumpSummary {
   id: number
   deviceId: number
-  filename: string
   chip: string
   firmwareVersion: string
   size: number
@@ -31,7 +30,6 @@ export interface CoredumpDetail extends CoredumpSummary {
 function transformCoredumpSummary(apiCoredump: {
   id: number
   device_id: number
-  filename: string
   chip: string
   firmware_version: string
   size: number
@@ -43,7 +41,6 @@ function transformCoredumpSummary(apiCoredump: {
   return {
     id: apiCoredump.id,
     deviceId: apiCoredump.device_id,
-    filename: apiCoredump.filename,
     chip: apiCoredump.chip,
     firmwareVersion: apiCoredump.firmware_version,
     size: apiCoredump.size,
@@ -58,7 +55,6 @@ function transformCoredumpSummary(apiCoredump: {
 function transformCoredumpDetail(apiCoredump: {
   id: number
   device_id: number
-  filename: string
   chip: string
   firmware_version: string
   size: number

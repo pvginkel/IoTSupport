@@ -170,8 +170,6 @@ test.describe('Core Dump Accordion', () => {
     await expect(metadata).toContainText('esp32s3');
     await expect(metadata).toContainText('3.1.4');
     await expect(metadata).toContainText('PARSED');
-    await expect(metadata).toContainText(coredump.filename);
-
     // Monaco editor should be visible with parsed output
     await expect(devicesPage.coredumpAccordionEditor).toBeVisible();
   });
