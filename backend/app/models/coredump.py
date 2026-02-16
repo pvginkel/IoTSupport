@@ -44,9 +44,6 @@ class CoreDump(db.Model):  # type: ignore[name-defined]
         ForeignKey("devices.id", ondelete="CASCADE"), nullable=False
     )
 
-    # Legacy filename column (nullable; S3 key is derived from device_key + id)
-    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
     # Chip type (e.g., esp32, esp32s3)
     chip: Mapped[str] = mapped_column(String(50), nullable=False)
 
