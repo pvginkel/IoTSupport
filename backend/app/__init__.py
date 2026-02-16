@@ -150,9 +150,11 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
     # Register template blueprints directly on the app (not under /api)
     # These are for internal cluster use only and should not be publicly proxied
     from app.api.health import health_bp
+    from app.api.internal import internal_bp
     from app.api.metrics import metrics_bp
 
     app.register_blueprint(health_bp)
+    app.register_blueprint(internal_bp)
     app.register_blueprint(metrics_bp)
 
     # Always register testing blueprints (runtime check handles access control)

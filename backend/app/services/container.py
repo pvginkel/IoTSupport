@@ -11,6 +11,7 @@ from app.config import Settings
 from app.services.auth_service import AuthService
 from app.services.cas_image_service import CasImageService
 from app.services.coredump_service import CoredumpService
+from app.services.device_log_stream_service import DeviceLogStreamService
 from app.services.device_model_service import DeviceModelService
 from app.services.device_service import DeviceService
 from app.services.elasticsearch_service import ElasticsearchService
@@ -126,6 +127,15 @@ class ServiceContainer(containers.DeclarativeContainer):
     )
     register_for_background_startup(lambda c: c.frontend_version_service())
 
+    # Device log stream service - SSE device log subscriptions and rotation nudges
+    device_log_stream_service = providers.Singleton(
+        DeviceLogStreamService,
+        sse_connection_manager=sse_connection_manager,
+        auth_service=auth_service,
+        lifecycle_coordinator=lifecycle_coordinator,
+    )
+    register_for_background_startup(lambda c: c.device_log_stream_service())
+
     # --- IoT-specific services ---
 
     # MqttService - Singleton to maintain persistent MQTT connection
@@ -173,6 +183,7 @@ class ServiceContainer(containers.DeclarativeContainer):
         config=app_config,
         mqtt_service=mqtt_service,
         lifecycle_coordinator=lifecycle_coordinator,
+        device_log_stream_service=device_log_stream_service,
     )
     register_for_background_startup(lambda c: c.logsink_service().startup())
 

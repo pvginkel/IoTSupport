@@ -1123,3 +1123,182 @@ class TestLogSinkServiceIndexNaming:
             assert action["index"]["_index"] == expected_index
         finally:
             _drain_service(service, lifecycle)
+
+
+class TestLogSinkServiceSSEForwarding:
+    """Tests for SSE log forwarding integration with DeviceLogStreamService."""
+
+    @patch("app.services.logsink_service.httpx.Client")
+    def test_forward_logs_called_with_parsed_documents(
+        self, mock_http_client_class: Mock
+    ):
+        """When device_log_stream_service is injected and messages arrive,
+        forward_logs is called with the parsed documents."""
+        mock_http_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_http_client.post.return_value = mock_response
+        mock_http_client_class.return_value = mock_http_client
+
+        mock_dls = MagicMock()
+        settings = _make_test_settings()
+        mock_mqtt_service = _make_mock_mqtt_service()
+        lifecycle = TestLifecycleCoordinator()
+
+        service = LogSinkService(
+            config=settings,
+            mqtt_service=mock_mqtt_service,
+            lifecycle_coordinator=lifecycle,
+            device_log_stream_service=mock_dls,
+        )
+        service.startup()
+
+        try:
+            payload = json.dumps({
+                "message": "Test log",
+                "entity_id": "sensor.a",
+            }).encode()
+            service._on_message(payload)
+
+            # forward_logs should have been called with parsed docs
+            mock_dls.forward_logs.assert_called_once()
+            docs = mock_dls.forward_logs.call_args[0][0]
+            assert len(docs) == 1
+            assert docs[0]["entity_id"] == "sensor.a"
+            assert docs[0]["message"] == "Test log"
+            assert "@timestamp" in docs[0]
+
+            # ES write should also happen
+            time.sleep(0.3)
+            assert mock_http_client.post.called
+        finally:
+            _drain_service(service, lifecycle)
+
+    @patch("app.services.logsink_service.httpx.Client")
+    def test_forward_logs_called_with_multiple_ndjson_lines(
+        self, mock_http_client_class: Mock
+    ):
+        """NDJSON with multiple lines forwards all parsed documents."""
+        mock_http_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_http_client.post.return_value = mock_response
+        mock_http_client_class.return_value = mock_http_client
+
+        mock_dls = MagicMock()
+        settings = _make_test_settings()
+        mock_mqtt_service = _make_mock_mqtt_service()
+        lifecycle = TestLifecycleCoordinator()
+
+        service = LogSinkService(
+            config=settings,
+            mqtt_service=mock_mqtt_service,
+            lifecycle_coordinator=lifecycle,
+            device_log_stream_service=mock_dls,
+        )
+        service.startup()
+
+        try:
+            lines = [
+                json.dumps({"message": "Log 1", "entity_id": "sensor.a"}),
+                json.dumps({"message": "Log 2", "entity_id": "sensor.b"}),
+            ]
+            payload = "\n".join(lines).encode()
+            service._on_message(payload)
+
+            mock_dls.forward_logs.assert_called_once()
+            docs = mock_dls.forward_logs.call_args[0][0]
+            assert len(docs) == 2
+        finally:
+            _drain_service(service, lifecycle)
+
+    @patch("app.services.logsink_service.httpx.Client")
+    def test_no_forward_when_service_is_none(self, mock_http_client_class: Mock):
+        """When device_log_stream_service is None, ES enqueue proceeds normally."""
+        mock_http_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_http_client.post.return_value = mock_response
+        mock_http_client_class.return_value = mock_http_client
+
+        settings = _make_test_settings()
+        mock_mqtt_service = _make_mock_mqtt_service()
+        lifecycle = TestLifecycleCoordinator()
+
+        service = LogSinkService(
+            config=settings,
+            mqtt_service=mock_mqtt_service,
+            lifecycle_coordinator=lifecycle,
+            device_log_stream_service=None,
+        )
+        service.startup()
+
+        try:
+            payload = json.dumps({"message": "Test"}).encode()
+            service._on_message(payload)
+
+            time.sleep(0.3)
+            assert mock_http_client.post.called
+        finally:
+            _drain_service(service, lifecycle)
+
+    @patch("app.services.logsink_service.httpx.Client")
+    def test_forward_error_does_not_break_es_enqueue(
+        self, mock_http_client_class: Mock
+    ):
+        """If forward_logs raises, ES enqueue still proceeds."""
+        mock_http_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_http_client.post.return_value = mock_response
+        mock_http_client_class.return_value = mock_http_client
+
+        mock_dls = MagicMock()
+        mock_dls.forward_logs.side_effect = RuntimeError("SSE error")
+        settings = _make_test_settings()
+        mock_mqtt_service = _make_mock_mqtt_service()
+        lifecycle = TestLifecycleCoordinator()
+
+        service = LogSinkService(
+            config=settings,
+            mqtt_service=mock_mqtt_service,
+            lifecycle_coordinator=lifecycle,
+            device_log_stream_service=mock_dls,
+        )
+        service.startup()
+
+        try:
+            payload = json.dumps({"message": "Test", "entity_id": "sensor.a"}).encode()
+            service._on_message(payload)
+
+            time.sleep(0.3)
+            # ES write should still happen despite SSE forward error
+            assert mock_http_client.post.called
+        finally:
+            _drain_service(service, lifecycle)
+
+    @patch("app.services.logsink_service.httpx.Client")
+    def test_forward_not_called_for_invalid_json(self, mock_http_client_class: Mock):
+        """Invalid JSON lines are not included in the forwarded documents."""
+        mock_dls = MagicMock()
+        settings = _make_test_settings()
+        mock_mqtt_service = _make_mock_mqtt_service()
+        lifecycle = TestLifecycleCoordinator()
+
+        service = LogSinkService(
+            config=settings,
+            mqtt_service=mock_mqtt_service,
+            lifecycle_coordinator=lifecycle,
+            device_log_stream_service=mock_dls,
+        )
+        service.startup()
+
+        try:
+            # All invalid JSON
+            payload = b"not json at all"
+            service._on_message(payload)
+
+            # No valid documents, so forward_logs should not be called
+            mock_dls.forward_logs.assert_not_called()
+        finally:
+            _drain_service(service, lifecycle)

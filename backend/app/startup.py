@@ -17,6 +17,7 @@ import logging
 import sys
 
 import click
+import httpx
 from flask import Blueprint, Flask
 
 from app.services.container import ServiceContainer
@@ -39,6 +40,7 @@ def register_blueprints(api_bp: Blueprint, app: Flask) -> None:
     """
     if not api_bp._got_registered_once:  # type: ignore[attr-defined]
         from app.api.coredumps import coredumps_bp
+        from app.api.device_log_stream import device_log_stream_bp
         from app.api.device_models import device_models_bp
         from app.api.devices import devices_bp
         from app.api.images import images_bp
@@ -48,6 +50,7 @@ def register_blueprints(api_bp: Blueprint, app: Flask) -> None:
         from app.api.testing import testing_bp
 
         api_bp.register_blueprint(coredumps_bp)  # type: ignore[attr-defined]
+        api_bp.register_blueprint(device_log_stream_bp)  # type: ignore[attr-defined]
         api_bp.register_blueprint(device_models_bp)  # type: ignore[attr-defined]
         api_bp.register_blueprint(devices_bp)  # type: ignore[attr-defined]
         api_bp.register_blueprint(images_bp)  # type: ignore[attr-defined]
@@ -121,6 +124,30 @@ def register_error_handlers(app: Flask) -> None:
         )
 
 
+def _notify_rotation_nudge(app: Flask) -> None:
+    """POST to the web process's internal endpoint to trigger a rotation nudge broadcast.
+
+    Best-effort: failures are logged but do not fail the rotation job.
+    No-op if INTERNAL_API_URL is not configured.
+    """
+    app_config = app.container.app_config()
+    internal_url = app_config.internal_api_url
+
+    if not internal_url:
+        logger.debug("INTERNAL_API_URL not configured, skipping rotation nudge notification")
+        return
+
+    url = f"{internal_url}/internal/rotation-nudge"
+    try:
+        response = httpx.post(url, json={}, timeout=5.0)
+        response.raise_for_status()
+        logger.info("Rotation nudge notification sent to web process")
+    except Exception as e:
+        # Best-effort: log and continue. The next CronJob tick will trigger
+        # another nudge anyway.
+        logger.warning("Failed to send rotation nudge notification: %s", e)
+
+
 def register_cli_commands(cli: click.Group) -> None:
     """Register app-specific CLI commands."""
     from datetime import datetime
@@ -166,6 +193,8 @@ def register_cli_commands(cli: click.Group) -> None:
 
         Designed to be called by a Kubernetes CronJob. Performs a single
         rotation cycle: checks schedule, processes timeouts, rotates one device.
+        After processing, notifies the web process to broadcast a rotation
+        nudge via the internal API endpoint (best-effort).
         """
         app = ctx.obj["app"]
         with app.app_context():
@@ -199,6 +228,11 @@ def register_cli_commands(cli: click.Group) -> None:
                 print(f"  Timeouts processed: {result.processed_timeouts}")
                 print(f"  Device rotated: {result.device_rotated or 'none'}")
                 print(f"  Scheduled triggered: {result.scheduled_rotation_triggered}")
+
+                # Notify web process to broadcast rotation nudge (best-effort).
+                # The CronJob runs in a separate process without SSE connections,
+                # so it delegates the broadcast to the web process via HTTP.
+                _notify_rotation_nudge(app)
 
             except Exception as e:
                 print(f"Error during rotation job: {e}", file=sys.stderr)

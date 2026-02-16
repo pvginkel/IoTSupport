@@ -72,7 +72,12 @@ class TestIotConfig:
     def test_get_config_completes_rotation(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
     ) -> None:
-        """Test that getting config after rotation completes the rotation."""
+        """Test that getting config after rotation completes the rotation.
+
+        Note: In test mode without real JWT validation, device_ctx is None,
+        so _check_rotation_completion returns early without completing rotation.
+        This test verifies the endpoint still returns 200 for a PENDING device.
+        """
         _, device_key, _ = create_test_device(app, container, model_code="rot1")
 
         # Set device to PENDING state
@@ -87,6 +92,44 @@ class TestIotConfig:
         # Get config - should complete rotation (in test mode without real JWT validation)
         response = client.get(f"/api/iot/config?device_key={device_key}")
         assert response.status_code == 200
+
+    def test_get_config_rotation_completion_broadcasts_nudge(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that rotation completion via /iot/config broadcasts a rotation nudge.
+
+        Simulates a device fetching config with a token issued after rotation started,
+        triggering rotation completion and chain rotation, followed by a nudge broadcast.
+        """
+        _, device_key, _ = create_test_device(app, container, model_code="rot2")
+
+        # Set device to PENDING state with a rotation attempt in the past
+        with app.app_context():
+            device_service = container.device_service()
+            device = device_service.get_device_by_key(device_key)
+            device.rotation_state = RotationState.PENDING.value
+            from datetime import datetime, timedelta
+            device.last_rotation_attempt_at = datetime.utcnow() - timedelta(minutes=5)
+            container.db_session().flush()
+
+        # Mock device auth context to simulate a device with a valid token
+        # issued after the rotation attempt
+        import time as time_mod
+        mock_ctx = MagicMock()
+        mock_ctx.device_key = device_key
+        mock_ctx.token_iat = time_mod.time()  # Token issued now (after rotation attempt)
+
+        dls = container.device_log_stream_service()
+        with patch(
+            "app.api.iot.get_device_auth_context", return_value=mock_ctx
+        ), patch.object(
+            dls, "broadcast_rotation_nudge", return_value=True
+        ) as mock_nudge:
+            response = client.get(f"/api/iot/config?device_key={device_key}")
+            assert response.status_code == 200
+
+            # Verify rotation nudge was broadcast after chain rotation
+            mock_nudge.assert_called_once_with(source="web")
 
 
 class TestIotFirmware:

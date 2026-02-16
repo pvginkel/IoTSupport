@@ -23,6 +23,7 @@ from app.models.device import RotationState
 from app.services.auth_service import AuthService
 from app.services.container import ServiceContainer
 from app.services.coredump_service import CoredumpService
+from app.services.device_log_stream_service import DeviceLogStreamService
 from app.services.device_service import DeviceService
 from app.services.firmware_service import FirmwareService
 from app.services.keycloak_admin_service import KeycloakAdminService
@@ -71,6 +72,7 @@ def get_config(
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     rotation_service: RotationService = Provide[ServiceContainer.rotation_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+    device_log_stream_service: DeviceLogStreamService = Provide[ServiceContainer.device_log_stream_service],
 ) -> Any:
     """Get raw JSON configuration for the device.
 
@@ -99,7 +101,10 @@ def get_config(
 
         # Check for rotation completion and trigger next device
         if device.rotation_state == RotationState.PENDING.value:
-            _check_rotation_completion(device, device_ctx, device_service, rotation_service)
+            _check_rotation_completion(
+                device, device_ctx, device_service, rotation_service,
+                device_log_stream_service,
+            )
 
         # Return raw config as JSON string
         config_data = device_service.get_config_for_device(device)
@@ -125,18 +130,21 @@ def _check_rotation_completion(
     device_ctx: Any,
     device_service: DeviceService,
     rotation_service: RotationService,
+    device_log_stream_service: DeviceLogStreamService,
 ) -> None:
     """Check if rotation should be marked complete based on token timestamp.
 
     If the token was issued after the rotation attempt started, the device
     has successfully obtained new credentials and rotation is complete.
-    After completion, triggers the next queued device to maintain rotation momentum.
+    After completion, triggers the next queued device to maintain rotation
+    momentum and broadcasts a rotation nudge so dashboards refresh.
 
     Args:
         device: Device instance
         device_ctx: Device auth context with token_iat
         device_service: Device service for updates
         rotation_service: Rotation service for triggering next device
+        device_log_stream_service: For broadcasting rotation-updated SSE events
     """
     if device_ctx is None or device_ctx.token_iat is None:
         return
@@ -168,6 +176,9 @@ def _check_rotation_completion(
         # Chain rotation: immediately trigger the next queued device
         # This maintains rotation momentum without waiting for the next CRON tick
         rotation_service.rotate_next_queued_device()
+
+        # Notify connected dashboards that rotation state changed
+        device_log_stream_service.broadcast_rotation_nudge(source="web")
 
 
 @iot_bp.route("/firmware", methods=["GET"])

@@ -75,6 +75,9 @@ class AppEnvironment(BaseSettings):
     ELASTICSEARCH_PASSWORD: str | None = Field(default=None)
     ELASTICSEARCH_INDEX_PATTERN: str = Field(default="logstash-http-*")
 
+    # Internal API URL for CronJob -> web process notifications
+    INTERNAL_API_URL: str | None = Field(default=None)
+
 
 class AppSettings(BaseModel):
     """IoT Support application-specific settings."""
@@ -126,6 +129,9 @@ class AppSettings(BaseModel):
     elasticsearch_username: str | None = None
     elasticsearch_password: str | None = None
     elasticsearch_index_pattern: str = "logstash-http-*"
+
+    # Internal API URL for CronJob -> web process notifications
+    internal_api_url: str | None = None
 
     # Secret Encryption Key (derived from secret_key)
     fernet_key: str = ""
@@ -187,5 +193,6 @@ class AppSettings(BaseModel):
             elasticsearch_username=env.ELASTICSEARCH_USERNAME,
             elasticsearch_password=env.ELASTICSEARCH_PASSWORD,
             elasticsearch_index_pattern=env.ELASTICSEARCH_INDEX_PATTERN,
+            internal_api_url=strip_slashes(env.INTERNAL_API_URL),
             fernet_key=fernet_key,
         )

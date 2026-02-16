@@ -76,6 +76,7 @@ class SSEConnectionManager:
 
         # Observer callbacks for connection events
         self._on_connect_callbacks: list[Callable[[str], None]] = []
+        self._on_disconnect_callbacks: list[Callable[[str], None]] = []
 
         # Thread safety
         self._lock = threading.RLock()
@@ -92,6 +93,20 @@ class SSEConnectionManager:
         """
         with self._lock:
             self._on_connect_callbacks.append(callback)
+
+    def register_on_disconnect(self, callback: Callable[[str], None]) -> None:
+        """Register a callback to be notified when connections are disconnected.
+
+        Callbacks are invoked with the request_id after a connection is removed.
+        Each callback is wrapped in exception handling; failures are logged but
+        don't prevent other callbacks from running or the cleanup from completing.
+        Stale disconnect callbacks (unknown or mismatched tokens) do NOT trigger observers.
+
+        Args:
+            callback: Function to call with request_id when connection disconnected
+        """
+        with self._lock:
+            self._on_disconnect_callbacks.append(callback)
 
     def on_connect(self, request_id: str, token: str, url: str) -> None:
         """Register a new connection from SSE Gateway.
@@ -172,10 +187,13 @@ class SSEConnectionManager:
 
         Uses reverse mapping to find request_id. Verifies token matches current
         connection before removing (ignores stale disconnect callbacks).
+        After successful removal, notifies all registered disconnect observers.
 
         Args:
             token: Gateway connection token from disconnect callback
         """
+        disconnected_request_id: str | None = None
+
         with self._lock:
             # Look up request_id via reverse mapping
             request_id = self._token_to_request_id.get(token)
@@ -209,6 +227,8 @@ class SSEConnectionManager:
             SSE_GATEWAY_CONNECTIONS_TOTAL.labels(action="disconnect").inc()
             SSE_GATEWAY_ACTIVE_CONNECTIONS.dec()
 
+            disconnected_request_id = request_id
+
             logger.info(
                 "Unregistered SSE Gateway connection",
                 extra={
@@ -216,6 +236,25 @@ class SSEConnectionManager:
                     "token": token,
                 }
             )
+
+        # Notify disconnect observers OUTSIDE the lock (same pattern as on_connect)
+        if disconnected_request_id is not None:
+            with self._lock:
+                callbacks_to_notify = list(self._on_disconnect_callbacks)
+
+            for callback in callbacks_to_notify:
+                try:
+                    callback(disconnected_request_id)
+                except Exception as e:
+                    logger.warning(
+                        "Observer callback raised exception during on_disconnect",
+                        exc_info=True,
+                        extra={
+                            "request_id": disconnected_request_id,
+                            "callback": getattr(callback, "__name__", repr(callback)),
+                            "error": str(e),
+                        }
+                    )
 
     def has_connection(self, request_id: str) -> bool:
         """Check if a connection exists for the given request_id.
