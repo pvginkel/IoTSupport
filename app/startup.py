@@ -4,6 +4,7 @@ Hook points called by create_app():
   - create_container()
   - register_blueprints()
   - register_error_handlers()
+  - register_root_blueprints()
 
 Hook points called by CLI command handlers:
   - register_cli_commands()
@@ -64,6 +65,15 @@ def register_blueprints(api_bp: Blueprint, app: Flask) -> None:
     # resolves to None during Singleton construction.
     container = app.container
     container.coredump_service().container = container
+
+
+def register_root_blueprints(app: Flask) -> None:
+    """Register app-specific blueprints directly on the app (not under /api prefix)."""
+    from app.api.internal import internal_bp
+    from app.api.testing_device_sse import testing_device_sse_bp
+
+    app.register_blueprint(internal_bp)
+    app.register_blueprint(testing_device_sse_bp)
 
 
 def register_error_handlers(app: Flask) -> None:

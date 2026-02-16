@@ -114,6 +114,7 @@ class TaskService:
         self.lifecycle_coordinator.register_lifecycle_notification(self._on_lifecycle_event)
         self.lifecycle_coordinator.register_shutdown_waiter("TaskService", self._wait_for_tasks_completion)
 
+        # Cleanup thread is started later via startup()
         self._cleanup_thread: threading.Thread | None = None
 
         logger.info(f"TaskService initialized: max_workers={max_workers}, timeout={task_timeout}s, cleanup_interval={cleanup_interval}s")
@@ -121,7 +122,9 @@ class TaskService:
     def startup(self) -> None:
         """Start the background cleanup thread.
 
-        Called by the container's start_background_services().
+        Called during app startup (after container construction). Separated
+        from __init__ so that test fixtures can create a TaskService without
+        spawning daemon threads.
         """
         self._cleanup_thread = threading.Thread(target=self._cleanup_worker, daemon=True)
         self._cleanup_thread.start()

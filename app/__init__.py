@@ -15,10 +15,11 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
     """Create and configure Flask application.
 
     This factory follows a hook-based pattern where app-specific behavior
-    is injected through three functions in app/startup.py:
+    is injected through functions in app/startup.py:
     - create_container(): builds the DI container with app-specific providers
-    - register_blueprints(): registers domain resource blueprints
+    - register_blueprints(): registers domain resource blueprints on /api
     - register_error_handlers(): registers app-specific error handlers
+    - register_root_blueprints(): registers blueprints directly on the app (not under /api)
     """
     app = App(__name__)
 
@@ -150,12 +151,15 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
     # Register template blueprints directly on the app (not under /api)
     # These are for internal cluster use only and should not be publicly proxied
     from app.api.health import health_bp
-    from app.api.internal import internal_bp
     from app.api.metrics import metrics_bp
 
     app.register_blueprint(health_bp)
-    app.register_blueprint(internal_bp)
     app.register_blueprint(metrics_bp)
+
+    # --- Hook 4: App-specific root-level blueprints (not under /api) ---
+    from app.startup import register_root_blueprints
+
+    register_root_blueprints(app)
 
     # Always register testing blueprints (runtime check handles access control)
     from app.api.testing_logs import testing_logs_bp
@@ -179,10 +183,6 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
     # Register testing content endpoints (runtime check handles access control)
     from app.api.testing_content import testing_content_bp
     app.register_blueprint(testing_content_bp)
-
-    # Register testing device SSE endpoints (runtime check handles access control)
-    from app.api.testing_device_sse import testing_device_sse_bp
-    app.register_blueprint(testing_device_sse_bp)
 
     @app.teardown_request
     def close_session(exc: Exception | None) -> None:
@@ -213,8 +213,8 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
     # Start background services only when not in CLI mode
     if not skip_background_services:
         # Eagerly instantiate and start all registered background services
-        # (MQTT connection, cleanup threads, log sink writer, etc.)
         from app.services.container import start_background_services
+
         start_background_services(container)
 
         # Initialize request diagnostics if enabled

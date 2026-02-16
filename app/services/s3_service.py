@@ -33,10 +33,9 @@ class S3Service:
         self.settings = settings
 
     def startup(self) -> None:
-        """Initialize S3 client and ensure bucket exists.
+        """Ensure the S3 bucket exists during app startup.
 
-        Called by the container's start_background_services(). Logs a warning
-        on failure rather than preventing app startup.
+        Logs a warning on failure rather than preventing app startup.
         """
         try:
             self.ensure_bucket_exists()
