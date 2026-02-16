@@ -24,6 +24,7 @@ from app.services.logsink_service import LogSinkService
 from app.services.metrics_service import MetricsService
 from app.services.mqtt_service import MqttService
 from app.services.oidc_client_service import OidcClientService
+from app.services.rotation_nudge_service import RotationNudgeService
 from app.services.rotation_service import RotationService
 from app.services.s3_service import S3Service
 from app.services.settings_service import SettingsService
@@ -127,11 +128,18 @@ class ServiceContainer(containers.DeclarativeContainer):
     )
     register_for_background_startup(lambda c: c.frontend_version_service())
 
-    # Device log stream service - SSE device log subscriptions and rotation nudges
+    # Rotation nudge service - SSE rotation dashboard refresh notifications
+    rotation_nudge_service = providers.Singleton(
+        RotationNudgeService,
+        sse_connection_manager=sse_connection_manager,
+        lifecycle_coordinator=lifecycle_coordinator,
+    )
+    register_for_background_startup(lambda c: c.rotation_nudge_service())
+
+    # Device log stream service - SSE device log subscriptions
     device_log_stream_service = providers.Singleton(
         DeviceLogStreamService,
         sse_connection_manager=sse_connection_manager,
-        auth_service=auth_service,
         lifecycle_coordinator=lifecycle_coordinator,
     )
     register_for_background_startup(lambda c: c.device_log_stream_service())
@@ -183,9 +191,14 @@ class ServiceContainer(containers.DeclarativeContainer):
         config=app_config,
         mqtt_service=mqtt_service,
         lifecycle_coordinator=lifecycle_coordinator,
-        device_log_stream_service=device_log_stream_service,
     )
     register_for_background_startup(lambda c: c.logsink_service().startup())
+    # Wire SSE log forwarding via observer callback
+    register_for_background_startup(
+        lambda c: c.logsink_service().register_on_logs(
+            c.device_log_stream_service().forward_logs
+        )
+    )
 
     # FirmwareService - Factory for firmware management via S3 + DB
     firmware_service = providers.Factory(

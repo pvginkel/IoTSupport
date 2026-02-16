@@ -23,11 +23,11 @@ from app.models.device import RotationState
 from app.services.auth_service import AuthService
 from app.services.container import ServiceContainer
 from app.services.coredump_service import CoredumpService
-from app.services.device_log_stream_service import DeviceLogStreamService
 from app.services.device_service import DeviceService
 from app.services.firmware_service import FirmwareService
 from app.services.keycloak_admin_service import KeycloakAdminService
 from app.services.metrics_service import MetricsService
+from app.services.rotation_nudge_service import RotationNudgeService
 from app.services.rotation_service import RotationService
 from app.utils.auth import public
 from app.utils.device_auth import (
@@ -72,7 +72,7 @@ def get_config(
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     rotation_service: RotationService = Provide[ServiceContainer.rotation_service],
     metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
-    device_log_stream_service: DeviceLogStreamService = Provide[ServiceContainer.device_log_stream_service],
+    rotation_nudge_service: RotationNudgeService = Provide[ServiceContainer.rotation_nudge_service],
 ) -> Any:
     """Get raw JSON configuration for the device.
 
@@ -103,7 +103,7 @@ def get_config(
         if device.rotation_state == RotationState.PENDING.value:
             _check_rotation_completion(
                 device, device_ctx, device_service, rotation_service,
-                device_log_stream_service,
+                rotation_nudge_service,
             )
 
         # Return raw config as JSON string
@@ -130,7 +130,7 @@ def _check_rotation_completion(
     device_ctx: Any,
     device_service: DeviceService,
     rotation_service: RotationService,
-    device_log_stream_service: DeviceLogStreamService,
+    rotation_nudge_service: RotationNudgeService,
 ) -> None:
     """Check if rotation should be marked complete based on token timestamp.
 
@@ -144,7 +144,7 @@ def _check_rotation_completion(
         device_ctx: Device auth context with token_iat
         device_service: Device service for updates
         rotation_service: Rotation service for triggering next device
-        device_log_stream_service: For broadcasting rotation-updated SSE events
+        rotation_nudge_service: For broadcasting rotation-updated SSE events
     """
     if device_ctx is None or device_ctx.token_iat is None:
         return
@@ -178,7 +178,7 @@ def _check_rotation_completion(
         rotation_service.rotate_next_queued_device()
 
         # Notify connected dashboards that rotation state changed
-        device_log_stream_service.broadcast_rotation_nudge(source="web")
+        rotation_nudge_service.broadcast(source="web")
 
 
 @iot_bp.route("/firmware", methods=["GET"])

@@ -10,7 +10,7 @@ import logging
 from typing import Any
 
 from dependency_injector.wiring import Provide, inject
-from flask import Blueprint, g, request
+from flask import Blueprint, request
 from spectree import Response as SpectreeResponse
 
 from app.exceptions import RecordNotFoundException
@@ -23,6 +23,7 @@ from app.schemas.device_log_stream import (
 from app.services.container import ServiceContainer
 from app.services.device_log_stream_service import DeviceLogStreamService
 from app.services.device_service import DeviceService
+from app.utils.auth import get_auth_context
 from app.utils.error_handling import handle_api_errors
 from app.utils.spectree_config import api
 
@@ -31,18 +32,6 @@ logger = logging.getLogger(__name__)
 device_log_stream_bp = Blueprint(
     "device_log_stream", __name__, url_prefix="/device-logs"
 )
-
-
-def _get_caller_subject() -> str | None:
-    """Extract the caller's OIDC subject from the request context.
-
-    Returns None when OIDC is disabled (no auth context on g).
-    """
-    auth_context = getattr(g, "auth_context", None)
-    if auth_context is not None:
-        subject: str = auth_context.subject
-        return subject
-    return None
 
 
 @device_log_stream_bp.route("/subscribe", methods=["POST"])
@@ -76,7 +65,8 @@ def subscribe(
     # Delegate to singleton service with identity verification.
     # AuthorizationException (403) propagates to handle_api_errors if
     # the caller's identity does not match the SSE connection's binding.
-    caller_subject = _get_caller_subject()
+    auth_context = get_auth_context()
+    caller_subject = auth_context.subject if auth_context else None
     device_log_stream_service.subscribe(
         data.request_id, device.device_entity_id, caller_subject
     )
@@ -117,7 +107,8 @@ def unsubscribe(
     # AuthorizationException (403) propagates to handle_api_errors if
     # the caller's identity does not match. RecordNotFoundException (404)
     # propagates if no active subscription exists.
-    caller_subject = _get_caller_subject()
+    auth_context = get_auth_context()
+    caller_subject = auth_context.subject if auth_context else None
     device_log_stream_service.unsubscribe(
         data.request_id, device.device_entity_id, caller_subject
     )

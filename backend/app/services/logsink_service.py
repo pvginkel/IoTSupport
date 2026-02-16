@@ -9,6 +9,7 @@ import json
 import logging
 import threading
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from queue import Empty, Queue, ShutDown  # type: ignore[attr-defined]
 from typing import TYPE_CHECKING, Any
@@ -21,7 +22,6 @@ from app.utils.lifecycle_coordinator import LifecycleCoordinatorProtocol, Lifecy
 
 if TYPE_CHECKING:
     from app.app_config import AppSettings
-    from app.services.device_log_stream_service import DeviceLogStreamService
     from app.services.mqtt_service import MqttService
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,6 @@ class LogSinkService:
         config: "AppSettings",
         mqtt_service: "MqttService",
         lifecycle_coordinator: LifecycleCoordinatorProtocol,
-        device_log_stream_service: "DeviceLogStreamService | None" = None,
     ) -> None:
         """Initialize log sink service.
 
@@ -62,12 +61,13 @@ class LogSinkService:
             config: Application settings with Elasticsearch configuration
             mqtt_service: Shared MQTT service for subscription
             lifecycle_coordinator: Lifecycle coordinator for startup/shutdown
-            device_log_stream_service: Optional SSE forwarding service for real-time log streaming
         """
         self.config = config
         self.mqtt_service = mqtt_service
         self._lifecycle_coordinator = lifecycle_coordinator
-        self._device_log_stream_service = device_log_stream_service
+
+        # Observer callbacks for parsed log documents
+        self._on_logs_callbacks: list[Callable[[list[dict[str, Any]]], None]] = []
 
         # Track service state
         self.enabled = False
@@ -128,6 +128,19 @@ class LogSinkService:
             "LogSinkService started - subscribed to %s via shared MQTT client",
             self.LOGSINK_TOPIC,
         )
+
+    def register_on_logs(self, callback: Callable[[list[dict[str, Any]]], None]) -> None:
+        """Register a callback to be notified when log documents are received.
+
+        Callbacks are invoked with the list of parsed documents after each MQTT
+        message is processed. Each callback is wrapped in exception handling;
+        failures are logged but don't prevent other callbacks from running or
+        the ES enqueue from proceeding.
+
+        Args:
+            callback: Function to call with list of parsed document dicts
+        """
+        self._on_logs_callbacks.append(callback)
 
     def _initialize_metrics(self) -> None:
         """Initialize Prometheus metrics for log sink operations."""
@@ -218,12 +231,15 @@ class LogSinkService:
                     status="processing_error"
                 ).inc()
 
-        # Forward parsed documents to SSE subscribers (parallel to ES write path)
-        if parsed_documents and self._device_log_stream_service is not None:
-            try:
-                self._device_log_stream_service.forward_logs(parsed_documents)
-            except Exception as e:
-                logger.warning("LogSinkService SSE forwarding error: %s", e)
+        # Notify all registered observers with parsed documents
+        if parsed_documents:
+            for callback in self._on_logs_callbacks:
+                try:
+                    callback(parsed_documents)
+                except Exception as e:
+                    logger.warning(
+                        "LogSinkService on_logs callback error: %s", e
+                    )
 
     def _process_line(self, line: str) -> dict[str, Any]:
         """Process a single NDJSON line and enqueue for batch writing.

@@ -1,14 +1,13 @@
 """Device log stream service for SSE-based real-time log forwarding.
 
-This singleton service manages per-connection device log subscriptions,
-identity binding (request_id -> OIDC subject), and SSE event delivery.
-It also provides rotation nudge broadcasts.
+This singleton service manages per-connection device log subscriptions
+and SSE event delivery. Identity binding is handled by SSEConnectionManager;
+this service queries connection info for authorization checks.
 
 Key responsibilities:
 - Maintain bidirectional subscription maps: request_id <-> device_entity_id
-- Bind OIDC identity on SSE connect for subscription authorization
+- Verify caller identity against SSEConnectionManager on subscribe/unsubscribe
 - Forward matching log messages from LogSinkService to subscribed SSE clients
-- Broadcast rotation-updated events to all connected clients
 - Clean up subscriptions on SSE disconnect
 """
 
@@ -19,7 +18,6 @@ from typing import Any
 from prometheus_client import Counter, Gauge
 
 from app.exceptions import AuthorizationException, RecordNotFoundException
-from app.services.auth_service import AuthService
 from app.services.sse_connection_manager import SSEConnectionManager
 from app.utils.lifecycle_coordinator import LifecycleCoordinatorProtocol, LifecycleEvent
 
@@ -35,38 +33,23 @@ SSE_DEVICE_LOG_EVENTS_SENT_TOTAL = Counter(
     "Total device-logs SSE events sent",
     ["status"],
 )
-SSE_ROTATION_NUDGE_BROADCAST_TOTAL = Counter(
-    "sse_rotation_nudge_broadcast_total",
-    "Total rotation-updated broadcasts attempted",
-    ["source"],
-)
-SSE_IDENTITY_BINDING_TOTAL = Counter(
-    "sse_identity_binding_total",
-    "Total SSE identity binding attempts",
-    ["status"],
-)
-
-# Sentinel subject used when OIDC is disabled (dev/test mode)
-_LOCAL_USER_SUBJECT = "local-user"
 
 
 class DeviceLogStreamService:
-    """Singleton service managing device log SSE subscriptions and rotation nudges.
+    """Singleton service managing device log SSE subscriptions.
 
     This service does not access the database directly. Device lookups
     (device_id -> device_entity_id) happen at the API layer using
-    the request-scoped DeviceService. This service receives the resolved
-    device_entity_id directly.
+    the request-scoped DeviceService. Identity verification is delegated
+    to SSEConnectionManager which owns the request_id -> subject mapping.
     """
 
     def __init__(
         self,
         sse_connection_manager: SSEConnectionManager,
-        auth_service: AuthService,
         lifecycle_coordinator: LifecycleCoordinatorProtocol,
     ) -> None:
         self.sse_connection_manager = sse_connection_manager
-        self.auth_service = auth_service
         self._lifecycle_coordinator = lifecycle_coordinator
 
         # Subscription maps (protected by _lock)
@@ -74,8 +57,6 @@ class DeviceLogStreamService:
         self._subscriptions_by_request_id: dict[str, set[str]] = {}
         # Reverse: device_entity_id -> set of request_ids
         self._subscriptions_by_entity_id: dict[str, set[str]] = {}
-        # Identity map: request_id -> OIDC subject
-        self._identity_map: dict[str, str] = {}
 
         self._is_shutting_down = False
         self._lock = threading.RLock()
@@ -87,92 +68,6 @@ class DeviceLogStreamService:
         lifecycle_coordinator.register_lifecycle_notification(self._on_lifecycle_event)
 
         logger.info("DeviceLogStreamService initialized")
-
-    # ------------------------------------------------------------------
-    # Identity binding
-    # ------------------------------------------------------------------
-
-    def bind_identity(self, request_id: str, headers: dict[str, str]) -> None:
-        """Extract and validate OIDC token from SSE connect headers, storing
-        request_id -> subject mapping for later subscription authorization.
-
-        When OIDC is disabled, stores a sentinel subject so subscriptions
-        work without authentication.
-
-        Args:
-            request_id: SSE connection request ID
-            headers: HTTP headers forwarded from the SSE Gateway connect callback
-        """
-        # When OIDC is disabled, use sentinel subject
-        if not self.auth_service.config.oidc_enabled:
-            with self._lock:
-                self._identity_map[request_id] = _LOCAL_USER_SUBJECT
-            SSE_IDENTITY_BINDING_TOTAL.labels(status="skipped").inc()
-            logger.debug(
-                "Identity binding skipped (OIDC disabled), using sentinel subject",
-                extra={"request_id": request_id},
-            )
-            return
-
-        # Extract access token from headers
-        token = self._extract_token_from_headers(headers)
-        if not token:
-            SSE_IDENTITY_BINDING_TOTAL.labels(status="failed").inc()
-            logger.warning(
-                "Identity binding failed: no token found in headers",
-                extra={"request_id": request_id},
-            )
-            return
-
-        # Validate token and extract subject
-        try:
-            auth_context = self.auth_service.validate_token(token)
-            with self._lock:
-                self._identity_map[request_id] = auth_context.subject
-            SSE_IDENTITY_BINDING_TOTAL.labels(status="success").inc()
-            logger.info(
-                "Identity bound for SSE connection",
-                extra={"request_id": request_id, "subject": auth_context.subject},
-            )
-        except Exception as e:
-            SSE_IDENTITY_BINDING_TOTAL.labels(status="failed").inc()
-            logger.warning(
-                "Identity binding failed: token validation error",
-                extra={"request_id": request_id, "error": str(e)},
-            )
-
-    def _extract_token_from_headers(self, headers: dict[str, str]) -> str | None:
-        """Extract the access token from forwarded headers.
-
-        Checks the Authorization header first (Bearer token), then falls
-        back to the OIDC cookie.
-
-        Args:
-            headers: HTTP headers dict (case-sensitive keys as forwarded)
-
-        Returns:
-            Token string or None if not found
-        """
-        # Check Authorization header (case-insensitive lookup)
-        for key, value in headers.items():
-            if key.lower() == "authorization":
-                parts = value.split(" ", 1)
-                if len(parts) == 2 and parts[0].lower() == "bearer":
-                    return parts[1]
-
-        # Fall back to cookie header
-        cookie_name = self.auth_service.config.oidc_cookie_name
-        for key, value in headers.items():
-            if key.lower() == "cookie":
-                # Parse cookie string to find the access_token cookie
-                for cookie_part in value.split(";"):
-                    cookie_part = cookie_part.strip()
-                    if "=" in cookie_part:
-                        name, _, val = cookie_part.partition("=")
-                        if name.strip() == cookie_name:
-                            return val.strip()
-
-        return None
 
     # ------------------------------------------------------------------
     # Subscription management
@@ -277,7 +172,9 @@ class DeviceLogStreamService:
     def _verify_identity(self, request_id: str, caller_subject: str | None) -> None:
         """Verify that the caller's subject matches the stored identity for request_id.
 
-        Must be called under self._lock.
+        Queries SSEConnectionManager for connection info. The connection must
+        exist and have a bound identity. When caller_subject is None (OIDC
+        disabled), any bound identity is accepted.
 
         Args:
             request_id: SSE connection request ID
@@ -286,21 +183,17 @@ class DeviceLogStreamService:
         Raises:
             AuthorizationException: If no identity is stored or subjects mismatch
         """
-        stored_subject = self._identity_map.get(request_id)
-        if stored_subject is None:
+        conn_info = self.sse_connection_manager.get_connection_info(request_id)
+        if conn_info is None or conn_info.subject is None:
             raise AuthorizationException(
                 "No identity binding for this SSE connection"
             )
 
-        # When OIDC is disabled, caller_subject is None; accept if stored is sentinel
+        # When OIDC is disabled, caller_subject is None; accept any bound identity
         if caller_subject is None:
-            if stored_subject != _LOCAL_USER_SUBJECT:
-                raise AuthorizationException(
-                    "Identity mismatch for SSE connection"
-                )
             return
 
-        if stored_subject != caller_subject:
+        if conn_info.subject != caller_subject:
             raise AuthorizationException(
                 "Identity mismatch for SSE connection"
             )
@@ -373,47 +266,14 @@ class DeviceLogStreamService:
                     SSE_DEVICE_LOG_EVENTS_SENT_TOTAL.labels(status="error").inc()
 
     # ------------------------------------------------------------------
-    # Rotation nudge
-    # ------------------------------------------------------------------
-
-    def broadcast_rotation_nudge(self, source: str = "web") -> bool:
-        """Broadcast a rotation-updated SSE event to all connected clients.
-
-        The event payload is empty -- the frontend re-fetches the dashboard
-        on receipt.
-
-        Args:
-            source: Origin of the nudge for metrics ("web" or "cronjob")
-
-        Returns:
-            True if broadcast reached at least one client, False otherwise
-        """
-        if self._is_shutting_down:
-            return False
-
-        SSE_ROTATION_NUDGE_BROADCAST_TOTAL.labels(source=source).inc()
-
-        result = self.sse_connection_manager.send_event(
-            None,  # None = broadcast to all connections
-            {},
-            event_name="rotation-updated",
-            service_type="rotation",
-        )
-
-        logger.debug(
-            "Broadcast rotation nudge",
-            extra={"source": source, "delivered": result},
-        )
-        return result
-
-    # ------------------------------------------------------------------
     # Disconnect cleanup
     # ------------------------------------------------------------------
 
     def _on_disconnect_callback(self, request_id: str) -> None:
-        """Clean up all subscriptions and identity mapping for a disconnected request_id.
+        """Clean up all subscriptions for a disconnected request_id.
 
         Called by SSEConnectionManager's disconnect observer pattern.
+        Identity cleanup is handled by SSEConnectionManager itself.
 
         Args:
             request_id: Disconnected SSE connection request ID
@@ -427,9 +287,6 @@ class DeviceLogStreamService:
                     reverse_subs.discard(request_id)
                     if not reverse_subs:
                         del self._subscriptions_by_entity_id[entity_id]
-
-            # Remove identity mapping
-            self._identity_map.pop(request_id, None)
 
             # Update gauge
             total = sum(
@@ -458,6 +315,5 @@ class DeviceLogStreamService:
                     self._is_shutting_down = True
                     self._subscriptions_by_request_id.clear()
                     self._subscriptions_by_entity_id.clear()
-                    self._identity_map.clear()
                     SSE_DEVICE_LOG_SUBSCRIPTIONS_ACTIVE.set(0)
                 logger.info("DeviceLogStreamService: PREPARE_SHUTDOWN - cleared all state")

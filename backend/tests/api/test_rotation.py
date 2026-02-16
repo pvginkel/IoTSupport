@@ -80,8 +80,8 @@ class TestRotationTriggerFleet:
                 device_service.create_device(device_model_id=model.id, config="{}")
                 device_service.create_device(device_model_id=model.id, config="{}")
 
-        dls = container.device_log_stream_service()
-        with patch.object(dls, "broadcast_rotation_nudge", return_value=True) as mock_nudge:
+        rns = container.rotation_nudge_service()
+        with patch.object(rns, "broadcast", return_value=True) as mock_nudge:
             response = client.post("/api/rotation/trigger")
 
             assert response.status_code == 200
@@ -112,8 +112,8 @@ class TestRotationTriggerFleet:
                 device = device_service.create_device(device_model_id=model.id, config="{}")
                 device.rotation_state = RotationState.PENDING.value
 
-        dls = container.device_log_stream_service()
-        with patch.object(dls, "broadcast_rotation_nudge", return_value=False) as mock_nudge:
+        rns = container.rotation_nudge_service()
+        with patch.object(rns, "broadcast", return_value=False) as mock_nudge:
             response = client.post("/api/rotation/trigger")
 
             assert response.status_code == 200
@@ -127,8 +127,8 @@ class TestRotationTriggerFleet:
         self, client: FlaskClient, container: ServiceContainer
     ) -> None:
         """Test fleet rotation when no devices exist still broadcasts nudge."""
-        dls = container.device_log_stream_service()
-        with patch.object(dls, "broadcast_rotation_nudge", return_value=False) as mock_nudge:
+        rns = container.rotation_nudge_service()
+        with patch.object(rns, "broadcast", return_value=False) as mock_nudge:
             response = client.post("/api/rotation/trigger")
 
             assert response.status_code == 200
