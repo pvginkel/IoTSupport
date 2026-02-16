@@ -332,3 +332,68 @@ class TestLifecycleShutdown:
         # is that _is_shutting_down blocks forward_logs.
         service.subscribe("req-1", "sensor.a", None)
         assert "sensor.a" in service._subscriptions_by_request_id["req-1"]
+
+
+class TestGetSubscriptions:
+    """Tests for the get_subscriptions() public method."""
+
+    def test_empty_when_no_subscriptions(self) -> None:
+        """Returns empty list when no subscriptions exist."""
+        service, _ = _make_service()
+
+        result = service.get_subscriptions()
+
+        assert result == []
+
+    def test_returns_all_subscriptions(self) -> None:
+        """Returns all active subscriptions with sorted request_ids."""
+        service, mock_sse = _make_service()
+        _bind_identity(mock_sse, "req-1")
+        _bind_identity(mock_sse, "req-2")
+        service.subscribe("req-1", "sensor.a", None)
+        service.subscribe("req-2", "sensor.b", None)
+
+        result = service.get_subscriptions()
+
+        assert len(result) == 2
+        by_entity = {r["device_entity_id"]: r for r in result}
+        assert by_entity["sensor.a"]["request_ids"] == ["req-1"]
+        assert by_entity["sensor.b"]["request_ids"] == ["req-2"]
+
+    def test_multiple_subscribers_per_entity(self) -> None:
+        """Multiple request_ids for the same entity are returned sorted."""
+        service, mock_sse = _make_service()
+        _bind_identity(mock_sse, "req-b")
+        _bind_identity(mock_sse, "req-a")
+        service.subscribe("req-b", "sensor.a", None)
+        service.subscribe("req-a", "sensor.a", None)
+
+        result = service.get_subscriptions()
+
+        assert len(result) == 1
+        assert result[0]["device_entity_id"] == "sensor.a"
+        assert result[0]["request_ids"] == ["req-a", "req-b"]
+
+    def test_filter_by_device_entity_id(self) -> None:
+        """Filtering returns only the matching entity."""
+        service, mock_sse = _make_service()
+        _bind_identity(mock_sse, "req-1")
+        _bind_identity(mock_sse, "req-2")
+        service.subscribe("req-1", "sensor.a", None)
+        service.subscribe("req-2", "sensor.b", None)
+
+        result = service.get_subscriptions(device_entity_id="sensor.a")
+
+        assert len(result) == 1
+        assert result[0]["device_entity_id"] == "sensor.a"
+        assert result[0]["request_ids"] == ["req-1"]
+
+    def test_filter_nonexistent_entity(self) -> None:
+        """Filtering for a non-existent entity returns empty list."""
+        service, mock_sse = _make_service()
+        _bind_identity(mock_sse, "req-1")
+        service.subscribe("req-1", "sensor.a", None)
+
+        result = service.get_subscriptions(device_entity_id="sensor.nonexistent")
+
+        assert result == []
