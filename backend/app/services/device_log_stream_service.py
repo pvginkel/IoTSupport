@@ -198,6 +198,46 @@ class DeviceLogStreamService:
                 "Identity mismatch for SSE connection"
             )
 
+    def get_subscriptions(
+        self, device_entity_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Return a snapshot of current SSE subscriptions.
+
+        Used by testing endpoints to let Playwright poll until a subscription
+        is active before injecting logs.
+
+        Args:
+            device_entity_id: If provided, return only the subscription for
+                this entity ID. Otherwise return all subscriptions.
+
+        Returns:
+            List of dicts with ``device_entity_id`` (str) and
+            ``request_ids`` (list[str]) for each active subscription.
+        """
+        with self._lock:
+            if device_entity_id is not None:
+                # Filter to a single entity
+                request_ids = self._subscriptions_by_entity_id.get(
+                    device_entity_id
+                )
+                if request_ids:
+                    return [
+                        {
+                            "device_entity_id": device_entity_id,
+                            "request_ids": sorted(request_ids),
+                        }
+                    ]
+                return []
+
+            # Return all subscriptions (copy under lock)
+            return [
+                {
+                    "device_entity_id": eid,
+                    "request_ids": sorted(rids),
+                }
+                for eid, rids in self._subscriptions_by_entity_id.items()
+            ]
+
     # ------------------------------------------------------------------
     # Log forwarding
     # ------------------------------------------------------------------

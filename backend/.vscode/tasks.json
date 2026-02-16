@@ -41,6 +41,29 @@
         "reevaluateOnRerun": true
       },
       "isBackground": true
+    },
+    {
+      "label": "SSE Gateway",
+      "type": "shell",
+      "command": "scripts/dev-sse-gateway.sh",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "SSE_GATEWAY_ROOT": "../../SSEGateway"
+        }
+      },
+      "icon": { "id": "server" },
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always",
+        "focus": false,
+        "showReuseMessage": true
+      },
+      "runOptions": {
+        "reevaluateOnRerun": true
+      },
+      "isBackground": true
     }
   ]
 }
