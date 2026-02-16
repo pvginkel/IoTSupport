@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from croniter import croniter
+from prometheus_client import Counter
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -25,10 +26,16 @@ if TYPE_CHECKING:
     from app.app_config import AppSettings
     from app.services.device_service import DeviceService
     from app.services.keycloak_admin_service import KeycloakAdminService
-    from app.services.metrics_service import MetricsService
     from app.services.mqtt_service import MqttService
 
 logger = logging.getLogger(__name__)
+
+# Rotation Prometheus metrics (module-level)
+ROTATION_JOB_RUNS_TOTAL = Counter(
+    "iot_rotation_job_runs_total",
+    "Total rotation job runs",
+    ["result"],
+)
 
 
 @dataclass
@@ -54,7 +61,6 @@ class RotationService:
         device_service: "DeviceService",
         keycloak_admin_service: "KeycloakAdminService",
         mqtt_service: "MqttService",
-        metrics_service: "MetricsService",
     ) -> None:
         """Initialize rotation service.
 
@@ -64,14 +70,12 @@ class RotationService:
             device_service: Device service for device operations
             keycloak_admin_service: Keycloak service for secret management
             mqtt_service: MQTT service for notifications
-            metrics_service: Metrics service for recording operations
         """
         self.db = db
         self.config = config
         self.device_service = device_service
         self.keycloak_admin_service = keycloak_admin_service
         self.mqtt_service = mqtt_service
-        self.metrics_service = metrics_service
 
     def get_rotation_status(self) -> dict[str, Any]:
         """Get current rotation status across all devices.
@@ -177,10 +181,7 @@ class RotationService:
 
             # Record metrics
             duration = time.perf_counter() - start_time
-            self.metrics_service.increment_counter(
-                "iot_rotation_job_runs_total",
-                labels={"result": "success"}
-            )
+            ROTATION_JOB_RUNS_TOTAL.labels(result="success").inc()
             logger.info(
                 "Rotation job completed in %.3fs: timeouts=%d, rotated=%s, scheduled=%s",
                 duration,
@@ -193,10 +194,7 @@ class RotationService:
 
         except Exception as e:
             duration = time.perf_counter() - start_time
-            self.metrics_service.increment_counter(
-                "iot_rotation_job_runs_total",
-                labels={"result": "error"}
-            )
+            ROTATION_JOB_RUNS_TOTAL.labels(result="error").inc()
             logger.error("Rotation job failed after %.3fs: %s", duration, e)
             raise
 

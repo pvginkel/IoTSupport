@@ -15,9 +15,9 @@ from app.schemas.error import ErrorResponseSchema
 from app.schemas.pipeline import FirmwareVersionResponseSchema
 from app.services.container import ServiceContainer
 from app.services.device_model_service import DeviceModelService
-from app.services.metrics_service import MetricsService
 from app.utils.auth import allow_roles, public
 from app.utils.error_handling import handle_api_errors
+from app.utils.iot_metrics import record_operation
 from app.utils.spectree_config import api
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,6 @@ pipeline_bp = Blueprint("pipeline", __name__, url_prefix="/pipeline")
 def upload_firmware(
     code: str,
     device_model_service: DeviceModelService = Provide[ServiceContainer.device_model_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
 ) -> Any:
     """Upload firmware binary for a device model by code.
 
@@ -83,7 +82,7 @@ def upload_firmware(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("pipeline_upload_firmware", status, duration)
+        record_operation("pipeline_upload_firmware", status, duration)
 
 
 @pipeline_bp.route("/models/<string:code>/firmware-version", methods=["GET"])

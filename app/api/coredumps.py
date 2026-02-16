@@ -20,8 +20,8 @@ from app.schemas.error import ErrorResponseSchema
 from app.services.container import ServiceContainer
 from app.services.coredump_service import CoredumpService
 from app.services.device_service import DeviceService
-from app.services.metrics_service import MetricsService
 from app.utils.error_handling import handle_api_errors
+from app.utils.iot_metrics import record_operation
 from app.utils.spectree_config import api
 
 coredumps_bp = Blueprint("coredumps", __name__, url_prefix="/devices")
@@ -40,7 +40,7 @@ def list_coredumps(
     device_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     coredump_service: CoredumpService = Provide[ServiceContainer.coredump_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """List all coredumps for a device."""
     start_time = time.perf_counter()
@@ -63,7 +63,7 @@ def list_coredumps(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("list_coredumps", status, duration)
+        record_operation("list_coredumps", status, duration)
 
 
 @coredumps_bp.route("/<int:device_id>/coredumps/<int:coredump_id>", methods=["GET"])
@@ -79,7 +79,7 @@ def get_coredump(
     device_id: int,
     coredump_id: int,
     coredump_service: CoredumpService = Provide[ServiceContainer.coredump_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Get coredump detail including parsed output."""
     start_time = time.perf_counter()
@@ -95,7 +95,7 @@ def get_coredump(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("get_coredump", status, duration)
+        record_operation("get_coredump", status, duration)
 
 
 @coredumps_bp.route(
@@ -108,7 +108,7 @@ def download_coredump(
     coredump_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     coredump_service: CoredumpService = Provide[ServiceContainer.coredump_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Download raw coredump .dmp binary from S3."""
     start_time = time.perf_counter()
@@ -137,7 +137,7 @@ def download_coredump(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("download_coredump", status, duration)
+        record_operation("download_coredump", status, duration)
 
 
 @coredumps_bp.route(
@@ -156,7 +156,7 @@ def delete_coredump(
     coredump_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     coredump_service: CoredumpService = Provide[ServiceContainer.coredump_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Delete a single coredump."""
     start_time = time.perf_counter()
@@ -173,7 +173,7 @@ def delete_coredump(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("delete_coredump", status, duration)
+        record_operation("delete_coredump", status, duration)
 
 
 @coredumps_bp.route("/<int:device_id>/coredumps", methods=["DELETE"])
@@ -189,7 +189,7 @@ def delete_all_coredumps(
     device_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
     coredump_service: CoredumpService = Provide[ServiceContainer.coredump_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Delete all coredumps for a device."""
     start_time = time.perf_counter()
@@ -206,4 +206,4 @@ def delete_all_coredumps(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("delete_all_coredumps", status, duration)
+        record_operation("delete_all_coredumps", status, duration)

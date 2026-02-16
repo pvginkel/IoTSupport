@@ -18,8 +18,8 @@ from app.schemas.device_model import (
 from app.schemas.error import ErrorResponseSchema
 from app.services.container import ServiceContainer
 from app.services.device_model_service import DeviceModelService
-from app.services.metrics_service import MetricsService
 from app.utils.error_handling import handle_api_errors
+from app.utils.iot_metrics import record_operation
 from app.utils.spectree_config import api
 
 device_models_bp = Blueprint("device_models", __name__, url_prefix="/device-models")
@@ -31,7 +31,7 @@ device_models_bp = Blueprint("device_models", __name__, url_prefix="/device-mode
 @inject
 def list_device_models(
     device_model_service: DeviceModelService = Provide[ServiceContainer.device_model_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """List all device models."""
     start_time = time.perf_counter()
@@ -54,7 +54,7 @@ def list_device_models(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("list_device_models", status, duration)
+        record_operation("list_device_models", status, duration)
 
 
 @device_models_bp.route("", methods=["POST"])
@@ -70,7 +70,7 @@ def list_device_models(
 @inject
 def create_device_model(
     device_model_service: DeviceModelService = Provide[ServiceContainer.device_model_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Create a new device model."""
     start_time = time.perf_counter()
@@ -92,7 +92,7 @@ def create_device_model(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("create_device_model", status, duration)
+        record_operation("create_device_model", status, duration)
 
 
 @device_models_bp.route("/<int:model_id>", methods=["GET"])
@@ -107,7 +107,7 @@ def create_device_model(
 def get_device_model(
     model_id: int,
     device_model_service: DeviceModelService = Provide[ServiceContainer.device_model_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Get a device model by ID."""
     start_time = time.perf_counter()
@@ -123,7 +123,7 @@ def get_device_model(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("get_device_model", status, duration)
+        record_operation("get_device_model", status, duration)
 
 
 @device_models_bp.route("/<int:model_id>", methods=["PUT"])
@@ -140,7 +140,7 @@ def get_device_model(
 def update_device_model(
     model_id: int,
     device_model_service: DeviceModelService = Provide[ServiceContainer.device_model_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Update a device model."""
     start_time = time.perf_counter()
@@ -162,7 +162,7 @@ def update_device_model(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("update_device_model", status, duration)
+        record_operation("update_device_model", status, duration)
 
 
 @device_models_bp.route("/<int:model_id>", methods=["DELETE"])
@@ -178,7 +178,7 @@ def update_device_model(
 def delete_device_model(
     model_id: int,
     device_model_service: DeviceModelService = Provide[ServiceContainer.device_model_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Delete a device model."""
     start_time = time.perf_counter()
@@ -194,7 +194,7 @@ def delete_device_model(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("delete_device_model", status, duration)
+        record_operation("delete_device_model", status, duration)
 
 
 @device_models_bp.route("/<int:model_id>/firmware", methods=["POST"])
@@ -210,7 +210,7 @@ def delete_device_model(
 def upload_firmware(
     model_id: int,
     device_model_service: DeviceModelService = Provide[ServiceContainer.device_model_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Upload firmware binary for a device model.
 
@@ -242,7 +242,7 @@ def upload_firmware(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("upload_firmware", status, duration)
+        record_operation("upload_firmware", status, duration)
 
 
 @device_models_bp.route("/<int:model_id>/firmware", methods=["GET"])
@@ -251,7 +251,7 @@ def upload_firmware(
 def download_firmware(
     model_id: int,
     device_model_service: DeviceModelService = Provide[ServiceContainer.device_model_service],
-    metrics_service: MetricsService = Provide[ServiceContainer.metrics_service],
+
 ) -> Any:
     """Download firmware binary for a device model.
 
@@ -277,4 +277,4 @@ def download_firmware(
 
     finally:
         duration = time.perf_counter() - start_time
-        metrics_service.record_operation("download_firmware", status, duration)
+        record_operation("download_firmware", status, duration)

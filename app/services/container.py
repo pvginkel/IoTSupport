@@ -166,23 +166,18 @@ class ServiceContainer(containers.DeclarativeContainer):
     )
 
     # ImageProxyService - Factory creates new instance per request for thread safety
-    image_proxy_service = providers.Factory(
-        ImageProxyService,
-        metrics_service=metrics_service,
-    )
+    image_proxy_service = providers.Factory(ImageProxyService)
 
     # KeycloakAdminService - Singleton for admin API access
     keycloak_admin_service = providers.Singleton(
         KeycloakAdminService,
         config=app_config,
-        metrics_service=metrics_service,
     )
 
     # ElasticsearchService - Singleton for device log queries
     elasticsearch_service = providers.Singleton(
         ElasticsearchService,
         config=app_config,
-        metrics_service=metrics_service,
     )
 
     # LogSinkService - Singleton for MQTT log ingestion to Elasticsearch
@@ -213,7 +208,6 @@ class ServiceContainer(containers.DeclarativeContainer):
         CoredumpService,
         s3_service=s3_service,
         config=app_config,
-        metrics_service=metrics_service,
     )
 
     # DeviceModelService - Factory creates new instance per request with database session
@@ -242,7 +236,6 @@ class ServiceContainer(containers.DeclarativeContainer):
         device_service=device_service,
         keycloak_admin_service=keycloak_admin_service,
         mqtt_service=mqtt_service,
-        metrics_service=metrics_service,
     )
 
 
