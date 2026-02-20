@@ -120,4 +120,3 @@ class MetricsService:
         match event:
             case LifecycleEvent.SHUTDOWN:
                 self.shutdown()
-
