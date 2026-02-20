@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { execSync } from 'child_process'
 import fs from 'fs'
+import { loadAppProxies } from './vite-proxy-extensions'
 
 function versionPlugin(): Plugin {
   const getGitCommitId = () => {
@@ -99,6 +100,7 @@ export default defineConfig({
     port: 3200,
     allowedHosts: true,
     proxy: {
+      ...loadAppProxies(),
       '/api/sse': {
         target: gatewayProxyTarget,
         changeOrigin: true,
@@ -114,6 +116,7 @@ export default defineConfig({
   },
   preview: {
     proxy: {
+      ...loadAppProxies(),
       '/api/sse': {
         target: gatewayProxyTarget,
         changeOrigin: true,

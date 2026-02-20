@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { createRootRoute, Outlet } from '@tanstack/react-router';
+import { SIDEBAR_VISIBLE } from '@/lib/consts';
 import { Sidebar } from '@/components/layout/sidebar';
 import { TopBar } from '@/components/layout/top-bar';
 import { DeploymentNotificationBar } from '@/components/primitives/deployment-notification-bar';
@@ -23,8 +24,9 @@ function RootLayout() {
 }
 
 /**
- * App shell with top bar, sidebar, and main content area.
+ * App shell with top bar, optional sidebar, and main content area.
  * Handles responsive layout with mobile overlay menu.
+ * Set SIDEBAR_VISIBLE in consts.ts to control sidebar visibility.
  */
 function AppShellFrame() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -64,21 +66,23 @@ function AppShellFrame() {
       <DeploymentNotificationBar />
 
       {/* Top bar - single instance, always visible */}
-      <TopBar onMenuToggle={handleMenuToggle} />
+      <TopBar onMenuToggle={SIDEBAR_VISIBLE ? handleMenuToggle : undefined} />
 
       {/* Content area with sidebar */}
       <div className="flex flex-1 overflow-hidden" data-testid="app-shell.layout">
         {/* Desktop sidebar */}
-        <div className="hidden lg:block" data-testid="app-shell.sidebar.desktop">
-          <Sidebar
-            isCollapsed={sidebarCollapsed}
-            onNavigate={handleNavigation}
-            variant="desktop"
-          />
-        </div>
+        {SIDEBAR_VISIBLE && (
+          <div className="hidden lg:block" data-testid="app-shell.sidebar.desktop">
+            <Sidebar
+              isCollapsed={sidebarCollapsed}
+              onNavigate={handleNavigation}
+              variant="desktop"
+            />
+          </div>
+        )}
 
         {/* Mobile overlay menu */}
-        {mobileMenuOpen && (
+        {SIDEBAR_VISIBLE && mobileMenuOpen && (
           <div className="fixed inset-0 z-[100] lg:hidden" data-testid="app-shell.mobile-overlay">
             {/* Backdrop - clicking dismisses menu */}
             <div

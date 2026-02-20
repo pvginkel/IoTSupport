@@ -57,6 +57,9 @@ export { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription }
 // Segmented tabs
 export { SegmentedTabs, type SegmentedTabItem } from './segmented-tabs';
 
+// Drop zone
+export { DropZone } from './drop-zone';
+
 // Progress bar
 export { ProgressBar } from './progress-bar';
 

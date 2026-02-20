@@ -120,21 +120,23 @@ class Collector implements ServiceLogCollector {
       encoding: 'utf8',
     });
 
-    const startIndex = this.buffer.length;
     const captured: string[] = [];
 
-    const replayLine = (formatted: string) => {
+    const appendLine = (formatted: string) => {
       captured.push(formatted);
       stream.write(`${formatted}\n`);
     };
 
-    for (let index = startIndex; index < this.buffer.length; index += 1) {
-      replayLine(this.buffer[index]);
+    // Replay all lines buffered before this test started (worker startup, etc.)
+    for (const line of this.buffer) {
+      appendLine(line);
     }
 
+    // Capture any new lines emitted during the test.
+    const startIndex = this.buffer.length;
     const listener: LogListener = (formatted, index) => {
       if (index >= startIndex) {
-        replayLine(formatted);
+        appendLine(formatted);
       }
     };
 

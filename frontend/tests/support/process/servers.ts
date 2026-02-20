@@ -29,19 +29,13 @@ export type SSEGatewayServerHandle = ServerHandle;
 export async function startBackend(
   workerIndex: number,
   options: {
-    sqliteDbPath: string;
+    sqliteDbPath?: string;
     streamLogs?: boolean;
     port?: number;
     excludePorts?: number[];
     frontendVersionUrl?: string;
   }
 ): Promise<BackendServerHandle> {
-  if (!options?.sqliteDbPath) {
-    throw new Error(
-      `${formatPrefix(workerIndex, 'backend')} Missing sqliteDbPath for backend startup`
-    );
-  }
-
   const port =
     typeof options.port === 'number'
       ? options.port
@@ -55,8 +49,7 @@ export async function startBackend(
     HOSTNAME,
     '--port',
     String(port),
-    '--sqlite-db',
-    options.sqliteDbPath,
+    ...(options.sqliteDbPath ? ['--sqlite-db', options.sqliteDbPath] : []),
   ];
 
   return startService({

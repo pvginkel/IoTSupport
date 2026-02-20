@@ -113,7 +113,7 @@ export class AuthPage {
   }
 
   async waitForAuthenticated(): Promise<void> {
-    await this.topBar.waitFor({ state: 'visible' })
+    await this.userDropdownTrigger.waitFor({ state: 'visible' })
   }
 
   async waitForDropdownOpen(): Promise<void> {

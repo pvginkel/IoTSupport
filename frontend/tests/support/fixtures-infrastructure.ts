@@ -25,6 +25,7 @@ import {
   DeploymentSseHelper,
   createDeploymentSseHelper,
 } from './helpers/deployment-sse';
+import { FileUploadHelper, createFileUploadHelper } from './helpers/file-upload';
 import { AuthFactory } from './helpers/auth-factory';
 import { AppShellPage } from './page-objects/app-shell-page';
 import { startBackend, startFrontend, startSSEGateway } from './process/servers';
@@ -58,6 +59,7 @@ export type InfrastructureFixtures = {
   sseTimeout: number;
   testEvents: TestEventCapture;
   toastHelper: ToastHelper;
+  fileUploadHelper: FileUploadHelper;
   deploymentSse: DeploymentSseHelper;
   auth: AuthFactory;
   appShell: AppShellPage;
@@ -264,6 +266,11 @@ export const infrastructureFixtures = base.extend<InfrastructureFixtures, Intern
       await use(toastHelper);
     },
 
+    fileUploadHelper: async ({ page }, use) => {
+      const fileUploadHelper = createFileUploadHelper(page);
+      await use(fileUploadHelper);
+    },
+
     deploymentSse: async ({ page }, use) => {
       const helper = createDeploymentSseHelper(page);
       try {
@@ -336,29 +343,21 @@ export const infrastructureFixtures = base.extend<InfrastructureFixtures, Intern
         };
 
         const seedDbPath = process.env.PLAYWRIGHT_SEEDED_SQLITE_DB;
-        if (!seedDbPath) {
-          backendLogs.dispose();
-          gatewayLogs.dispose();
-          frontendLogs.dispose();
-          await cleanupWorkerDb();
-          throw new Error(
-            'PLAYWRIGHT_SEEDED_SQLITE_DB is not set. Ensure global setup initialized the test database.'
-          );
-        }
-
-        try {
-          workerDbDir = await mkdtemp(
-            join(tmpdir(), `test-worker-${workerInfo.workerIndex}-`)
-          );
-          workerDbPath = join(workerDbDir, 'database.sqlite');
-          await copyFile(seedDbPath, workerDbPath);
-          backendLogs.log(`Using SQLite database copy at ${workerDbPath}`);
-        } catch (error) {
-          backendLogs.dispose();
-          gatewayLogs.dispose();
-          frontendLogs.dispose();
-          await cleanupWorkerDb();
-          throw error;
+        if (seedDbPath) {
+          try {
+            workerDbDir = await mkdtemp(
+              join(tmpdir(), `test-worker-${workerInfo.workerIndex}-`)
+            );
+            workerDbPath = join(workerDbDir, 'database.sqlite');
+            await copyFile(seedDbPath, workerDbPath);
+            backendLogs.log(`Using SQLite database copy at ${workerDbPath}`);
+          } catch (error) {
+            backendLogs.dispose();
+            gatewayLogs.dispose();
+            frontendLogs.dispose();
+            await cleanupWorkerDb();
+            throw error;
+          }
         }
 
         const backendPort = await getPort();
@@ -370,7 +369,7 @@ export const infrastructureFixtures = base.extend<InfrastructureFixtures, Intern
         process.env.SSE_GATEWAY_URL = gatewayUrl;
 
         const backendPromise = startBackend(workerInfo.workerIndex, {
-          sqliteDbPath: workerDbPath,
+          ...(workerDbPath ? { sqliteDbPath: workerDbPath } : {}),
           streamLogs: backendStreamLogs,
           port: backendPort,
           frontendVersionUrl: `http://127.0.0.1:${frontendPort}/version.json`,
