@@ -6,7 +6,7 @@ import {
   usePostRotationTrigger,
   usePostDevicesRotateByDeviceId,
 } from '@/lib/api/generated/hooks'
-import { useToast } from '@/contexts/toast-context'
+import { useToast } from '@/hooks/use-toast'
 import { useSseContext } from '@/contexts/sse-context'
 
 // Dashboard device summary (camelCase)

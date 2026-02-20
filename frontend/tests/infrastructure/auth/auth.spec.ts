@@ -1,0 +1,273 @@
+/**
+ * Authentication Flow Tests
+ *
+ * Tests for OIDC authentication integration including:
+ * - Auth loading and error states
+ * - Login redirect on 401 (skipped - OIDC disabled in test backend)
+ * - User display and dropdown
+ * - Logout flow
+ * - App shell layout (sidebar toggle, mobile menu, top bar)
+ */
+
+import { test, expect } from '../../support/fixtures-infrastructure'
+import { AuthPage } from './AuthPage'
+
+test.describe('Authentication', () => {
+  test.describe('Auth Loading State', () => {
+    test('shows loading indicator before auth completes', async ({ page, auth }) => {
+      await auth.clearSession()
+      await auth.createSession({ name: 'Test User' })
+
+      await page.goto('/')
+
+      const authPage = new AuthPage(page)
+      await authPage.waitForAuthenticated()
+      await expect(authPage.topBar).toBeVisible()
+    })
+  })
+
+  test.describe('Login Redirect on 401', () => {
+    // NOTE: These tests require the backend to return 401 when no session exists.
+    // The test backend auto-authenticates when OIDC is disabled, preventing
+    // these tests from verifying the redirect behavior.
+    test.skip('redirects to login when not authenticated', async ({ page, auth }) => {
+      await auth.clearSession()
+
+      const loginRequestPromise = page.waitForRequest(request =>
+        request.url().includes('/api/auth/login')
+      )
+
+      await page.goto('/')
+
+      const loginRequest = await loginRequestPromise
+      expect(loginRequest.url()).toContain('/api/auth/login')
+      expect(loginRequest.url()).toContain('redirect=')
+    })
+
+    test.skip('preserves full path including query params in redirect', async ({ page, auth }) => {
+      await auth.clearSession()
+
+      const loginRequestPromise = page.waitForRequest(request =>
+        request.url().includes('/api/auth/login')
+      )
+
+      await page.goto('/items?filter=active&sort=name')
+
+      const loginRequest = await loginRequestPromise
+
+      const url = new URL(loginRequest.url())
+      const redirectParam = url.searchParams.get('redirect')
+      expect(redirectParam).toContain('/items')
+      expect(redirectParam).toContain('filter=active')
+      expect(redirectParam).toContain('sort=name')
+    })
+  })
+
+  test.describe('Auth Error and Retry', () => {
+    test('shows error screen when auth returns 500', async ({ page, auth }) => {
+      await auth.forceError(500)
+
+      await page.goto('/')
+
+      const authPage = new AuthPage(page)
+
+      await authPage.waitForErrorScreen()
+      await expect(authPage.errorScreen).toBeVisible()
+      await expect(authPage.retryButton).toBeVisible()
+    })
+
+    test('retry button triggers new auth check', async ({ page, auth }) => {
+      await auth.forceError(500)
+      await auth.createSession({ name: 'Retry User' })
+
+      await page.goto('/')
+
+      const authPage = new AuthPage(page)
+
+      await authPage.waitForErrorScreen()
+      await expect(authPage.errorScreen).toBeVisible()
+
+      await authPage.clickRetry()
+
+      await authPage.waitForAuthenticated()
+      await expect(authPage.userName).toHaveText('Retry User')
+    })
+  })
+
+  test.describe('Authenticated User Display', () => {
+    test('displays user name in top bar when authenticated', async ({ page, auth }) => {
+      await auth.createSession({ name: 'John Doe' })
+
+      await page.goto('/')
+
+      const authPage = new AuthPage(page)
+      await authPage.waitForAuthenticated()
+
+      await expect(authPage.userName).toHaveText('John Doe')
+    })
+
+    test('displays "Unknown User" when name is null', async ({ page, auth }) => {
+      await auth.createSession({ name: null, email: 'test@example.com' })
+
+      await page.goto('/')
+
+      const authPage = new AuthPage(page)
+      await authPage.waitForAuthenticated()
+
+      await expect(authPage.userName).toHaveText('Unknown User')
+    })
+  })
+
+  test.describe('Logout Flow', () => {
+    test('shows dropdown menu when clicking user name', async ({ page, auth }) => {
+      await auth.createSession({ name: 'Dropdown User' })
+
+      await page.goto('/')
+
+      const authPage = new AuthPage(page)
+      await authPage.waitForAuthenticated()
+
+      await authPage.openUserDropdown()
+
+      await authPage.waitForDropdownOpen()
+      await expect(authPage.userDropdownMenu).toBeVisible()
+      await expect(authPage.logoutButton).toBeVisible()
+    })
+
+    test('clicking logout navigates to logout endpoint', async ({ page, auth }) => {
+      await auth.createSession({ name: 'Logout User' })
+
+      await page.goto('/')
+
+      const authPage = new AuthPage(page)
+      await authPage.waitForAuthenticated()
+
+      await authPage.openUserDropdown()
+      await authPage.waitForDropdownOpen()
+
+      const logoutRequestPromise = page.waitForRequest(request =>
+        request.url().includes('/api/auth/logout')
+      )
+
+      await authPage.clickLogout()
+
+      const logoutRequest = await logoutRequestPromise
+      expect(logoutRequest.url()).toContain('/api/auth/logout')
+    })
+  })
+})
+
+test.describe('App Shell Layout', () => {
+  test.describe('Sidebar Toggle (Desktop)', () => {
+    test('collapses sidebar when hamburger clicked', async ({ page, auth }) => {
+      await auth.createSession({ name: 'Sidebar User' })
+
+      await page.setViewportSize({ width: 1280, height: 720 })
+      await page.goto('/')
+
+      const authPage = new AuthPage(page)
+      await authPage.waitForAuthenticated()
+
+      await expect(authPage.sidebar).toBeVisible()
+      expect(await authPage.isSidebarCollapsed()).toBe(false)
+
+      await authPage.toggleMenu()
+
+      expect(await authPage.isSidebarCollapsed()).toBe(true)
+    })
+
+    test('expands sidebar when hamburger clicked again', async ({ page, auth }) => {
+      await auth.createSession({ name: 'Sidebar User' })
+
+      await page.setViewportSize({ width: 1280, height: 720 })
+      await page.goto('/')
+
+      const authPage = new AuthPage(page)
+      await authPage.waitForAuthenticated()
+
+      await authPage.toggleMenu()
+      expect(await authPage.isSidebarCollapsed()).toBe(true)
+
+      await authPage.toggleMenu()
+      expect(await authPage.isSidebarCollapsed()).toBe(false)
+    })
+  })
+
+  test.describe('Mobile Menu Toggle', () => {
+    test('opens overlay menu on mobile when hamburger clicked', async ({ page, auth }) => {
+      await auth.createSession({ name: 'Mobile User' })
+
+      await page.setViewportSize({ width: 375, height: 667 })
+      await page.goto('/')
+
+      const authPage = new AuthPage(page)
+      await authPage.waitForAuthenticated()
+
+      await expect(authPage.mobileOverlay).not.toBeVisible()
+
+      await authPage.toggleMenu()
+
+      await expect(authPage.mobileOverlay).toBeVisible()
+    })
+
+    test('closes overlay when clicking outside', async ({ page, auth }) => {
+      await auth.createSession({ name: 'Mobile User' })
+
+      await page.setViewportSize({ width: 375, height: 667 })
+      await page.goto('/')
+
+      const authPage = new AuthPage(page)
+      await authPage.waitForAuthenticated()
+
+      await authPage.toggleMenu()
+      await expect(authPage.mobileOverlay).toBeVisible()
+
+      await authPage.dismissMobileOverlay()
+
+      await expect(authPage.mobileOverlay).not.toBeVisible()
+    })
+  })
+
+  test.describe('Top Bar Layout', () => {
+    test('shows hamburger, logo, title, and user dropdown in correct order', async ({ page, auth }) => {
+      await auth.createSession({ name: 'Layout User' })
+
+      await page.goto('/')
+
+      const authPage = new AuthPage(page)
+      await authPage.waitForAuthenticated()
+
+      await expect(authPage.hamburgerButton).toBeVisible()
+      await expect(authPage.logo).toBeVisible()
+      await expect(authPage.title).toBeVisible()
+      await expect(authPage.userDropdownTrigger).toBeVisible()
+
+      const hamburgerBox = await authPage.hamburgerButton.boundingBox()
+      const logoBox = await authPage.logo.boundingBox()
+      const titleBox = await authPage.title.boundingBox()
+      const userBox = await authPage.userDropdownTrigger.boundingBox()
+
+      expect(hamburgerBox).not.toBeNull()
+      expect(logoBox).not.toBeNull()
+      expect(titleBox).not.toBeNull()
+      expect(userBox).not.toBeNull()
+
+      expect(hamburgerBox!.x).toBeLessThan(logoBox!.x)
+      expect(logoBox!.x).toBeLessThan(titleBox!.x)
+      expect(titleBox!.x).toBeLessThan(userBox!.x)
+    })
+
+    test('logo and title link to home route', async ({ page, auth }) => {
+      await auth.createSession({ name: 'Navigation User' })
+
+      await page.goto('/device-models')
+
+      const authPage = new AuthPage(page)
+      await authPage.waitForAuthenticated()
+
+      await authPage.clickHomeLink()
+
+      await expect(page).toHaveURL(/\/devices/)
+    })
+  })
+})

@@ -6,7 +6,7 @@
 set -euo pipefail
 
 HOST="127.0.0.1"
-PORT="3200"
+PORT="3100"
 
 print_usage() {
   cat <<'EOF'
@@ -53,7 +53,7 @@ echo "Port: ${PORT}" >&2
 
 # Ensure the dev server proxies API calls to the Playwright backend.
 if [ -z "${BACKEND_URL:-}" ]; then
-  export BACKEND_URL=http://localhost:3201
+  export BACKEND_URL=http://localhost:5100
   echo "Using default BACKEND_URL=${BACKEND_URL}" >&2
 else
   echo "Using BACKEND_URL=${BACKEND_URL}" >&2

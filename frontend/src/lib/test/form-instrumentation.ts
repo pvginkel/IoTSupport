@@ -1,176 +1,147 @@
 /**
- * Form instrumentation hooks for test events.
- * Provides structured form lifecycle events for Playwright test infrastructure.
+ * Form instrumentation for test events
+ * Provides utilities to track form lifecycle events
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import React from 'react';
 import { emitTestEvent } from './event-emitter';
-import { TestEventKind, type FormTestEvent } from '@/types/test-events';
+import { TestEventKind, type FormTestEvent } from '@/lib/test/test-events';
 import { isTestMode } from '@/lib/config/test-mode';
 
 /**
- * Emit a form lifecycle event when in test mode.
+ * Generate a stable form ID based on component name and optional identifier
  */
-function emitFormEvent(
-  formId: string,
-  phase: FormTestEvent['phase'],
-  fields?: Record<string, unknown>,
-  metadata?: FormTestEvent['metadata']
-): void {
-  if (!isTestMode()) {
-    return;
-  }
-
-  const payload: Omit<FormTestEvent, 'timestamp'> = {
-    kind: TestEventKind.FORM,
-    formId,
-    phase,
-    ...(fields ? { fields } : {}),
-    ...(metadata ? { metadata } : {}),
-  };
-
-  emitTestEvent(payload);
+export function generateFormId(componentName: string, identifier?: string): string {
+  const baseId = componentName.toLowerCase().replace(/form$/, '');
+  return identifier ? `${baseId}_${identifier}` : baseId;
 }
 
 /**
- * Track when a form is opened/mounted.
+ * Track form open event
  */
 export function trackFormOpen(formId: string, fields?: Record<string, unknown>): void {
-  emitFormEvent(formId, 'open', fields);
+  if (!isTestMode()) return;
+
+  const formEvent: Omit<FormTestEvent, 'timestamp'> = {
+    kind: TestEventKind.FORM,
+    phase: 'open',
+    formId,
+    ...(fields && { fields }),
+  };
+
+  emitTestEvent(formEvent);
 }
 
 /**
- * Track when a form is submitted.
+ * Track form submit event
  */
 export function trackFormSubmit(formId: string, fields?: Record<string, unknown>): void {
-  emitFormEvent(formId, 'submit', fields);
+  if (!isTestMode()) return;
+
+  const snapshot = fields ? { ...fields } : undefined;
+  const formEvent: Omit<FormTestEvent, 'timestamp'> = {
+    kind: TestEventKind.FORM,
+    phase: 'submit',
+    formId,
+    ...(snapshot && { fields: snapshot, metadata: snapshot }),
+  };
+
+  emitTestEvent(formEvent);
 }
 
 /**
- * Track when a form submission succeeds.
+ * Track form success event
  */
 export function trackFormSuccess(formId: string, fields?: Record<string, unknown>): void {
-  emitFormEvent(formId, 'success', fields);
+  if (!isTestMode()) return;
+
+  const snapshot = fields ? { ...fields } : undefined;
+  const formEvent: Omit<FormTestEvent, 'timestamp'> = {
+    kind: TestEventKind.FORM,
+    phase: 'success',
+    formId,
+    ...(snapshot && { fields: snapshot, metadata: snapshot }),
+  };
+
+  emitTestEvent(formEvent);
 }
 
 /**
- * Track when a form submission fails.
+ * Track form error event
  */
-export function trackFormError(
-  formId: string,
-  error?: string,
-  fields?: Record<string, unknown>
-): void {
-  emitFormEvent(formId, 'error', fields, error ? { error } : undefined);
+export function trackFormError(formId: string, fields?: Record<string, unknown>): void {
+  if (!isTestMode()) return;
+
+  const snapshot = fields ? { ...fields } : undefined;
+  const formEvent: Omit<FormTestEvent, 'timestamp'> = {
+    kind: TestEventKind.FORM,
+    phase: 'error',
+    formId,
+    ...(snapshot && { fields: snapshot, metadata: snapshot }),
+  };
+
+  emitTestEvent(formEvent);
 }
 
 /**
- * Track when a form validation error occurs.
+ * Track form validation error event
  */
 export function trackFormValidationError(
   formId: string,
-  field: string,
-  error: string,
+  fieldName: string,
+  errorMessage: string,
   fields?: Record<string, unknown>
 ): void {
-  emitFormEvent(formId, 'validation_error', fields, { field, error });
-}
+  if (!isTestMode()) return;
 
-interface UseFormInstrumentationOptions {
-  /** Unique identifier for the form, used in test-event payloads */
-  formId: string;
-  /** Whether the form is currently open/mounted */
-  isOpen?: boolean;
-}
+  const formEvent: Omit<FormTestEvent, 'timestamp'> = {
+    kind: TestEventKind.FORM,
+    phase: 'validation_error',
+    formId,
+    ...(fields && { fields }),
+    metadata: {
+      field: fieldName,
+      error: errorMessage,
+    },
+  };
 
-interface FormInstrumentationHandlers {
-  /** Call when form submission starts */
-  trackSubmit: (fields?: Record<string, unknown>) => void;
-  /** Call when form submission succeeds */
-  trackSuccess: (fields?: Record<string, unknown>) => void;
-  /** Call when form submission fails */
-  trackError: (error?: string, fields?: Record<string, unknown>) => void;
-  /** Call when a field validation error occurs */
-  trackValidationError: (field: string, error: string, fields?: Record<string, unknown>) => void;
+  emitTestEvent(formEvent);
 }
 
 /**
- * Hook to instrument form lifecycle events for Playwright tests.
- * Emits 'open' event on mount and provides handlers for submit/success/error phases.
- *
- * @example
- * ```tsx
- * const { trackSubmit, trackSuccess, trackError } = useFormInstrumentation({
- *   formId: 'DeviceEditor',
- *   isOpen: true
- * });
- *
- * const handleSave = async () => {
- *   trackSubmit({ deviceId });
- *   try {
- *     await saveDevice();
- *     trackSuccess({ deviceId });
- *   } catch (err) {
- *     trackError(err.message);
- *   }
- * };
- * ```
+ * Track all validation errors from a validation result
+ * This is a convenience function for tracking multiple validation errors at once
  */
-export function useFormInstrumentation(
-  options: UseFormInstrumentationOptions
-): FormInstrumentationHandlers {
-  const { formId, isOpen = true } = options;
-  const hasEmittedOpenRef = useRef(false);
-  const testMode = isTestMode();
+export function trackFormValidationErrors(
+  formId: string,
+  errors: Record<string, string | undefined>,
+  fields?: Record<string, unknown>
+): void {
+  if (!isTestMode()) return;
 
-  // Emit 'open' event when the form is first mounted
-  // Using useEffect to properly handle the side effect and ref access
-  useEffect(() => {
-    if (!testMode) {
-      return;
-    }
-
-    if (isOpen && !hasEmittedOpenRef.current) {
-      hasEmittedOpenRef.current = true;
-      trackFormOpen(formId);
-    } else if (!isOpen) {
-      // Reset when form is closed
-      hasEmittedOpenRef.current = false;
-    }
-  }, [formId, isOpen, testMode]);
-
-  const trackSubmit = useCallback(
-    (fields?: Record<string, unknown>) => {
-      trackFormSubmit(formId, fields);
-    },
-    [formId]
-  );
-
-  const trackSuccess = useCallback(
-    (fields?: Record<string, unknown>) => {
-      trackFormSuccess(formId, fields);
-    },
-    [formId]
-  );
-
-  const trackError = useCallback(
-    (error?: string, fields?: Record<string, unknown>) => {
-      trackFormError(formId, error, fields);
-    },
-    [formId]
-  );
-
-  const trackValidationError = useCallback(
-    (field: string, error: string, fields?: Record<string, unknown>) => {
+  for (const [field, error] of Object.entries(errors)) {
+    if (error) {
       trackFormValidationError(formId, field, error, fields);
-    },
-    [formId]
-  );
+    }
+  }
+}
 
-  return {
-    trackSubmit,
-    trackSuccess,
-    trackError,
-    trackValidationError,
+/**
+ * Higher-order component wrapper for form tracking
+ * This is a utility function that can be used to wrap form components
+ */
+export function withFormTracking<T extends Record<string, unknown>>(
+  Component: React.ComponentType<T>,
+  formName: string
+) {
+  return function TrackedFormComponent(props: T) {
+    const formId = generateFormId(formName);
+
+    // Track form open on mount
+    React.useEffect(() => {
+      trackFormOpen(formId);
+    }, [formId]);
+
+    return React.createElement(Component, props);
   };
 }

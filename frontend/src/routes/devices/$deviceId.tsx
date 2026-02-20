@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, Link, useMatches } from '@tanstack/react-router'
 import { useDevice } from '@/hooks/use-devices'
 import { DeviceDetailHeader } from '@/components/devices/device-detail-header'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/primitives/button'
 
 export const Route = createFileRoute('/devices/$deviceId')({
   component: DeviceIdLayout,

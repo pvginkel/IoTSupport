@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { writeFileSync, readFileSync, mkdirSync } from 'fs';
+import { writeFileSync, readFileSync } from 'fs';
 import { createHash } from 'crypto';
 import https from 'https';
 import http from 'http';
@@ -15,20 +15,8 @@ const CACHE_FILE = path.join(CACHE_DIR, 'openapi.json');
 
 // Primary and fallback URLs for fetching OpenAPI spec
 const OPENAPI_URLS = [
-  'http://localhost:3201/api/docs/openapi.json',
-  'http://localhost:3201/api/docs'
+  'http://localhost:5000/api/docs/openapi.json'
 ];
-
-/**
- * Ensures cache directory exists
- */
-function ensureCacheDir() {
-  try {
-    mkdirSync(CACHE_DIR, { recursive: true });
-  } catch (error) {
-    // Directory might already exist, ignore error
-  }
-}
 
 /**
  * Fetches content from a URL using https/http
@@ -36,13 +24,13 @@ function ensureCacheDir() {
 function fetchUrl(url) {
   return new Promise((resolve, reject) => {
     const client = url.startsWith('https:') ? https : http;
-
+    
     const req = client.get(url, (res) => {
       if (res.statusCode !== 200) {
         reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
         return;
       }
-
+      
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
@@ -54,7 +42,7 @@ function fetchUrl(url) {
         }
       });
     });
-
+    
     req.on('error', reject);
     req.setTimeout(10000, () => {
       req.destroy();
@@ -68,7 +56,7 @@ function fetchUrl(url) {
  */
 async function fetchOpenAPISpec() {
   let lastError;
-
+  
   for (const url of OPENAPI_URLS) {
     try {
       console.log(`Attempting to fetch OpenAPI spec from ${url}...`);
@@ -80,7 +68,7 @@ async function fetchOpenAPISpec() {
       lastError = error;
     }
   }
-
+  
   throw new Error(`Failed to fetch OpenAPI spec from all URLs. Last error: ${lastError.message}`);
 }
 
@@ -93,7 +81,7 @@ function calculateSpecHash(spec) {
 }
 
 /**
- * Loads cached OpenAPI spec
+ * Loads cached OpenAPI spec and metadata
  */
 function loadCache() {
   try {
@@ -105,11 +93,12 @@ function loadCache() {
 }
 
 /**
- * Saves OpenAPI spec to cache
+ * Saves OpenAPI spec and metadata to cache
  */
 function saveCache(spec) {
-  ensureCacheDir();
+  // Save the spec
   writeFileSync(CACHE_FILE, JSON.stringify(spec, null, 2));
+  
   console.log(`✅ Cached OpenAPI spec`);
 }
 
@@ -118,7 +107,7 @@ function saveCache(spec) {
  */
 export async function fetchAndCache(options = {}) {
   const { forceRefresh = false, buildMode = false } = options;
-
+  
   if (buildMode) {
     // Build mode: only use cache, never fetch
     const spec = loadCache();
@@ -129,22 +118,21 @@ export async function fetchAndCache(options = {}) {
     }
     return spec;
   }
-
+  
   // Check if we should use cache
   if (!forceRefresh) {
     const cache = loadCache();
     if (cache) {
-      console.log(`📦 Using cached OpenAPI spec`);
-
+      console.log(`📦 Found cached OpenAPI spec from ${cache.timestamp} (hash: ${cache.hash})`);
+      
       // Try to fetch to check for changes
       try {
         const freshSpec = await fetchOpenAPISpec();
         const freshHash = calculateSpecHash(freshSpec);
-        const cacheHash = calculateSpecHash(cache);
-
-        if (freshHash === cacheHash) {
+        
+        if (freshHash === cache.hash) {
           console.log('✅ OpenAPI spec is up to date, using cache');
-          return cache;
+          return cache.spec;
         } else {
           console.log('🔄 OpenAPI spec has changed, updating cache');
           saveCache(freshSpec);
@@ -152,11 +140,11 @@ export async function fetchAndCache(options = {}) {
         }
       } catch (error) {
         console.log(`⚠️  Failed to fetch fresh spec, using cache: ${error.message}`);
-        return cache;
+        return cache.spec;
       }
     }
   }
-
+  
   // Fetch fresh spec
   const spec = await fetchOpenAPISpec();
   saveCache(spec);
@@ -168,7 +156,7 @@ if (process.argv[1] === __filename) {
   const args = process.argv.slice(2);
   const forceRefresh = args.includes('--force');
   const buildMode = args.includes('--cache-only');
-
+  
   fetchAndCache({ forceRefresh, buildMode })
     .then(() => {
       console.log('✅ OpenAPI fetch completed successfully');

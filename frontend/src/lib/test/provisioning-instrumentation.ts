@@ -4,12 +4,13 @@
  */
 
 import { useCallback } from 'react';
-import { emitTestEvent } from './event-emitter';
-import { TestEventKind, type ProvisioningTestEvent, type ProvisioningPhase } from '@/types/test-events';
+import type { ProvisioningTestEvent, ProvisioningPhase } from '@/types/provisioning-events';
 import { isTestMode } from '@/lib/config/test-mode';
 
 /**
  * Emit a provisioning lifecycle event when in test mode.
+ * Uses the Playwright binding directly since provisioning events are
+ * domain-specific and not part of the template's TestEvent union.
  */
 function emitProvisioningEvent(
   deviceId: number,
@@ -20,14 +21,23 @@ function emitProvisioningEvent(
     return;
   }
 
-  const payload: Omit<ProvisioningTestEvent, 'timestamp'> = {
-    kind: TestEventKind.PROVISIONING,
+  const event: ProvisioningTestEvent = {
+    kind: 'provisioning',
+    timestamp: new Date().toISOString(),
     deviceId,
     phase,
     ...(metadata ? { metadata } : {}),
   };
 
-  emitTestEvent(payload);
+  if (typeof window !== 'undefined') {
+    const binding = window.__playwright_emitTestEvent;
+    if (typeof binding === 'function') {
+      const result = binding(event);
+      if (result && typeof (result as Promise<unknown>).catch === 'function') {
+        void (result as Promise<unknown>).catch(() => {});
+      }
+    }
+  }
 }
 
 /**

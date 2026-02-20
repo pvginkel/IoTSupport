@@ -2,6 +2,41 @@ import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
+import { execSync } from 'child_process'
+import fs from 'fs'
+
+function versionPlugin(): Plugin {
+  const getGitCommitId = () => {
+    try {
+      // First try to read from git-rev file (for Docker builds)
+      const gitRevFile = path.resolve(__dirname, 'git-rev')
+      if (fs.existsSync(gitRevFile)) {
+        const fileContent = fs.readFileSync(gitRevFile, 'utf8').trim()
+        if (fileContent) {
+          return fileContent
+        }
+      }
+      // Fallback to git command
+      return execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim()
+    } catch (error) {
+      console.warn('Failed to get git commit:', error)
+      return 'unknown'
+    }
+  }
+
+  return {
+    name: 'version-plugin',
+    generateBundle() {
+      const gitCommitId = getGitCommitId()
+      const versionData = { version: gitCommitId }
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify(versionData, null, 2)
+      })
+    }
+  }
+}
 
 function backendProxyStatusPlugin(target: string): Plugin {
   const probeUrl = new URL('/health/readyz', target).toString()
@@ -9,23 +44,19 @@ function backendProxyStatusPlugin(target: string): Plugin {
   const checkBackend = async () => {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 2000)
-
     try {
       const response = await fetch(probeUrl, { signal: controller.signal })
       if (!response.ok) {
         console.warn(
-          `\n⚠️  WARNING: Backend at ${target} responded with ${response.status}.\n` +
-          `   Ensure the backend is running or update BACKEND_URL.\n` +
-          `   The dev server will start, but API calls will fail until the backend is available.\n`
+          `[vite] Backend at ${target} responded with ${response.status}. ` +
+          'Ensure the backend is running or update BACKEND_URL.'
         )
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unknown error'
       console.warn(
-        `\n⚠️  WARNING: Unable to reach backend at ${target}.\n` +
-        `   Reason: ${reason}\n` +
-        `   Start the backend or set BACKEND_URL to a reachable URL.\n` +
-        `   The dev server will start, but API calls will fail until the backend is available.\n`
+        `[vite] Unable to reach backend at ${target}: ${reason}. ` +
+        'Start the backend or set BACKEND_URL to a reachable URL.'
       )
     } finally {
       clearTimeout(timeoutId)
@@ -33,28 +64,21 @@ function backendProxyStatusPlugin(target: string): Plugin {
   }
 
   const safeCheck = () => {
-    checkBackend().catch(() => {
-      // Connectivity issues are already reported above; no additional handling required.
-    })
+    checkBackend().catch(() => {})
   }
 
   return {
     name: 'backend-proxy-status',
-    configureServer() {
-      safeCheck()
-    },
-    configurePreviewServer() {
-      safeCheck()
-    }
+    configureServer() { safeCheck() },
+    configurePreviewServer() { safeCheck() }
   }
 }
 
 const backendProxyTarget = process.env.BACKEND_URL || 'http://localhost:3201'
 const gatewayProxyTarget = process.env.SSE_GATEWAY_URL || 'http://localhost:3001'
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [tailwindcss(), react(), backendProxyStatusPlugin(backendProxyTarget)],
+  plugins: [tailwindcss(), react(), versionPlugin(), backendProxyStatusPlugin(backendProxyTarget)],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -84,21 +108,9 @@ export default defineConfig({
         target: backendProxyTarget,
         changeOrigin: true,
         secure: false,
-        configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq, req) => {
-            if (req.headers.host) {
-              proxyReq.setHeader('X-Forwarded-Host', req.headers.host);
-              proxyReq.setHeader('X-Forwarded-Proto', 'http');
-            }
-          });
-        },
       }
     },
-    watch: process.env.VITE_TEST_MODE === 'true'
-      ? {
-          ignored: ['**']
-        }
-      : undefined
+    watch: process.env.VITE_TEST_MODE === 'true' ? { ignored: ['**'] } : undefined
   },
   preview: {
     proxy: {
@@ -111,27 +123,20 @@ export default defineConfig({
         target: backendProxyTarget,
         changeOrigin: true,
         secure: false,
-        configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq, req) => {
-            if (req.headers.host) {
-              proxyReq.setHeader('X-Forwarded-Host', req.headers.host);
-              proxyReq.setHeader('X-Forwarded-Proto', 'http');
-            }
-          });
-        },
       }
     }
   },
   define: {
-    // Force VITE_TEST_MODE to 'false' in production builds.
-    // This enables Vite to tree-shake all `if (isTestMode()) { ... }` blocks,
-    // eliminating test instrumentation code from production bundles.
-    // In development, use the environment variable if set.
     'import.meta.env.VITE_TEST_MODE': process.env.NODE_ENV === 'production'
       ? JSON.stringify('false')
       : JSON.stringify(process.env.VITE_TEST_MODE || 'false'),
   },
   build: {
+    rollupOptions: {
+      external: process.env.NODE_ENV === 'production' && process.env.VITE_TEST_MODE === 'true'
+        ? ['./src/lib/test/*']
+        : []
+    },
     chunkSizeWarningLimit: 2000
   },
   optimizeDeps: {

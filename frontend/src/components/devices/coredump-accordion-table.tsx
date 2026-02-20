@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Editor from '@monaco-editor/react'
 import { Trash2, Download } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/primitives/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
-import { ConfirmDialog } from '@/components/ui/dialog'
+import { ConfirmDialog } from '@/components/primitives/dialog'
 import { useConfirm } from '@/hooks/use-confirm'
 import { useCoredumps, useCoredump, useDeleteCoredump, formatFileSize } from '@/hooks/use-coredumps'
 import { useListLoadingInstrumentation } from '@/lib/test/query-instrumentation'
-import { useFormInstrumentation } from '@/lib/test/form-instrumentation'
+import { useFormInstrumentation } from '@/hooks/use-form-instrumentation'
 
 interface CoredumpAccordionTableProps {
   deviceId: number
@@ -32,7 +32,8 @@ export function CoredumpAccordionTable({ deviceId, expandedCoredumpId }: Coredum
 
   // Form instrumentation for the delete mutation lifecycle
   const { trackSubmit, trackSuccess, trackError } = useFormInstrumentation({
-    formId: 'CoredumpDelete'
+    formId: 'CoredumpDelete',
+    isOpen: true,
   })
 
   // List loading instrumentation for Playwright
@@ -91,7 +92,7 @@ export function CoredumpAccordionTable({ deviceId, expandedCoredumpId }: Coredum
             }
           },
           onError: (err) => {
-            trackError(err instanceof Error ? err.message : 'Unknown error')
+            trackError({ error: err instanceof Error ? err.message : 'Unknown error' })
           }
         }
       )

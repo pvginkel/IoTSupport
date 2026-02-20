@@ -11,7 +11,7 @@ import {
   type DeviceCreateSchema_d48fbce,
   type DeviceUpdateSchema_d48fbce
 } from '@/lib/api/generated/hooks'
-import { useToast } from '@/contexts/toast-context'
+import { useToast } from '@/hooks/use-toast'
 
 // UI domain model (camelCase) - device summary for list view
 export interface DeviceSummary {

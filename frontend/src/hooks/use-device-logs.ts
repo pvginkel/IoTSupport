@@ -1,8 +1,8 @@
-import { useEffect, useCallback, useReducer } from 'react'
+import { useEffect, useCallback, useReducer, useRef } from 'react'
 import { useSseContext } from '@/contexts/sse-context'
 import { isTestMode } from '@/lib/config/test-mode'
 import { emitTestEvent } from '@/lib/test/event-emitter'
-import { TestEventKind, type ListLoadingTestEvent } from '@/types/test-events'
+import { TestEventKind, type ListLoadingTestEvent } from '@/lib/test/test-events'
 
 // UI domain model (camelCase) - log entry
 export interface LogEntry {
@@ -151,8 +151,18 @@ export function useDeviceLogs({
     [deviceId]
   )
 
+  // Abort controller for pending unsubscribe calls. When StrictMode causes
+  // double-mount, the cleanup's fire-and-forget unsubscribe can race with the
+  // re-mount's subscribe. This ref lets the new effect invocation cancel any
+  // pending unsubscribe before it reaches the backend.
+  const pendingUnsubscribeRef = useRef<AbortController | null>(null)
+
   // Main SSE subscription effect
   useEffect(() => {
+    // Cancel any pending unsubscribe from a previous cleanup (StrictMode)
+    pendingUnsubscribeRef.current?.abort()
+    pendingUnsubscribeRef.current = null
+
     if (!hasEntityId || deviceId === undefined || !requestId) {
       return
     }
@@ -307,15 +317,19 @@ export function useDeviceLogs({
       removeListener()
       abortController?.abort()
 
-      // Best-effort unsubscribe -- fire and forget
+      // Best-effort unsubscribe -- abortable so StrictMode re-mount can cancel it.
+      // keepalive is omitted intentionally: when the page actually closes, the SSE
+      // disconnect callback will clean up subscriptions on the backend.
+      const unsubscribeController = new AbortController()
+      pendingUnsubscribeRef.current = unsubscribeController
       fetch('/api/device-logs/unsubscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ request_id: requestId, device_id: deviceId }),
         credentials: 'include',
-        keepalive: true,
+        signal: unsubscribeController.signal,
       }).catch(() => {
-        // Swallow -- best-effort cleanup
+        // Swallow -- best-effort cleanup (includes AbortError from StrictMode cancel)
       })
     }
   }, [deviceId, deviceEntityId, hasEntityId, requestId, addEventListener, emitLoadingEvent])

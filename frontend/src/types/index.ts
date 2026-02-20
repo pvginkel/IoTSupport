@@ -2,4 +2,4 @@
  * Centralized type exports
  */
 
-export * from './test-events'
+export * from './provisioning-events'

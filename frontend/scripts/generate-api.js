@@ -47,7 +47,7 @@ function generateTypes() {
 }
 
 /**
- * Generates openapi-fetch client
+ * Generates openapi-fetch client with auth middleware
  */
 function generateClient() {
   console.log('🔄 Generating API client...');
@@ -317,9 +317,6 @@ function transformOperationId(operationId) {
   // Replace hyphens and dots with underscores
   baseName = baseName.replace(/[-\.]/g, '_');
 
-  // Replace periods (e.g., from .json extension) with underscores
-  baseName = baseName.replace(/\./g, '_');
-
   // Clean up multiple consecutive underscores
   baseName = baseName.replace(/_+/g, '_');
   baseName = baseName.replace(/^_|_$/g, ''); // Remove leading/trailing underscores
@@ -488,7 +485,7 @@ async function generateAPI(options = {}) {
     });
 
     // Generate all the files
-    generateTypes(spec);
+    generateTypes();
     generateClient();
     generateHooks(spec);
 

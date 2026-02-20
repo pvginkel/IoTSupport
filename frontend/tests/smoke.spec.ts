@@ -8,7 +8,7 @@ test.describe('Smoke Tests', () => {
     await page.goto('/');
 
     // Check page title
-    await expect(page).toHaveTitle(/IoT Support/);
+    await expect(page).toHaveTitle(/IoT device management/);
 
     // Check sidebar is visible (on desktop)
     await page.setViewportSize({ width: 1280, height: 720 });

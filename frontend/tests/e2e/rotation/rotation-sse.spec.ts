@@ -30,6 +30,7 @@ test.describe('Rotation Dashboard SSE Nudge', () => {
     page,
     devices,
     frontendUrl,
+    deploymentSse,
   }) => {
     // Create a device to populate the dashboard (devices fixture already authenticates)
     const device = await devices.create();
@@ -40,6 +41,10 @@ test.describe('Rotation Dashboard SSE Nudge', () => {
     // Wait for initial dashboard load
     await expect(rotationPage.dashboard).toBeVisible({ timeout: 15_000 });
     await expect(rotationPage.panels).toBeVisible({ timeout: 15_000 });
+
+    // In test mode, SSE does not auto-connect. Use the deployment SSE bridge
+    // to explicitly establish the connection so rotation-updated events are received.
+    await deploymentSse.ensureConnected();
 
     // Record initial state -- the device should be visible in a panel row
     const deviceRow = rotationPage.rowByDeviceId(device.id);

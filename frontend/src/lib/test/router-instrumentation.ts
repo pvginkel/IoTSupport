@@ -1,21 +1,34 @@
 /**
- * Router instrumentation setup for test mode
- * Stub for Phase A - will be expanded in Phase B
- *
- * TODO(Phase B): Implement router event emission to track navigation
- * Should:
- * - Subscribe to TanStack Router's navigation events
- * - Emit RouterEvent with 'from' and 'to' paths when navigation completes
- * - Track route transitions for Playwright tests to wait on
- * - Include both programmatic and user-initiated navigations
- *
- * @see docs/features/phase_a_foundation/plan.md (Slice 7 - Test Events)
+ * Router instrumentation for test events
+ * Hooks into TanStack Router to emit navigation events
  */
 
-import type { Router } from '@tanstack/react-router'
+import type { AnyRouter } from '@tanstack/react-router';
+import { emitTestEvent } from './event-emitter';
+import { TestEventKind, type RouteTestEvent } from '@/lib/test/test-events';
 
-export function setupRouterInstrumentation(router: Router<any, any>) {
-  // Stub implementation for Phase A
-  // Full implementation in Phase B
-  void router // unused in Phase A
+/**
+ * Setup router instrumentation to emit route test-event payloads
+ */
+export function setupRouterInstrumentation(router: AnyRouter): () => void {
+  // Subscribe to router navigation events using TanStack Router's subscription API
+  const unsubscribe = router.subscribe('onResolved', (event) => {
+    // Extract navigation information from the resolved event
+    const fromPath = event.fromLocation
+      ? event.fromLocation.pathname + (event.fromLocation.search || '')
+      : '';
+    const toPath = event.toLocation.pathname + (event.toLocation.search || '');
+
+    const routeEvent: Omit<RouteTestEvent, 'timestamp'> = {
+      kind: TestEventKind.ROUTE,
+      from: fromPath,
+      to: toPath,
+      params: (event.toLocation as { params?: Record<string, string> }).params || {},
+    };
+
+    emitTestEvent(routeEvent);
+  });
+
+  // Return cleanup function
+  return unsubscribe;
 }

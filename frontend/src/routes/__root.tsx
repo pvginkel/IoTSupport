@@ -1,46 +1,25 @@
 /**
  * Root layout component.
- * Integrates authentication, top bar, and sidebar navigation.
+ * Composes provider groups and renders the app shell.
  */
 
-import { useState } from 'react'
-import { createRootRoute, Outlet } from '@tanstack/react-router'
-import { QueryClientProvider } from '@tanstack/react-query'
-import { Sidebar } from '@/components/layout/sidebar'
-import { TopBar } from '@/components/layout/top-bar'
-import { ToastProvider } from '@/contexts/toast-context'
-import { AuthProvider } from '@/contexts/auth-context'
-import { SseProvider } from '@/contexts/sse-context'
-import { AuthGate } from '@/components/auth/auth-gate'
-import { queryClient } from '@/lib/query-client'
+import { useState } from 'react';
+import { createRootRoute, Outlet } from '@tanstack/react-router';
+import { Sidebar } from '@/components/layout/sidebar';
+import { TopBar } from '@/components/layout/top-bar';
+import { DeploymentNotificationBar } from '@/components/primitives/deployment-notification-bar';
+import { Providers } from '@/providers';
 
 export const Route = createRootRoute({
   component: RootLayout,
-})
+});
 
-/**
- * Root layout wrapper.
- * Sets up providers in correct order:
- * 1. QueryClientProvider - enables data fetching
- * 2. ToastProvider - enables toast notifications
- * 3. AuthProvider - provides auth state and handles 401 redirects
- * 4. AuthGate - blocks rendering until authenticated
- * 5. SseProvider - opens SSE connection (only when authenticated)
- */
 function RootLayout() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <AuthProvider>
-          <AuthGate>
-            <SseProvider>
-              <AppShellFrame />
-            </SseProvider>
-          </AuthGate>
-        </AuthProvider>
-      </ToastProvider>
-    </QueryClientProvider>
-  )
+    <Providers>
+      <AppShellFrame />
+    </Providers>
+  );
 }
 
 /**
@@ -48,40 +27,42 @@ function RootLayout() {
  * Handles responsive layout with mobile overlay menu.
  */
 function AppShellFrame() {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const toggleSidebar = () => {
-    setSidebarCollapsed(prev => !prev)
-  }
+    setSidebarCollapsed((prev) => !prev);
+  };
 
   const toggleMobileMenu = () => {
-    setMobileMenuOpen(prev => !prev)
-  }
+    setMobileMenuOpen((prev) => !prev);
+  };
 
   const handleNavigation = () => {
-    setMobileMenuOpen(false)
-  }
+    setMobileMenuOpen(false);
+  };
 
-  // Determine which toggle to use based on viewport
-  // On mobile (< lg), toggle the mobile menu overlay
-  // On desktop (>= lg), toggle the sidebar collapse state
+  // Determine which toggle to use based on viewport width.
+  // On mobile (< lg breakpoint), toggle the mobile menu overlay.
+  // On desktop (>= lg breakpoint), toggle the sidebar collapse state.
   const handleMenuToggle = () => {
-    // Check if we're on mobile viewport
-    const isMobile = window.innerWidth < 1024 // lg breakpoint
+    const isMobile = window.innerWidth < 1024;
     if (isMobile) {
-      toggleMobileMenu()
+      toggleMobileMenu();
     } else {
-      toggleSidebar()
+      toggleSidebar();
     }
-  }
+  };
 
   return (
     <div
-      className="flex h-screen flex-col overflow-hidden bg-background"
+      className="flex h-screen flex-col overflow-hidden"
       data-testid="app-shell.root"
       data-mobile-menu-state={mobileMenuOpen ? 'open' : 'closed'}
     >
+      {/* Deployment bar sits above everything */}
+      <DeploymentNotificationBar />
+
       {/* Top bar - single instance, always visible */}
       <TopBar onMenuToggle={handleMenuToggle} />
 
@@ -117,10 +98,13 @@ function AppShellFrame() {
         )}
 
         {/* Main content */}
-        <main className="flex-1 overflow-auto" data-testid="app-shell.content">
+        <main
+          className="flex-1 overflow-auto"
+          data-testid="app-shell.content"
+        >
           <Outlet />
         </main>
       </div>
     </div>
-  )
+  );
 }

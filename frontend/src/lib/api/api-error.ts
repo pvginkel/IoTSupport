@@ -1,105 +1,73 @@
-/**
- * Simplified API error handling for Phase A.
- * This will be expanded in Phase B when we have generated types.
- */
+import { parseApiError } from '@/lib/utils/error-parsing';
 
 /**
  * Wrap API error payloads in a proper Error subclass so unhandled rejections
  * surface meaningful messages and preserve structured details.
  */
 export class ApiError extends Error {
-  status?: number
-  details?: unknown
-  raw: unknown
-  cause?: unknown
+  status?: number;
+  details?: unknown;
+  raw: unknown;
 
   constructor(raw: unknown) {
-    super(parseApiError(raw))
-    this.name = 'ApiError'
-    this.raw = raw
+    super(parseApiError(raw));
+    this.name = 'ApiError';
+    this.raw = raw;
 
     if (typeof raw === 'object' && raw !== null) {
-      const maybeObject = raw as Record<string, unknown>
+      const maybeObject = raw as Record<string, unknown>;
 
       if (typeof maybeObject.status === 'number') {
-        this.status = maybeObject.status
+        this.status = maybeObject.status;
       }
 
       if ('details' in maybeObject) {
-        this.details = maybeObject.details
+        this.details = maybeObject.details;
       }
     }
 
     // Preserve the original payload for debugging
-    this.cause = raw
+    this.cause = raw;
 
     if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, ApiError)
+      Error.captureStackTrace(this, ApiError);
     }
   }
 }
 
+/**
+ * Convert an unknown error payload into a proper Error instance.
+ * When a numeric `status` is provided (typically from `response.status`),
+ * it is attached to the resulting error for downstream consumers like
+ * `isUnauthorizedError()`.
+ */
 export function toApiError(error: unknown, status?: number): Error {
   if (error instanceof Error) {
     // If we have a status, attach it to the existing error
     if (status !== undefined) {
-      (error as Error & { status?: number }).status = status
+      (error as Error & { status?: number }).status = status;
     }
-    return error
+    return error;
   }
-  const apiError = new ApiError(error)
+  const apiError = new ApiError(error);
   // Override status from response if provided (more reliable than parsing body)
   if (status !== undefined) {
-    apiError.status = status
+    apiError.status = status;
   }
-  return apiError
+  return apiError;
 }
 
 /**
- * Parse API error into a user-friendly message
+ * Type-safe predicate for detecting 401 Unauthorized errors.
+ * Used by useAuth to distinguish "not logged in" from real failures.
  */
-function parseApiError(error: unknown): string {
-  // Handle structured API error responses with 'error' field (ErrorResponseSchema)
-  // This should be checked first since it's the most specific format from our backend
-  if (typeof error === 'object' && error !== null && 'error' in error) {
-    const apiError = error as { error: unknown }
-    if (typeof apiError.error === 'string') {
-      return apiError.error
-    }
+export function isUnauthorizedError(error: unknown): boolean {
+  if (error instanceof ApiError && error.status === 401) {
+    return true;
   }
-
-  // Handle fetch/network errors
-  if (error instanceof Error) {
-    if ('status' in error && typeof (error as Error & { status: unknown }).status === 'number') {
-      const fetchError = error as Error & { status: number }
-      if (fetchError.status === 404) {
-        return 'Resource not found'
-      }
-      if (fetchError.status >= 500) {
-        return 'Server error occurred. Please try again later.'
-      }
-    }
-    return error.message || 'An unexpected error occurred'
+  // Also check for raw error objects that might have status
+  if (typeof error === 'object' && error !== null && 'status' in error) {
+    return (error as { status: unknown }).status === 401;
   }
-
-  // Handle error objects with message property
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    return String((error as { message: unknown }).message)
-  }
-
-  // Handle error objects with detail property (common in some frameworks)
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detailError = error as { detail: unknown }
-    if (typeof detailError.detail === 'string') {
-      return detailError.detail
-    }
-  }
-
-  // Handle string errors
-  if (typeof error === 'string') {
-    return error
-  }
-
-  // Fallback for unknown error formats
-  return 'An unexpected error occurred'
+  return false;
 }

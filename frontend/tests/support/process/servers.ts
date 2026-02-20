@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
@@ -7,11 +7,11 @@ import type { Readable } from 'node:stream';
 import split2 from 'split2';
 
 const BACKEND_READY_PATH = '/health/readyz';
-const GATEWAY_READY_PATH = '/readyz';
 const FRONTEND_READY_PATH = '/';
+const GATEWAY_READY_PATH = '/readyz';
 const BACKEND_STARTUP_TIMEOUT_MS = 30_000;
-const GATEWAY_STARTUP_TIMEOUT_MS = 15_000;
 const FRONTEND_STARTUP_TIMEOUT_MS = 90_000;
+const GATEWAY_STARTUP_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 200;
 const HOSTNAME = '127.0.0.1';
 
@@ -23,19 +23,20 @@ type ServerHandle = {
 };
 
 export type BackendServerHandle = ServerHandle;
-export type GatewayServerHandle = ServerHandle;
 export type FrontendServerHandle = ServerHandle;
+export type SSEGatewayServerHandle = ServerHandle;
 
 export async function startBackend(
   workerIndex: number,
   options: {
+    sqliteDbPath: string;
     streamLogs?: boolean;
     port?: number;
     excludePorts?: number[];
-    sqliteDbPath?: string;
-  } = {}
+    frontendVersionUrl?: string;
+  }
 ): Promise<BackendServerHandle> {
-  if (!options.sqliteDbPath) {
+  if (!options?.sqliteDbPath) {
     throw new Error(
       `${formatPrefix(workerIndex, 'backend')} Missing sqliteDbPath for backend startup`
     );
@@ -50,9 +51,12 @@ export async function startBackend(
 
   const scriptPath = resolve(getBackendRepoRoot(), './scripts/testing-server.sh');
   const args = [
-    '--host', HOSTNAME,
-    '--port', String(port),
-    '--sqlite-db', options.sqliteDbPath,
+    '--host',
+    HOSTNAME,
+    '--port',
+    String(port),
+    '--sqlite-db',
+    options.sqliteDbPath,
   ];
 
   return startService({
@@ -66,52 +70,14 @@ export async function startBackend(
     streamLogs: options.streamLogs === true,
     env: {
       ...process.env,
-    },
-  });
-}
-
-/**
- * Start the SSE Gateway between the backend and frontend.
- * The gateway script is expected at ../ssegateway/scripts/run-gateway.sh
- * (or SSE_GATEWAY_ROOT override). If the script is missing the function
- * throws with a clear message so CI failures are actionable.
- */
-export async function startGateway(options: {
-  workerIndex: number;
-  backendUrl: string;
-  excludePorts?: number[];
-  streamLogs?: boolean;
-  port?: number;
-}): Promise<GatewayServerHandle> {
-  const port =
-    typeof options.port === 'number'
-      ? options.port
-      : await getPort({
-          exclude: options.excludePorts ?? [],
-        });
-
-  const gatewayRoot = getGatewayRepoRoot();
-  const scriptPath = resolve(gatewayRoot, './scripts/run-gateway.sh');
-
-  if (!existsSync(scriptPath)) {
-    throw new Error(
-      `${formatPrefix(options.workerIndex, 'gateway')} SSE Gateway script not found at ${scriptPath}. ` +
-        'Ensure the gateway repo is available at ../ssegateway or set SSE_GATEWAY_ROOT.'
-    );
-  }
-
-  return startService({
-    workerIndex: options.workerIndex,
-    port,
-    serviceLabel: 'gateway',
-    scriptPath,
-    args: ['--host', HOSTNAME, '--port', String(port)],
-    readinessPath: GATEWAY_READY_PATH,
-    startupTimeoutMs: GATEWAY_STARTUP_TIMEOUT_MS,
-    streamLogs: options.streamLogs === true,
-    env: {
-      ...process.env,
-      CALLBACK_URL: options.backendUrl,
+      // Disable real OIDC in tests — the testing service endpoints
+      // (/api/testing/auth/*) provide auth simulation regardless of this flag.
+      // Without this override, OIDC_ENABLED=true from .env causes the
+      // before_request hook to attempt real token validation → 401.
+      OIDC_ENABLED: 'false',
+      ...(options.frontendVersionUrl
+        ? { FRONTEND_VERSION_URL: options.frontendVersionUrl }
+        : {}),
     },
   });
 }
@@ -119,7 +85,6 @@ export async function startGateway(options: {
 export async function startFrontend(options: {
   workerIndex: number;
   backendUrl: string;
-  gatewayUrl?: string;
   excludePorts?: number[];
   streamLogs?: boolean;
   port?: number;
@@ -146,14 +111,47 @@ export async function startFrontend(options: {
     env: {
       ...process.env,
       BACKEND_URL: options.backendUrl,
-      // Pass SSE Gateway URL to the Vite proxy; falls back to default if not provided
-      ...(options.gatewayUrl ? { SSE_GATEWAY_URL: options.gatewayUrl } : {}),
       VITE_TEST_MODE: 'true',
     },
   });
 }
 
-type ServiceLabel = 'backend' | 'gateway' | 'frontend';
+export async function startSSEGateway(options: {
+  workerIndex: number;
+  backendUrl: string;
+  excludePorts?: number[];
+  streamLogs?: boolean;
+  port?: number;
+}): Promise<SSEGatewayServerHandle> {
+  const port =
+    typeof options.port === 'number'
+      ? options.port
+      : await getPort({
+          exclude: options.excludePorts ?? [],
+        });
+
+  const require = createRequire(import.meta.url);
+  const gatewayEntry = require.resolve('ssegateway');
+  const callbackUrl = `${options.backendUrl}/api/sse/callback`;
+
+  return startService({
+    workerIndex: options.workerIndex,
+    port,
+    serviceLabel: 'sse-gateway',
+    scriptPath: process.execPath,
+    args: [gatewayEntry],
+    readinessPath: GATEWAY_READY_PATH,
+    startupTimeoutMs: GATEWAY_STARTUP_TIMEOUT_MS,
+    streamLogs: options.streamLogs === true,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CALLBACK_URL: callbackUrl,
+    },
+  });
+}
+
+type ServiceLabel = 'backend' | 'frontend' | 'sse-gateway';
 
 type StartServiceOptions = {
   workerIndex: number;
@@ -349,11 +347,11 @@ function serviceShouldLogLifecycle(serviceLabel: ServiceLabel): boolean {
   if (serviceLabel === 'backend') {
     return process.env.PLAYWRIGHT_BACKEND_LOG_STREAM === 'true';
   }
-  if (serviceLabel === 'gateway') {
-    return process.env.PLAYWRIGHT_GATEWAY_LOG_STREAM === 'true';
-  }
   if (serviceLabel === 'frontend') {
     return process.env.PLAYWRIGHT_FRONTEND_LOG_STREAM === 'true';
+  }
+  if (serviceLabel === 'sse-gateway') {
+    return process.env.PLAYWRIGHT_GATEWAY_LOG_STREAM === 'true';
   }
   return false;
 }
@@ -383,7 +381,6 @@ async function waitForExit(
 
 let frontendRepoRootCache: string | undefined;
 let backendRepoRootCache: string | undefined;
-let gatewayRepoRootCache: string | undefined;
 
 function getFrontendRepoRoot(): string {
   if (!frontendRepoRootCache) {
@@ -395,22 +392,9 @@ function getFrontendRepoRoot(): string {
 
 function getBackendRepoRoot(): string {
   if (!backendRepoRootCache) {
-    backendRepoRootCache = resolve(getFrontendRepoRoot(), '../backend');
+    backendRepoRootCache = resolve(getFrontendRepoRoot(), process.env.BACKEND_ROOT || '../backend');
   }
   return backendRepoRootCache;
-}
-
-function getGatewayRepoRoot(): string {
-  if (!gatewayRepoRootCache) {
-    // Allow override via environment variable
-    const envRoot = process.env.SSE_GATEWAY_ROOT;
-    if (envRoot) {
-      gatewayRepoRootCache = resolve(envRoot);
-    } else {
-      gatewayRepoRootCache = resolve(getFrontendRepoRoot(), '../ssegateway');
-    }
-  }
-  return gatewayRepoRootCache;
 }
 
 const activeChildren = new Set<ChildProcessWithoutNullStreams>();

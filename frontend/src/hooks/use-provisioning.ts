@@ -25,7 +25,7 @@ import {
   type PartitionInfo,
 } from '@/lib/esptool';
 import { useProvisioningInstrumentation } from '@/lib/test/provisioning-instrumentation';
-import type { ProvisioningPhase } from '@/types/test-events';
+import type { ProvisioningPhase } from '@/types/provisioning-events';
 
 /**
  * State for the provisioning workflow

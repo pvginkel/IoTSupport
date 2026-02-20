@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/primitives/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { DeviceSummary } from '@/hooks/use-devices'
 import type { DeviceModelSummary } from '@/hooks/use-device-models'

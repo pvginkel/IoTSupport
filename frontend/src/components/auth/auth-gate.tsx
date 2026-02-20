@@ -4,13 +4,13 @@
  * Shows loading spinner during auth check, error screen with retry for failures.
  */
 
-import { type ReactNode } from 'react'
-import { useAuthContext } from '@/contexts/auth-context'
-import { Button } from '@/components/ui/button'
-import { ApiError } from '@/lib/api/api-error'
+import { type ReactNode } from 'react';
+import { useAuthContext } from '@/contexts/auth-context';
+import { Button } from '@/components/primitives/button';
+import { ApiError } from '@/lib/api/api-error';
 
 interface AuthGateProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
 /**
@@ -23,7 +23,7 @@ function AuthLoading() {
       className="h-screen w-full bg-background"
       data-testid="auth.gate.loading"
     />
-  )
+  );
 }
 
 /**
@@ -32,14 +32,14 @@ function AuthLoading() {
  * not auth-focused since 401s are already handled by redirect.
  */
 function getErrorDisplay(error: Error): { title: string; description: string } {
-  const status = error instanceof ApiError ? error.status : undefined
+  const status = error instanceof ApiError ? error.status : undefined;
 
   // Network errors (no status) - connection failed entirely
   if (status === undefined) {
     return {
       title: 'Connection Error',
       description: 'Unable to connect to the server. Please check your network connection.',
-    }
+    };
   }
 
   // 502 Bad Gateway - backend service is down
@@ -47,7 +47,7 @@ function getErrorDisplay(error: Error): { title: string; description: string } {
     return {
       title: 'Server Unavailable',
       description: 'The server is currently unavailable. Please try again shortly.',
-    }
+    };
   }
 
   // 503 Service Unavailable
@@ -55,7 +55,7 @@ function getErrorDisplay(error: Error): { title: string; description: string } {
     return {
       title: 'Service Unavailable',
       description: 'The service is temporarily unavailable. Please try again shortly.',
-    }
+    };
   }
 
   // 504 Gateway Timeout
@@ -63,7 +63,7 @@ function getErrorDisplay(error: Error): { title: string; description: string } {
     return {
       title: 'Server Timeout',
       description: 'The server took too long to respond. Please try again.',
-    }
+    };
   }
 
   // Other 5xx errors
@@ -71,14 +71,14 @@ function getErrorDisplay(error: Error): { title: string; description: string } {
     return {
       title: 'Server Error',
       description: 'The server encountered an error. Please try again later.',
-    }
+    };
   }
 
   // Fallback for unexpected error types
   return {
     title: 'Connection Error',
     description: 'An unexpected error occurred. Please try again.',
-  }
+  };
 }
 
 /**
@@ -86,10 +86,7 @@ function getErrorDisplay(error: Error): { title: string; description: string } {
  * Displays server-focused messaging since 401s redirect to login.
  */
 function AuthError({ error, onRetry }: { error: Error; onRetry: () => void }) {
-  const { title, description } = getErrorDisplay(error)
-
-  // Log error details for debugging
-  console.error('[AuthGate] Auth check failed:', error)
+  const { title, description } = getErrorDisplay(error);
 
   return (
     <div
@@ -124,7 +121,7 @@ function AuthError({ error, onRetry }: { error: Error; onRetry: () => void }) {
         </Button>
       </div>
     </div>
-  )
+  );
 }
 
 /**
@@ -132,30 +129,30 @@ function AuthError({ error, onRetry }: { error: Error; onRetry: () => void }) {
  * Blocks rendering of children until auth state is resolved.
  *
  * States:
- * - Loading: Shows spinner while checking auth
+ * - Loading: Shows blank screen while checking auth
  * - Error (non-401): Shows error screen with retry button
- * - Unauthenticated (401): AuthProvider handles redirect, gate shows nothing
+ * - Unauthenticated (401): Middleware handles redirect, gate shows blank
  * - Authenticated: Renders children
  */
 export function AuthGate({ children }: AuthGateProps) {
-  const { isLoading, isAuthenticated, error, refetch } = useAuthContext()
+  const { isLoading, isAuthenticated, error, refetch } = useAuthContext();
 
   // Show loading state while auth check is in progress
   if (isLoading) {
-    return <AuthLoading />
+    return <AuthLoading />;
   }
 
   // Show error screen for non-401 errors (server errors, network issues)
   if (error) {
-    return <AuthError error={error} onRetry={refetch} />
+    return <AuthError error={error} onRetry={refetch} />;
   }
 
-  // If not authenticated and no error, redirect is in progress (handled by AuthProvider)
+  // If not authenticated and no error, redirect is in progress (handled by middleware)
   // Don't render children to prevent flash of content
   if (!isAuthenticated) {
-    return <AuthLoading />
+    return <AuthLoading />;
   }
 
   // User is authenticated - render the app
-  return <>{children}</>
+  return <>{children}</>;
 }

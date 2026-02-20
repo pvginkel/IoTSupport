@@ -3,21 +3,15 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { config } from 'dotenv';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 async function globalSetup() {
-  // Load test environment variables
-  config({ path: resolve(__dirname, '../../.env.test') });
-
-  // External services mode is not supported - all tests use per-worker managed services
+  // External services mode has been removed. All tests now use per-worker managed services.
   if (process.env.PLAYWRIGHT_MANAGED_SERVICES === 'false') {
     throw new Error(
       'PLAYWRIGHT_MANAGED_SERVICES=false is no longer supported. ' +
-        'All tests use per-worker managed services (backend and frontend) for isolation. ' +
-        'Please remove this environment variable.'
+      'The external services mode has been removed. ' +
+      'Please remove this environment variable. ' +
+      'All tests now use per-worker managed services (backend, SSE gateway, and frontend) for isolation.'
     );
   }
 
@@ -27,18 +21,19 @@ async function globalSetup() {
   const seededDbPath = await initializeSeedDatabase();
   process.env.PLAYWRIGHT_SEEDED_SQLITE_DB = seededDbPath;
   console.log(`🗃️  Seeded Playwright SQLite database: ${seededDbPath}`);
-  console.log('⏭️  Worker fixtures will boot backend and frontend on demand');
+  console.log('⏭️  Worker fixtures will boot backend, SSE gateway, and frontend on demand');
 }
 
 export default globalSetup;
 
 async function initializeSeedDatabase(): Promise<string> {
   const repoRoot = getRepoRoot();
-  const tmpRoot = await mkdtemp(join(tmpdir(), 'iotsupport-seed-'));
+  const backendRoot = resolve(repoRoot, process.env.BACKEND_ROOT || '../backend');
+  const tmpRoot = await mkdtemp(join(tmpdir(), 'electronics-seed-'));
   const dbPath = join(tmpRoot, 'seed.sqlite');
-  const scriptPath = resolve(repoRoot, '../backend/scripts/initialize-sqlite-database.sh');
+  const scriptPath = resolve(backendRoot, 'scripts/initialize-sqlite-database.sh');
 
-  await runScript(scriptPath, ['--db', dbPath], {
+  await runScript(scriptPath, ['--db', dbPath, '--load-test-data'], {
     cwd: repoRoot,
   });
 

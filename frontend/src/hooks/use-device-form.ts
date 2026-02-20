@@ -3,7 +3,7 @@ import { useNavigate, useBlocker } from '@tanstack/react-router'
 import { useCreateDevice, useUpdateDevice } from '@/hooks/use-devices'
 import { useDeviceModels, useDeviceModel } from '@/hooks/use-device-models'
 import { useConfirm } from '@/hooks/use-confirm'
-import { useFormInstrumentation } from '@/lib/test/form-instrumentation'
+import { useFormInstrumentation } from '@/hooks/use-form-instrumentation'
 import { configureMonacoSchemaValidation } from '@/lib/utils/monaco-schema'
 import { setDeviceTabPreference } from '@/lib/utils/device-tab-preference'
 
@@ -44,7 +44,7 @@ export function useDeviceForm({
 
   // Form instrumentation for Playwright tests
   const formId = mode === 'edit' ? 'DeviceEditor_edit' : mode === 'duplicate' ? 'DeviceEditor_duplicate' : 'DeviceEditor_new'
-  const { trackSubmit, trackSuccess, trackError } = useFormInstrumentation({ formId })
+  const { trackSubmit, trackSuccess, trackError } = useFormInstrumentation({ formId, isOpen: true })
 
   // Device model is selectable for new devices, fixed for edits
   const [selectedModelId, setSelectedModelId] = useState<number | undefined>(initialDeviceModelId)
@@ -129,7 +129,7 @@ export function useDeviceForm({
       if (deviceId === undefined) {
         setJsonError('Device ID is required for update')
         isNavigatingRef.current = false
-        trackError('Device ID is required for update')
+        trackError({ error: 'Device ID is required for update' })
         return
       }
 
@@ -146,7 +146,7 @@ export function useDeviceForm({
           },
           onError: (err) => {
             isNavigatingRef.current = false
-            trackError(err instanceof Error ? err.message : 'Unknown error')
+            trackError({ error: err instanceof Error ? err.message : 'Unknown error' })
           }
         }
       )
@@ -161,7 +161,7 @@ export function useDeviceForm({
           },
           onError: (err) => {
             isNavigatingRef.current = false
-            trackError(err instanceof Error ? err.message : 'Unknown error')
+            trackError({ error: err instanceof Error ? err.message : 'Unknown error' })
           }
         }
       )

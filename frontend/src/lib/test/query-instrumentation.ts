@@ -6,7 +6,7 @@
 import { useEffect, useRef } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import { emitTestEvent } from './event-emitter';
-import { TestEventKind, type QueryErrorTestEvent, type ListLoadingTestEvent } from '@/types/test-events';
+import { TestEventKind, type QueryErrorTestEvent, type ListLoadingTestEvent } from '@/lib/test/test-events';
 import { isTestMode } from '@/lib/config/test-mode';
 
 /**

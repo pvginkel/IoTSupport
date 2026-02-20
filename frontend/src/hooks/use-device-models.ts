@@ -9,7 +9,7 @@ import {
   type DeviceModelCreateSchema_349be3d,
   type DeviceModelUpdateSchema_349be3d
 } from '@/lib/api/generated/hooks'
-import { useToast } from '@/contexts/toast-context'
+import { useToast } from '@/hooks/use-toast'
 
 // UI domain model (camelCase) - device model summary for list view
 export interface DeviceModelSummary {

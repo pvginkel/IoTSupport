@@ -36,34 +36,34 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 195 35% 12%;
-    --card: 186 28% 97%;
-    --card-foreground: 195 35% 12%;
+    --foreground: 224 71% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71% 4%;
     --popover: 0 0% 100%;
-    --popover-foreground: 195 35% 12%;
-    --primary: 186 69% 61%;
-    --primary-foreground: 195 55% 10%;
-    --secondary: 186 22% 94%;
-    --secondary-foreground: 195 35% 12%;
-    --muted: 186 22% 94%;
-    --muted-foreground: 186 12% 50%;
-    --accent: 186 50% 91%;
-    --accent-foreground: 195 55% 10%;
-    --destructive: 0 52% 53%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 186 20% 87%;
-    --input: 186 20% 87%;
-    --ring: 186 69% 61%;
+    --popover-foreground: 224 71% 4%;
+    --primary: 220 90% 56%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 220 15% 96%;
+    --secondary-foreground: 220 9% 46%;
+    --muted: 220 15% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 220 15% 96%;
+    --accent-foreground: 220 9% 46%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 220 90% 56%;
     --radius: 0.5rem;
-    --link: 186 69% 55%;
-    --link-hover: 186 72% 45%;
+    --link: 220 90% 56%;
+    --link-hover: 220 90% 48%;
 
-    /* Extended design tokens for modern UI */
-    --success: 160 72% 43%;
-    --success-foreground: 165 55% 10%;
+    /* Extended design tokens */
+    --success: 142 72% 43%;
+    --success-foreground: 142 72% 8%;
     --warning: 48 79% 42%;
     --warning-foreground: 48 64% 10%;
-    --info: 200 61% 47%;
+    --info: 200 90% 47%;
     --info-foreground: 200 69% 10%;
 
     /* Spacing scale */
@@ -82,31 +82,31 @@
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --background: 186 18% 9%;
-      --foreground: 186 30% 92%;
-      --card: 200 20% 8%;
-      --card-foreground: 186 30% 92%;
-      --popover: 200 18% 9%;
-      --popover-foreground: 186 30% 92%;
-      --primary: 186 75% 55%;
-      --primary-foreground: 200 60% 6%;
-      --secondary: 200 16% 14%;
-      --secondary-foreground: 186 18% 75%;
-      --muted: 200 16% 14%;
-      --muted-foreground: 200 10% 50%;
-      --accent: 186 65% 20%;
-      --accent-foreground: 186 65% 90%;
-      --destructive: 0 59% 60%;
-      --destructive-foreground: 0 55% 7%;
-      --border: 200 14% 18%;
-      --input: 200 14% 18%;
-      --ring: 186 75% 55%;
-      --link: 186 70% 62%;
-      --link-hover: 186 75% 55%;
+      --background: 224 71% 4%;
+      --foreground: 210 40% 98%;
+      --card: 224 71% 4%;
+      --card-foreground: 210 40% 98%;
+      --popover: 224 71% 4%;
+      --popover-foreground: 210 40% 98%;
+      --primary: 220 90% 56%;
+      --primary-foreground: 220 90% 10%;
+      --secondary: 215 28% 17%;
+      --secondary-foreground: 210 40% 98%;
+      --muted: 215 28% 17%;
+      --muted-foreground: 218 11% 65%;
+      --accent: 216 34% 17%;
+      --accent-foreground: 210 40% 98%;
+      --destructive: 0 63% 31%;
+      --destructive-foreground: 0 0% 98%;
+      --border: 216 34% 17%;
+      --input: 216 34% 17%;
+      --ring: 220 90% 56%;
+      --link: 220 90% 65%;
+      --link-hover: 220 90% 56%;
 
       /* Dark mode extended tokens */
-      --success: 160 65% 50%;
-      --success-foreground: 165 70% 8%;
+      --success: 142 69% 52%;
+      --success-foreground: 142 72% 8%;
       --warning: 49 82% 47%;
       --warning-foreground: 49 72% 8%;
       --info: 200 64% 53%;
@@ -120,6 +120,9 @@
   }
 }
 
+/* App-specific theme overrides (brand colors, custom utilities, animations) */
+@import "./styles/app-theme.css";
+
 @layer base {
   * {
     border-color: hsl(var(--border));
@@ -131,7 +134,6 @@
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }

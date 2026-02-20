@@ -4,8 +4,8 @@
  */
 
 import { isTestMode } from '@/lib/config/test-mode';
-import type { TestEvent, TestEventPayload, TestEventKind } from '@/types/test-events';
-import { TestEventKind as EventKind } from '@/types/test-events';
+import type { TestEvent, TestEventPayload, TestEventKind } from '@/lib/test/test-events';
+import { TestEventKind as EventKind } from '@/lib/test/test-events';
 
 /**
  * Validate event kind against defined types

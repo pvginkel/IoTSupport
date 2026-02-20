@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { ExternalLink, RefreshCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/primitives/button'
 import { useDeviceKeycloakStatus, useSyncDeviceKeycloak } from '@/hooks/use-devices'
 
 interface KeycloakClientStatusProps {

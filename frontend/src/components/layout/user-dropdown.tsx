@@ -8,7 +8,7 @@ import { useAuthContext } from '@/contexts/auth-context'
 
 /**
  * Get display name for the user.
- * Falls back to "Unknown User" if name is null.
+ * Falls back to "Unknown User" if name is null, empty, or whitespace-only.
  */
 function getDisplayName(name: string | null): string {
   if (name && name.trim()) {
@@ -20,6 +20,7 @@ function getDisplayName(name: string | null): string {
 /**
  * UserDropdown component.
  * Shows user name as trigger, dropdown with logout option.
+ * Closes on outside click or Escape key.
  */
 export function UserDropdown() {
   const { user, logout } = useAuthContext()

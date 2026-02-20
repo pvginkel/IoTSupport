@@ -5,7 +5,7 @@ import {
   useGetDevicesCoredumpsByDeviceIdAndCoredumpId,
   useDeleteDevicesCoredumpsByDeviceIdAndCoredumpId
 } from '@/lib/api/generated/hooks'
-import { useToast } from '@/contexts/toast-context'
+import { useToast } from '@/hooks/use-toast'
 
 // UI domain model (camelCase) - coredump summary for list view
 export interface CoredumpSummary {

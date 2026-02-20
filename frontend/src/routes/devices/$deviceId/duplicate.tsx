@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { DeviceEditor } from '@/components/devices/device-editor'
 import { useDevice } from '@/hooks/use-devices'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/primitives/button'
 
 export const Route = createFileRoute('/devices/$deviceId/duplicate')({
   component: DuplicateDeviceRoute,

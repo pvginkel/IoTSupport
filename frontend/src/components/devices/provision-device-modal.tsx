@@ -18,9 +18,9 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from '@/components/ui/dialog';
-import { ConfirmDialog } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+} from '@/components/primitives/dialog';
+import { ConfirmDialog } from '@/components/primitives/dialog';
+import { Button } from '@/components/primitives/button';
 import { useProvisioning } from '@/hooks/use-provisioning';
 import { isWebSerialSupported } from '@/lib/esptool';
 

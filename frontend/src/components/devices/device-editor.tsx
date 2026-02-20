@@ -1,7 +1,7 @@
 import Editor from '@monaco-editor/react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/primitives/button'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { ConfirmDialog } from '@/components/ui/dialog'
+import { ConfirmDialog } from '@/components/primitives/dialog'
 import { useDeviceForm } from '@/hooks/use-device-form'
 
 interface DeviceEditorProps {

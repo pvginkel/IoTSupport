@@ -1,13 +1,14 @@
 /**
  * Sidebar component.
  * Navigation-only component (header moved to TopBar).
- * Collapses completely (0 width) when toggled.
+ * Collapses to icon-only (w-20) when toggled on desktop.
  */
 
 import { Link } from '@tanstack/react-router'
-import { Settings, Box, RefreshCw, type LucideIcon } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { navigationItems } from './sidebar-nav'
 
-interface SidebarItem {
+export interface SidebarItem {
   to: string
   label: string
   icon: LucideIcon
@@ -20,37 +21,24 @@ interface SidebarProps {
   variant?: 'desktop' | 'mobile'
 }
 
-const navigationItems: SidebarItem[] = [
-  { to: '/device-models', label: 'Device Models', icon: Box, testId: 'device-models' },
-  { to: '/devices', label: 'Devices', icon: Settings, testId: 'devices' },
-  { to: '/rotation', label: 'Rotation Dashboard', icon: RefreshCw, testId: 'rotation' },
-]
-
 /**
  * Sidebar component.
  * Renders navigation links only - header content is now in TopBar.
  *
  * Collapse behavior:
- * - Desktop: Fully hides (0 width) when collapsed
+ * - Desktop: Shows icons only (w-16) when collapsed, full width (w-64) when expanded
  * - Mobile: Always shows full width in overlay
  */
 export function Sidebar({
   isCollapsed = false,
   onNavigate,
-  variant = 'desktop',
+  variant = 'desktop'
 }: SidebarProps) {
   const dataState = isCollapsed ? 'collapsed' : 'expanded'
 
-  // Desktop sidebar collapses to 0 width; mobile always shows full
-  const widthClass = variant === 'mobile'
-    ? 'w-64'
-    : isCollapsed
-      ? 'w-0 overflow-hidden'
-      : 'w-64'
-
   return (
     <div
-      className={`bg-background border-r border-border transition-all duration-300 h-full ${widthClass}`}
+      className={`bg-background border-r border-border transition-all duration-300 h-full ${isCollapsed ? 'w-16' : 'w-64'}`}
       data-testid="app-shell.sidebar"
       data-state={dataState}
       data-variant={variant}
@@ -63,11 +51,11 @@ export function Sidebar({
           data-testid="app-shell.sidebar.nav"
         >
           <ul className="space-y-2 px-3">
-            {navigationItems.map(item => (
+            {navigationItems.map((item) => (
               <li key={item.to} data-testid={`app-shell.sidebar.item.${item.testId}`}>
                 <Link
                   to={item.to}
-                  className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-muted-foreground hover:bg-secondary hover:text-foreground [&.active]:bg-secondary [&.active]:text-foreground [&.active]:font-medium whitespace-nowrap"
+                  className={`flex items-center rounded-md py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground [&.active]:bg-accent [&.active]:text-accent-foreground [&.active]:font-medium ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3'}`}
                   data-testid={`app-shell.sidebar.link.${item.testId}`}
                   data-nav-target={item.to}
                   title={item.label}
@@ -79,8 +67,8 @@ export function Sidebar({
                   inactiveProps={{ 'data-active': 'false' }}
                   onClick={() => onNavigate?.()}
                 >
-                  <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                  <span>{item.label}</span>
+                  <item.icon className="h-5 w-5" aria-hidden="true" />
+                  {!isCollapsed && <span>{item.label}</span>}
                 </Link>
               </li>
             ))}

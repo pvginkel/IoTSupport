@@ -1,12 +1,12 @@
 import { useState, useCallback, useRef, useMemo } from 'react'
 import { useNavigate, useBlocker } from '@tanstack/react-router'
 import Editor from '@monaco-editor/react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Button } from '@/components/primitives/button'
+import { Input } from '@/components/primitives/input'
 import { useCreateDeviceModel, useUpdateDeviceModel } from '@/hooks/use-device-models'
-import { ConfirmDialog } from '@/components/ui/dialog'
+import { ConfirmDialog } from '@/components/primitives/dialog'
 import { useConfirm } from '@/hooks/use-confirm'
-import { useFormInstrumentation } from '@/lib/test/form-instrumentation'
+import { useFormInstrumentation } from '@/hooks/use-form-instrumentation'
 
 interface DeviceModelEditorProps {
   mode: 'new' | 'edit'
@@ -44,7 +44,7 @@ export function DeviceModelEditor({
 
   // Form instrumentation for Playwright tests
   const formId = mode === 'edit' ? 'DeviceModelEditor_edit' : 'DeviceModelEditor_new'
-  const { trackSubmit, trackSuccess, trackError } = useFormInstrumentation({ formId })
+  const { trackSubmit, trackSuccess, trackError } = useFormInstrumentation({ formId, isOpen: true })
 
   // Code is editable only for new models
   const [code, setCode] = useState(initialCode)
@@ -128,7 +128,7 @@ export function DeviceModelEditor({
       if (modelId === undefined) {
         setJsonError('Model ID is required for update')
         isNavigatingRef.current = false
-        trackError('Model ID is required for update')
+        trackError({ error: 'Model ID is required for update' })
         return
       }
 
@@ -142,7 +142,7 @@ export function DeviceModelEditor({
           },
           onError: (err) => {
             isNavigatingRef.current = false
-            trackError(err instanceof Error ? err.message : 'Unknown error')
+            trackError({ error: err instanceof Error ? err.message : 'Unknown error' })
           }
         }
       )
@@ -157,7 +157,7 @@ export function DeviceModelEditor({
           },
           onError: (err) => {
             isNavigatingRef.current = false
-            trackError(err instanceof Error ? err.message : 'Unknown error')
+            trackError({ error: err instanceof Error ? err.message : 'Unknown error' })
           }
         }
       )

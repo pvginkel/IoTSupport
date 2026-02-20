@@ -1,22 +1,22 @@
 /**
  * TopBar component.
  * Displays hamburger menu, logo, app title, and user dropdown.
- * Layout: hamburger | logo | "IoT Support" | spacer | user dropdown
+ * Layout: hamburger | logo | "Electronics" | spacer | user dropdown
  */
 
 import { Link } from '@tanstack/react-router'
+import { PROJECT_TITLE, PROJECT_DESCRIPTION } from '@/lib/consts'
 import { UserDropdown } from './user-dropdown'
 
 interface TopBarProps {
   onMenuToggle: () => void
-  isMobile?: boolean
 }
 
 /**
  * TopBar component.
  * Provides app header with navigation toggle and user controls.
  */
-export function TopBar({ onMenuToggle, isMobile = false }: TopBarProps) {
+export function TopBar({ onMenuToggle }: TopBarProps) {
   return (
     <header
       className="flex h-14 items-center border-b border-border bg-background px-4"
@@ -27,7 +27,7 @@ export function TopBar({ onMenuToggle, isMobile = false }: TopBarProps) {
         type="button"
         onClick={onMenuToggle}
         className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-        aria-label={isMobile ? 'Toggle mobile menu' : 'Toggle sidebar'}
+        aria-label="Toggle navigation menu"
         data-testid="app-shell.topbar.hamburger"
       >
         <svg
@@ -55,7 +55,7 @@ export function TopBar({ onMenuToggle, isMobile = false }: TopBarProps) {
         {/* Logo - 110% of text height via em units inherited from parent font-size */}
         <img
           src="/favicon.png"
-          alt="IoT Support Logo"
+          alt={`${PROJECT_DESCRIPTION} Logo`}
           className="h-[1.4em] w-[1.4em] mr-1 mt-1"
           data-testid="app-shell.topbar.logo"
         />
@@ -63,7 +63,7 @@ export function TopBar({ onMenuToggle, isMobile = false }: TopBarProps) {
           className="font-semibold"
           data-testid="app-shell.topbar.title"
         >
-          IoT Support
+          {PROJECT_TITLE}
         </span>
       </Link>
 

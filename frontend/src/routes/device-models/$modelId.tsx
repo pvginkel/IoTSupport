@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { DeviceModelEditor } from '@/components/device-models/device-model-editor'
 import { useDeviceModel } from '@/hooks/use-device-models'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/primitives/button'
 
 export const Route = createFileRoute('/device-models/$modelId')({
   component: EditDeviceModelRoute,

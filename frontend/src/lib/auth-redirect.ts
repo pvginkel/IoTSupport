@@ -9,7 +9,7 @@
  * redirected back after authentication.
  */
 export function buildLoginUrl(): string {
-  const currentPath = window.location.pathname + window.location.search
-  const encodedRedirect = encodeURIComponent(currentPath)
-  return `/api/auth/login?redirect=${encodedRedirect}`
+  const currentPath = window.location.pathname + window.location.search;
+  const encodedRedirect = encodeURIComponent(currentPath);
+  return `/api/auth/login?redirect=${encodedRedirect}`;
 }
