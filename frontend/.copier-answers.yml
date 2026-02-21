@@ -3,14 +3,14 @@ _commit: v0.8
 _src_path: ../../ModernAppTemplate/frontend
 author_email: dev@example.com
 author_name: Developer
-backend_port: 3201
-frontend_port: 3200
+backend_port: 3101
+frontend_port: 3100
 image_name: registry:5000/iotsupport-ui
 project_description: IoT device management and support platform
 project_name: iot-support
 project_title: IoT Support
 repo_url: https://github.com/pvginkel/IoTSupportUI.git
-sse_gateway_port: 3001
+sse_gateway_port: 3102
 use_app_shell: true
 use_oidc: true
 use_sse: true
