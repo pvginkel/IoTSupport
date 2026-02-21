@@ -209,7 +209,7 @@ class Environment(BaseSettings):
         description="SSE heartbeat interval in seconds (5 for development, 30 for production)"
     )
     SSE_GATEWAY_URL: str = Field(
-        default="http://localhost:3001",
+        default="http://localhost:3102",
         description="SSE Gateway base URL for internal send endpoint"
     )
     SSE_CALLBACK_SECRET: str = Field(
