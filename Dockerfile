@@ -34,7 +34,7 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
     FLASK_ENV=production
 
-EXPOSE 3201
+EXPOSE 3101
 
 ENTRYPOINT ["tini", "--"]
 
