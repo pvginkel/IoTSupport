@@ -4,7 +4,8 @@
  * Verifies that:
  * - The SSE connection goes through the Vite dev server proxy (no direct gateway access)
  * - Version events are delivered correctly through the React SSE infrastructure
- * - Task events are routed through the Vite proxy to the browser
+ * - Task events are routed through the Vite proxy to the browser (envelope format)
+ * - SharedWorker path delivers events correctly when enabled via URL parameter
  */
 import { test, expect } from '../../support/fixtures';
 import { makeUnique } from '../../support/helpers';
@@ -105,8 +106,9 @@ test.describe('SSE connectivity', () => {
 
     // Create a standalone EventSource in the browser. This opens a separate
     // SSE connection through the Vite proxy, registers with the SSE Gateway,
-    // and listens for task_event messages. This verifies the full proxy chain
-    // (browser -> Vite -> Gateway) independently of the React SSE infrastructure.
+    // and listens for task_event messages via the envelope format.
+    // The gateway now sends all events as unnamed data-only messages wrapping
+    // {type, payload}, so we use es.onmessage and filter by type.
     const receivedEvent = await page.evaluate(
       async ({ tId, timeout }) => {
         // Generate a unique request_id for this connection
@@ -114,16 +116,38 @@ test.describe('SSE connectivity', () => {
         const params = new URLSearchParams({ request_id: requestId });
         const es = new EventSource(`/api/sse/stream?${params}`);
 
+        // Set up the envelope message listener BEFORE waiting for open,
+        // so no events are missed between open and send.
+        const eventPromise = new Promise<unknown>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            es.close();
+            reject(new Error('task_event timeout'));
+          }, timeout);
+
+          es.onmessage = (e: MessageEvent) => {
+            try {
+              const envelope = JSON.parse(e.data);
+              if (envelope.type === 'task_event' && envelope.payload?.task_id === tId) {
+                clearTimeout(timer);
+                es.close();
+                resolve(envelope.payload);
+              }
+            } catch {
+              // Ignore parse errors
+            }
+          };
+        });
+
         // Wait for the EventSource to open (connection registered with Gateway)
         await new Promise<void>((resolve, reject) => {
           const timer = setTimeout(() => reject(new Error('EventSource open timeout')), timeout);
-          es.onopen = () => { clearTimeout(timer); resolve(); };
-          es.onerror = () => {
+          es.addEventListener('open', () => { clearTimeout(timer); resolve(); });
+          es.addEventListener('error', () => {
             if (es.readyState === EventSource.CLOSED) {
               clearTimeout(timer);
               reject(new Error('EventSource closed during open'));
             }
-          };
+          });
         });
 
         // Small delay to ensure the Gateway callback has registered the connection
@@ -148,28 +172,8 @@ test.describe('SSE connectivity', () => {
           throw new Error(`Failed to send task event: ${sendResponse.status} ${err}`);
         }
 
-        // Wait for the task event to arrive via SSE
-        const event = await new Promise<unknown>((resolve, reject) => {
-          const timer = setTimeout(() => {
-            es.close();
-            reject(new Error('task_event timeout'));
-          }, timeout);
-
-          es.addEventListener('task_event', (e: MessageEvent) => {
-            try {
-              const data = JSON.parse(e.data);
-              if (data.task_id === tId) {
-                clearTimeout(timer);
-                es.close();
-                resolve(data);
-              }
-            } catch {
-              // Ignore parse errors
-            }
-          });
-        });
-
-        return event;
+        // Wait for the task event to arrive via SSE (envelope format)
+        return eventPromise;
       },
       { tId: taskId, timeout: sseTimeout }
     );
@@ -200,15 +204,37 @@ test.describe('SSE connectivity', () => {
         const params = new URLSearchParams({ request_id: requestId });
         const es = new EventSource(`/api/sse/stream?${params}`);
 
+        // Set up the envelope message listener BEFORE waiting for open,
+        // so no events are missed between open and send.
+        const eventPromise = new Promise<unknown>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            es.close();
+            reject(new Error('task_event timeout'));
+          }, timeout);
+
+          es.onmessage = (e: MessageEvent) => {
+            try {
+              const envelope = JSON.parse(e.data);
+              if (envelope.type === 'task_event' && envelope.payload?.task_id === tId) {
+                clearTimeout(timer);
+                es.close();
+                resolve(envelope.payload);
+              }
+            } catch {
+              // Ignore parse errors
+            }
+          };
+        });
+
         await new Promise<void>((resolve, reject) => {
           const timer = setTimeout(() => reject(new Error('EventSource open timeout')), timeout);
-          es.onopen = () => { clearTimeout(timer); resolve(); };
-          es.onerror = () => {
+          es.addEventListener('open', () => { clearTimeout(timer); resolve(); });
+          es.addEventListener('error', () => {
             if (es.readyState === EventSource.CLOSED) {
               clearTimeout(timer);
               reject(new Error('EventSource closed during open'));
             }
-          };
+          });
         });
 
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -230,27 +256,7 @@ test.describe('SSE connectivity', () => {
           throw new Error(`Failed to send task event: ${sendResponse.status} ${err}`);
         }
 
-        const event = await new Promise<unknown>((resolve, reject) => {
-          const timer = setTimeout(() => {
-            es.close();
-            reject(new Error('task_event timeout'));
-          }, timeout);
-
-          es.addEventListener('task_event', (e: MessageEvent) => {
-            try {
-              const data = JSON.parse(e.data);
-              if (data.task_id === tId) {
-                clearTimeout(timer);
-                es.close();
-                resolve(data);
-              }
-            } catch {
-              // Ignore parse errors
-            }
-          });
-        });
-
-        return event;
+        return eventPromise;
       },
       { tId: taskId, timeout: sseTimeout }
     );
@@ -264,5 +270,89 @@ test.describe('SSE connectivity', () => {
     expect(event.event_type).toBe('task_failed');
     expect(event.data.error).toBe('proxy-failure-test');
     expect(event.data.code).toBe('TEST_ERROR');
+  });
+
+  test('delivers version events via SharedWorker', async ({
+    page,
+    frontendUrl,
+    backendUrl,
+    deploymentSse,
+  }) => {
+    // Navigate with __sharedWorker parameter to enable SharedWorker path
+    await page.goto(`${frontendUrl}?__sharedWorker`);
+
+    await deploymentSse.resetRequestId();
+    const connectionStatus = await deploymentSse.ensureConnected();
+
+    await waitForSseEvent(page, {
+      streamId: 'connection',
+      phase: 'open',
+      event: 'connected',
+      timeoutMs: 15000,
+    });
+
+    const requestId = connectionStatus.requestId;
+    expect(requestId).toBeTruthy();
+
+    const versionLabel = makeUnique('sw-version');
+
+    const response = await page.request.post(`${backendUrl}/api/testing/deployments/version`, {
+      data: {
+        request_id: requestId,
+        version: versionLabel,
+      },
+    });
+    expect(response.ok()).toBeTruthy();
+
+    const versionEvent = await waitForSseEvent(page, {
+      streamId: 'version',
+      phase: 'message',
+      event: 'version',
+      matcher: event => {
+        const payload = extractSseData<{ version?: string }>(event);
+        return payload?.version === versionLabel;
+      },
+      timeoutMs: 15000,
+    });
+
+    const payload = extractSseData<{ version: string }>(versionEvent);
+    expect(payload?.version).toBe(versionLabel);
+
+    await deploymentSse.disconnect();
+  });
+
+  test('connects and receives events via SharedWorker', async ({
+    page,
+    frontendUrl,
+    gatewayUrl,
+    deploymentSse,
+  }) => {
+    // Navigate with __sharedWorker parameter to enable SharedWorker path
+    await page.goto(`${frontendUrl}?__sharedWorker`);
+
+    await deploymentSse.resetRequestId();
+    await deploymentSse.ensureConnected();
+
+    await waitForSseEvent(page, {
+      streamId: 'connection',
+      phase: 'open',
+      event: 'connected',
+      timeoutMs: 15000,
+    });
+
+    // Verify SSE URLs go through the frontend (Vite proxy), not directly to the gateway
+    const sseUrls = await page.evaluate(() => {
+      const entries = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
+      return entries
+        .filter(e => e.initiatorType === 'other' && e.name.includes('/api/sse/'))
+        .map(e => e.name);
+    });
+
+    for (const url of sseUrls) {
+      expect(url).not.toContain(gatewayUrl);
+      expect(url).toContain('/api/sse/stream');
+    }
+
+    await deploymentSse.disconnect();
   });
 });

@@ -48,14 +48,15 @@ test('surfaces backend-driven deployment updates', async ({
 
     expect(baselineResponse.ok()).toBeTruthy();
 
+    // Match on version value only — the backend does not include
+    // correlation_id in version event payloads.
     await waitForSseEvent(page, {
       streamId: 'version',
       phase: 'message',
       event: 'version',
       matcher: event => {
-        const payload = extractSseData<{ correlationId?: string; correlation_id?: string; version?: string }>(event);
-        const correlation = payload?.correlationId ?? payload?.correlation_id;
-        return correlation === requestId && payload?.version === baselineVersion;
+        const payload = extractSseData<{ version?: string }>(event);
+        return payload?.version === baselineVersion;
       },
       timeoutMs: 15000,
     });
@@ -76,30 +77,13 @@ test('surfaces backend-driven deployment updates', async ({
       phase: 'message',
       event: 'version',
       matcher: event => {
-        const payload = extractSseData<{
-          correlationId?: string;
-          correlation_id?: string;
-          version?: string;
-        }>(event);
-        const correlation = payload?.correlationId ?? payload?.correlation_id;
-        if (correlation !== requestId) {
-          return false;
-        }
-
+        const payload = extractSseData<{ version?: string }>(event);
         return payload?.version === versionLabel;
       },
       timeoutMs: 15000,
     });
 
-    const payload = extractSseData<{
-      correlationId?: string;
-      correlation_id?: string;
-      requestId?: string;
-      request_id?: string;
-      version?: string;
-    }>(payloadEvent);
-    const correlation = payload?.correlationId ?? payload?.correlation_id;
-    expect(correlation).toBe(requestId);
+    const payload = extractSseData<{ version?: string }>(payloadEvent);
     expect(payload?.version).toBe(versionLabel);
 
     const bannerMessage = page.getByText('A new version of the app is available.', { exact: false });

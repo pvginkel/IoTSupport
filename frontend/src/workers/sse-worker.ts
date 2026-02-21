@@ -2,8 +2,9 @@
  * SharedWorker for multiplexing a unified SSE connection across browser tabs.
  *
  * Maintains a single EventSource connection to the SSE endpoint and forwards
- * named events to all connected tabs via MessagePort. Tabs dynamically subscribe
- * to event names they care about; the worker attaches EventSource listeners on demand.
+ * events to all connected tabs via MessagePort. The gateway sends all events as
+ * unnamed data-only messages with a {type, payload} envelope, so the worker
+ * uses a single `onmessage` handler to capture everything.
  *
  * When the last tab disconnects, the worker closes the SSE connection.
  */
@@ -26,8 +27,7 @@ type WorkerMessage =
 
 type TabCommand =
   | { type: 'connect'; isTestMode?: boolean }
-  | { type: 'disconnect' }
-  | { type: 'subscribe'; event: string };
+  | { type: 'disconnect' };
 
 // Token generation utility (inline version of makeUniqueToken)
 const TOKEN_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -48,8 +48,8 @@ let retryCount = 0;
 let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 const maxRetryDelay = 60000; // 60 seconds
 
-// Track which event names have been attached to the EventSource
-const subscribedEvents = new Set<string>();
+// Cache the last version event so late-joining tabs receive it immediately
+let lastVersionPayload: unknown = null;
 
 /**
  * Broadcast a message to all connected tabs
@@ -104,7 +104,7 @@ function closeConnection(): void {
   }
   currentRequestId = null;
   retryCount = 0;
-  subscribedEvents.clear();
+  lastVersionPayload = null;
 }
 
 /**
@@ -134,37 +134,6 @@ function scheduleReconnect(): void {
 }
 
 /**
- * Attach a named-event listener on the EventSource.
- * Parses JSON data and broadcasts to all tabs.
- */
-function subscribeToEvent(eventName: string): void {
-  if (!eventSource || subscribedEvents.has(eventName)) return;
-
-  subscribedEvents.add(eventName);
-
-  eventSource.addEventListener(eventName, (e: MessageEvent) => {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(e.data);
-    } catch {
-      parsed = e.data;
-    }
-
-    const message: WorkerMessage = {
-      type: 'event',
-      event: eventName,
-      data: parsed,
-    };
-
-    if (hasTestModePorts()) {
-      message.__testEvent = createTestEvent(eventName, 'message', eventName, parsed);
-    }
-
-    broadcast(message);
-  });
-}
-
-/**
  * Create EventSource connection to unified SSE endpoint
  */
 function createEventSource(): void {
@@ -182,20 +151,11 @@ function createEventSource(): void {
 
   console.debug(`SSE worker: Creating EventSource for requestId=${currentRequestId}`);
 
-  // Preserve previously subscribed event names so we can re-attach after reconnection
-  const previousEvents = new Set(subscribedEvents);
-  subscribedEvents.clear();
-
   eventSource = new EventSource(url);
 
   eventSource.onopen = () => {
     console.debug('SSE worker: SSE connection opened');
     retryCount = 0;
-
-    // Re-attach listeners for previously subscribed events
-    for (const eventName of previousEvents) {
-      subscribeToEvent(eventName);
-    }
 
     const message: WorkerMessage = {
       type: 'connected',
@@ -211,6 +171,44 @@ function createEventSource(): void {
     broadcast(message);
   };
 
+  // Single onmessage handler captures all envelope events from the gateway.
+  // Each message contains {type, payload} — unwrap and broadcast to tabs.
+  eventSource.onmessage = (e: MessageEvent) => {
+    let envelope: { type: string; payload: unknown };
+    try {
+      envelope = JSON.parse(e.data);
+    } catch {
+      // Non-JSON data on the unnamed channel; ignore
+      console.debug('SSE worker: Ignoring non-JSON unnamed event:', e.data);
+      return;
+    }
+
+    if (!envelope.type) {
+      return;
+    }
+
+    const eventName = envelope.type;
+    const eventData = envelope.payload;
+
+    // Cache the latest version payload for late-joining tabs
+    if (eventName === 'version') {
+      lastVersionPayload = eventData;
+    }
+
+    const message: WorkerMessage = {
+      type: 'event',
+      event: eventName,
+      data: eventData,
+    };
+
+    if (hasTestModePorts()) {
+      message.__testEvent = createTestEvent(eventName, 'message', eventName, eventData);
+    }
+
+    broadcast(message);
+  };
+
+  // connection_close stays as a named event (internal plumbing)
   eventSource.addEventListener('connection_close', (event) => {
     try {
       const data = JSON.parse(event.data);
@@ -257,7 +255,7 @@ function handleConnect(port: MessagePort, isTestMode = false): void {
   if (!eventSource) {
     createEventSource();
   } else if (eventSource.readyState === EventSource.OPEN) {
-    // SSE already connected - send connected message to new tab
+    // SSE already connected — send connected message to new tab
     const connectedMessage: WorkerMessage = {
       type: 'connected',
       requestId: currentRequestId!,
@@ -271,6 +269,21 @@ function handleConnect(port: MessagePort, isTestMode = false): void {
 
     try {
       port.postMessage(connectedMessage);
+
+      // Send cached version event so late-joining tabs get the current version
+      if (lastVersionPayload !== null) {
+        const versionMessage: WorkerMessage = {
+          type: 'event',
+          event: 'version',
+          data: lastVersionPayload,
+        };
+
+        if (isTestMode) {
+          versionMessage.__testEvent = createTestEvent('version', 'message', 'version', lastVersionPayload);
+        }
+
+        port.postMessage(versionMessage);
+      }
     } catch (error) {
       console.error('SSE worker: Failed to send connected message to new tab:', error);
       ports.delete(port);
@@ -294,13 +307,6 @@ function handleDisconnect(port: MessagePort): void {
 }
 
 /**
- * Handle event subscription from a tab
- */
-function handleSubscribe(eventName: string): void {
-  subscribeToEvent(eventName);
-}
-
-/**
  * SharedWorker onconnect handler
  */
 self.addEventListener('connect', (event) => {
@@ -317,10 +323,6 @@ self.addEventListener('connect', (event) => {
 
       case 'disconnect':
         handleDisconnect(port);
-        break;
-
-      case 'subscribe':
-        handleSubscribe(command.event);
         break;
 
       default:

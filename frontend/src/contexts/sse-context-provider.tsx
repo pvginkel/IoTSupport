@@ -60,6 +60,10 @@ function shouldUseSharedWorker(): boolean {
  * Exposes a generic addEventListener interface. Consumer hooks subscribe to
  * named SSE events and handle their own DTO parsing.
  *
+ * The gateway sends all events as unnamed data-only messages with a
+ * {type, payload} envelope. Both the SharedWorker and the direct EventSource
+ * path unwrap the envelope and dispatch to local listeners by event name.
+ *
  * Uses SharedWorker in production for cross-tab connection sharing, falls back to
  * direct EventSource in dev/test/iOS environments.
  */
@@ -73,12 +77,6 @@ export function SseContextProvider({ children }: SseContextProviderProps) {
 
   // Internal listener registry: Map<eventName, Set<handler>>
   const listenersRef = useRef(new Map<string, Set<(data: unknown) => void>>());
-
-  // Track which event names have been attached to the EventSource (direct mode)
-  const attachedEventsRef = useRef(new Set<string>());
-
-  // Track which event names have been subscribed on the SharedWorker
-  const workerSubscribedEventsRef = useRef(new Set<string>());
 
   /**
    * Dispatch an event to all registered handlers for a given event name
@@ -97,51 +95,8 @@ export function SseContextProvider({ children }: SseContextProviderProps) {
   }, []);
 
   /**
-   * Attach a named-event listener on the direct EventSource.
-   * Only attaches once per event name (multiple consumers share via the registry).
-   */
-  const ensureDirectEventSourceListener = useCallback((eventName: string) => {
-    const es = eventSourceRef.current;
-    if (!es || attachedEventsRef.current.has(eventName)) return;
-
-    attachedEventsRef.current.add(eventName);
-
-    es.addEventListener(eventName, (e: MessageEvent) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(e.data);
-      } catch {
-        parsed = e.data;
-      }
-
-      if (isTestMode()) {
-        emitTestEvent({
-          kind: 'sse',
-          streamId: eventName,
-          phase: 'message',
-          event: eventName,
-          data: parsed,
-        });
-      }
-
-      dispatchEvent(eventName, parsed);
-    });
-  }, [dispatchEvent]);
-
-  /**
-   * Tell the SharedWorker to subscribe to a named SSE event.
-   * Only sends the subscribe command once per event name.
-   */
-  const ensureWorkerSubscription = useCallback((eventName: string) => {
-    const worker = sharedWorkerRef.current;
-    if (!worker || workerSubscribedEventsRef.current.has(eventName)) return;
-
-    workerSubscribedEventsRef.current.add(eventName);
-    worker.port.postMessage({ type: 'subscribe', event: eventName });
-  }, []);
-
-  /**
    * Register a handler for a named SSE event.
+   * Purely local — no subscription commands are sent to the worker or EventSource.
    * Returns an unsubscribe function.
    */
   const addEventListener = useCallback(
@@ -151,13 +106,6 @@ export function SseContextProvider({ children }: SseContextProviderProps) {
         map.set(event, new Set());
       }
       map.get(event)!.add(handler);
-
-      // Ensure the underlying transport is listening for this event
-      if (useSharedWorker.current) {
-        ensureWorkerSubscription(event);
-      } else {
-        ensureDirectEventSourceListener(event);
-      }
 
       return () => {
         const handlers = map.get(event);
@@ -169,7 +117,7 @@ export function SseContextProvider({ children }: SseContextProviderProps) {
         }
       };
     },
-    [ensureDirectEventSourceListener, ensureWorkerSubscription]
+    []
   );
 
   /**
@@ -229,21 +177,16 @@ export function SseContextProvider({ children }: SseContextProviderProps) {
         type: 'connect',
         isTestMode: isTestMode(),
       });
-
-      // Subscribe the worker to any events that were registered before the worker was created
-      workerSubscribedEventsRef.current.clear();
-      for (const eventName of listenersRef.current.keys()) {
-        ensureWorkerSubscription(eventName);
-      }
     } catch (error) {
       console.error('Failed to create SharedWorker, falling back to direct connection:', error);
       useSharedWorker.current = false;
       setIsConnected(false);
     }
-  }, [handleWorkerMessage, ensureWorkerSubscription]);
+  }, [handleWorkerMessage]);
 
   /**
-   * Create direct EventSource connection
+   * Create direct EventSource connection.
+   * Uses onmessage to unwrap the {type, payload} envelope — same logic as the SharedWorker.
    */
   const createDirectConnection = useCallback(() => {
     const tabRequestId = Math.random().toString(36).substring(2, 15) +
@@ -254,12 +197,6 @@ export function SseContextProvider({ children }: SseContextProviderProps) {
 
     const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
-
-    // Re-attach listeners for any events registered before the EventSource was created
-    attachedEventsRef.current.clear();
-    for (const eventName of listenersRef.current.keys()) {
-      ensureDirectEventSourceListener(eventName);
-    }
 
     eventSource.onopen = () => {
       setIsConnected(true);
@@ -277,6 +214,38 @@ export function SseContextProvider({ children }: SseContextProviderProps) {
       }
     };
 
+    // Single onmessage handler unwraps the {type, payload} envelope
+    // and dispatches to local listeners — mirrors the SharedWorker logic.
+    eventSource.onmessage = (e: MessageEvent) => {
+      let envelope: { type: string; payload: unknown };
+      try {
+        envelope = JSON.parse(e.data);
+      } catch {
+        // Non-JSON data on the unnamed channel; ignore
+        return;
+      }
+
+      if (!envelope.type) {
+        return;
+      }
+
+      const eventName = envelope.type;
+      const eventData = envelope.payload;
+
+      if (isTestMode()) {
+        emitTestEvent({
+          kind: 'sse',
+          streamId: eventName,
+          phase: 'message',
+          event: eventName,
+          data: eventData,
+        });
+      }
+
+      dispatchEvent(eventName, eventData);
+    };
+
+    // connection_close stays as a named event (internal plumbing)
     eventSource.addEventListener('connection_close', (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -295,7 +264,7 @@ export function SseContextProvider({ children }: SseContextProviderProps) {
       }
       setIsConnected(false);
     };
-  }, [ensureDirectEventSourceListener]);
+  }, [dispatchEvent]);
 
   /**
    * Disconnect from SSE
@@ -309,13 +278,11 @@ export function SseContextProvider({ children }: SseContextProviderProps) {
         console.error('Failed to disconnect SharedWorker:', error);
       }
       sharedWorkerRef.current = null;
-      workerSubscribedEventsRef.current.clear();
     }
 
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
-      attachedEventsRef.current.clear();
     }
 
     setIsConnected(false);
@@ -339,7 +306,6 @@ export function SseContextProvider({ children }: SseContextProviderProps) {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
-      attachedEventsRef.current.clear();
     }
     createDirectConnection();
   }, [isConnected, createSharedWorkerConnection, createDirectConnection]);

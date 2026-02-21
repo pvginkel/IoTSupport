@@ -130,8 +130,8 @@ importers:
         specifier: ^4.2.0
         version: 4.2.0
       ssegateway:
-        specifier: git+https://github.com/pvginkel/SSEGateway.git#stable
-        version: https://codeload.github.com/pvginkel/SSEGateway/tar.gz/7c7fefe6566351871c8bcfc2b64539269f238afd
+        specifier: github:pvginkel/SSEGateway#stable
+        version: https://codeload.github.com/pvginkel/SSEGateway/tar.gz/dea28a1e77fb9ff4a7ee0ab490258a1f475c57fc
       typescript:
         specifier: ~5.9.0
         version: 5.9.3
@@ -2279,8 +2279,8 @@ packages:
     resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
     engines: {node: '>= 10.x'}
 
-  ssegateway@https://codeload.github.com/pvginkel/SSEGateway/tar.gz/7c7fefe6566351871c8bcfc2b64539269f238afd:
-    resolution: {tarball: https://codeload.github.com/pvginkel/SSEGateway/tar.gz/7c7fefe6566351871c8bcfc2b64539269f238afd}
+  ssegateway@https://codeload.github.com/pvginkel/SSEGateway/tar.gz/dea28a1e77fb9ff4a7ee0ab490258a1f475c57fc:
+    resolution: {tarball: https://codeload.github.com/pvginkel/SSEGateway/tar.gz/dea28a1e77fb9ff4a7ee0ab490258a1f475c57fc}
     version: 1.0.0
     engines: {node: '>=20.0.0'}
 
@@ -4637,7 +4637,7 @@ snapshots:
 
   split2@4.2.0: {}
 
-  ssegateway@https://codeload.github.com/pvginkel/SSEGateway/tar.gz/7c7fefe6566351871c8bcfc2b64539269f238afd:
+  ssegateway@https://codeload.github.com/pvginkel/SSEGateway/tar.gz/dea28a1e77fb9ff4a7ee0ab490258a1f475c57fc:
     dependencies:
       '@types/express': 5.0.6
       '@types/node': 20.19.33
