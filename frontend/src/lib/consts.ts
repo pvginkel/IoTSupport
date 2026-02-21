@@ -5,3 +5,4 @@ export const PROJECT_DESCRIPTION = "IoT device management and support platform";
 export const DEFAULT_BACKEND_PORT = 3101;
 export const DEFAULT_SSE_GATEWAY_PORT = 3102;
 export const DEFAULT_FRONTEND_PORT = 3100;
+export const SIDEBAR_VISIBLE = true;
