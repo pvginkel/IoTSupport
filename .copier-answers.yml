@@ -1,10 +1,11 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v0.7.4
+_commit: v0.7.5
 _src_path: ../../ModernAppTemplate/backend
 author_email: pvginkel@gmail.com
 author_name: Pieter van Ginkel
 backend_port: 3101
 database_name: iotsupport
+frontend_port: 3100
 image_name: registry:5000/iotsupport-app
 project_description: Flask backend for managing ESP32 IoT device configurations
 project_name: iot-support

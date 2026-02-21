@@ -54,7 +54,7 @@ class Environment(BaseSettings):
     FLASK_ENV: str = Field(default="development")
     DEBUG: bool = Field(default=True)
     CORS_ORIGINS: list[str] = Field(
-        default=["http://localhost:3000"], description="Allowed CORS origins"
+        default=["http://localhost:3100"], description="Allowed CORS origins"
     )
     TASK_MAX_WORKERS: int = Field(
         default=4,
@@ -123,7 +123,7 @@ class Environment(BaseSettings):
     # ── use_oidc ───────────────────────────────────────────────────────
 
     BASEURL: str = Field(
-        default="http://localhost:3000",
+        default="http://localhost:3100",
         description="Base URL for the application (used for redirect URI and cookie security)"
     )
     OIDC_ENABLED: bool = Field(
@@ -201,7 +201,7 @@ class Environment(BaseSettings):
     # ── use_sse ────────────────────────────────────────────────────────
 
     FRONTEND_VERSION_URL: str = Field(
-        default="http://localhost:3000/version.json",
+        default="http://localhost:3100/version.json",
         description="URL to fetch frontend version information"
     )
     SSE_HEARTBEAT_INTERVAL: int = Field(
@@ -237,7 +237,7 @@ class Settings(BaseModel):
     secret_key: str = _DEFAULT_SECRET_KEY
     flask_env: str = "development"
     debug: bool = True
-    cors_origins: list[str] = Field(default=["http://localhost:3000"])
+    cors_origins: list[str] = Field(default=["http://localhost:3100"])
     task_max_workers: int = 4
     task_timeout_seconds: int = 300
     task_cleanup_interval_seconds: int = 600
@@ -260,7 +260,7 @@ class Settings(BaseModel):
 
     # ── use_oidc ───────────────────────────────────────────────────────
 
-    baseurl: str = "http://localhost:3000"
+    baseurl: str = "http://localhost:3100"
     oidc_enabled: bool = False
     oidc_issuer_url: str | None = None
     oidc_client_id: str | None = None
@@ -284,7 +284,7 @@ class Settings(BaseModel):
 
     # ── use_sse ────────────────────────────────────────────────────────
 
-    frontend_version_url: str = "http://localhost:3000/version.json"
+    frontend_version_url: str = "http://localhost:3100/version.json"
     sse_heartbeat_interval: int = 5  # Resolved: 30 for production via load()
     sse_gateway_url: str = "http://localhost:3102"
     sse_callback_secret: str = ""
