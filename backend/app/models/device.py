@@ -1,14 +1,17 @@
 """Device model for IoT device instances."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
 
-if False:  # TYPE_CHECKING
+if TYPE_CHECKING:
     from app.models.coredump import CoreDump
     from app.models.device_model import DeviceModel
 
@@ -86,10 +89,10 @@ class Device(db.Model):  # type: ignore[name-defined]
     )
 
     # Relationships
-    device_model: Mapped["DeviceModel"] = relationship(
+    device_model: Mapped[DeviceModel] = relationship(
         "DeviceModel", back_populates="devices", lazy="selectin"
     )
-    coredumps: Mapped[list["CoreDump"]] = relationship(
+    coredumps: Mapped[list[CoreDump]] = relationship(
         "CoreDump",
         back_populates="device",
         cascade="all, delete-orphan",

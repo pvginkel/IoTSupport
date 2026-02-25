@@ -87,7 +87,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"app/utils/lvgl/LVGLImage.py" = ["I001", "UP035", "B904", "UP006", "C416", "B905", "E741"]
+"app/utils/lvgl/LVGLImage.py" = ["I001", "UP035", "B904", "UP006", "C416", "B905", "E741", "ERA001"]
 "alembic/**" = ["E402"]
 "tools/**" = ["ERA001"]
 

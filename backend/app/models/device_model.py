@@ -1,13 +1,16 @@
 """DeviceModel model for device hardware types."""
 
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
 
-if False:  # TYPE_CHECKING
+if TYPE_CHECKING:
     from app.models.device import Device
     from app.models.firmware_version import FirmwareVersion
 
@@ -49,14 +52,14 @@ class DeviceModel(db.Model):  # type: ignore[name-defined]
     )
 
     # Relationships
-    devices: Mapped[list["Device"]] = relationship(
+    devices: Mapped[list[Device]] = relationship(
         "Device",
         back_populates="device_model",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
 
-    firmware_versions: Mapped[list["FirmwareVersion"]] = relationship(
+    firmware_versions: Mapped[list[FirmwareVersion]] = relationship(
         "FirmwareVersion",
         back_populates="device_model",
         cascade="all, delete-orphan",
