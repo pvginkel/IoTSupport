@@ -182,11 +182,17 @@ class TestPartService:
 ## Code Quality Standards
 
 ### Linting and Formatting
-Before committing, run:
+Before committing, run all checks with a single command:
 ```bash
-poetry run ruff check .      # Linting
-poetry run mypy .           # Type checking
-poetry run pytest          # Full test suite
+poetry run check   # Runs ruff, mypy, vulture, and pytest
+```
+
+Or run individual tools:
+```bash
+poetry run ruff check .                                           # Linting
+poetry run mypy .                                                 # Type checking
+poetry run vulture app/ vulture_whitelist.py --min-confidence 80  # Dead code detection
+poetry run pytest                                                 # Full test suite
 ```
 
 ### Type Hints
