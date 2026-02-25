@@ -22,3 +22,17 @@ conn_record  # unused variable
 
 # Function parameters kept for API compatibility
 encoding  # unused variable
+
+# TYPE_CHECKING guard (unsatisfiable 'if' condition is expected)
+from typing import TYPE_CHECKING
+
+TYPE_CHECKING  # unused variable
+
+# paho-mqtt callback signatures (on_connect, on_disconnect, on_message)
+userdata  # unused variable
+connect_flags  # unused variable
+properties  # unused variable
+disconnect_flags  # unused variable
+
+# Tuple unpacking in LVGLImage.py (third-party utility)
+ext  # unused variable

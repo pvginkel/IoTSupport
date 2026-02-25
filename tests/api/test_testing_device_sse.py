@@ -21,7 +21,7 @@ from app.services.rotation_nudge_service import RotationNudgeService
 # module makes pytest discover the fixtures via conftest mechanics. We
 # import the fixture functions directly so that pytest registers them in
 # this module's scope without requiring conftest changes.
-from tests.api.test_testing import (  # noqa: I001
+from tests.api.test_testing import (
     testing_app,  # noqa: F401
     testing_app_settings,  # noqa: F401
     testing_client,  # noqa: F401

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from app.services.device_service import DeviceService
 
 # Import all infrastructure fixtures
-from tests.conftest_infrastructure import *  # noqa: F401, F403
+from tests.conftest_infrastructure import *  # noqa: F403
 
 # ---------------------------------------------------------------------------
 # Override test_settings to use flask_env="development" (not "testing")

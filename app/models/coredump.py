@@ -1,14 +1,17 @@
 """CoreDump model for ESP32 device crash dumps."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
 
-if False:  # TYPE_CHECKING
+if TYPE_CHECKING:
     from app.models.device import Device
 
 
@@ -76,7 +79,7 @@ class CoreDump(db.Model):  # type: ignore[name-defined]
     )
 
     # Relationships
-    device: Mapped["Device"] = relationship(
+    device: Mapped[Device] = relationship(
         "Device", back_populates="coredumps", lazy="selectin"
     )
 

@@ -1,13 +1,16 @@
 """FirmwareVersion model for tracking stored firmware versions per device model."""
 
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
 
-if False:  # TYPE_CHECKING
+if TYPE_CHECKING:
     from app.models.device_model import DeviceModel
 
 
@@ -46,7 +49,7 @@ class FirmwareVersion(db.Model):  # type: ignore[name-defined]
     )
 
     # Relationships
-    device_model: Mapped["DeviceModel"] = relationship(
+    device_model: Mapped[DeviceModel] = relationship(
         "DeviceModel", back_populates="firmware_versions", lazy="selectin"
     )
 
