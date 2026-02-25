@@ -364,47 +364,65 @@ export const infrastructureFixtures = base.extend<InfrastructureFixtures, Intern
         const gatewayPort = await getPort({ exclude: [backendPort] });
         const frontendPort = await getPort({ exclude: [backendPort, gatewayPort] });
 
-        // Set gateway URL for backend before it starts
+        // Pre-compute URLs from allocated ports so we can wire them before any
+        // service starts.  The backend's /health/readyz now checks SSE Gateway
+        // reachability, so the gateway must be up before the backend can pass
+        // its readiness probe.
+        const backendUrl = `http://127.0.0.1:${backendPort}`;
         const gatewayUrl = `http://127.0.0.1:${gatewayPort}`;
+
+        // Set gateway URL for backend before it starts
         process.env.SSE_GATEWAY_URL = gatewayUrl;
 
-        const backendPromise = startBackend(workerInfo.workerIndex, {
-          ...(workerDbPath ? { sqliteDbPath: workerDbPath } : {}),
-          streamLogs: backendStreamLogs,
-          port: backendPort,
-          frontendVersionUrl: `http://127.0.0.1:${frontendPort}/version.json`,
-        });
-        const backendReadyPromise = backendPromise.then(backendHandle => {
-          backendLogs.attachStream(backendHandle.process.stdout, 'stdout');
-          backendLogs.attachStream(backendHandle.process.stderr, 'stderr');
-          backendLogs.log(`Backend listening on ${backendHandle.url}`);
-          return backendHandle;
-        });
-
-        const gatewayPromise = backendReadyPromise.then(async backendHandle => {
-          gatewayLogs.log(`Starting SSE Gateway with callback to ${backendHandle.url}`);
+        // 1. Start SSE Gateway first — it only needs the backend URL for its
+        //    callback config, not for its own readiness.
+        const gatewayPromise = (async () => {
+          gatewayLogs.log(`Starting SSE Gateway with callback to ${backendUrl}`);
           try {
             const gatewayHandle = await startSSEGateway({
               workerIndex: workerInfo.workerIndex,
-              backendUrl: backendHandle.url,
-              excludePorts: [backendHandle.port],
+              backendUrl,
+              excludePorts: [backendPort],
               port: gatewayPort,
               streamLogs: gatewayStreamLogs,
             });
             gatewayLogs.attachStream(gatewayHandle.process.stdout, 'stdout');
             gatewayLogs.attachStream(gatewayHandle.process.stderr, 'stderr');
             gatewayLogs.log(`SSE Gateway listening on ${gatewayHandle.url}`);
-            return { backendHandle, gatewayHandle };
+            return gatewayHandle;
           } catch (error) {
-            await backendHandle.dispose();
             gatewayLogs.log(
               `SSE Gateway failed to start: ${(error as Error)?.message ?? String(error)}`
             );
             throw error;
           }
+        })();
+
+        // 2. Once the gateway is ready, start the backend (its readyz can now
+        //    reach the gateway).
+        const backendPromise = gatewayPromise.then(async gatewayHandle => {
+          try {
+            const backendHandle = await startBackend(workerInfo.workerIndex, {
+              ...(workerDbPath ? { sqliteDbPath: workerDbPath } : {}),
+              streamLogs: backendStreamLogs,
+              port: backendPort,
+              frontendVersionUrl: `http://127.0.0.1:${frontendPort}/version.json`,
+            });
+            backendLogs.attachStream(backendHandle.process.stdout, 'stdout');
+            backendLogs.attachStream(backendHandle.process.stderr, 'stderr');
+            backendLogs.log(`Backend listening on ${backendHandle.url}`);
+            return { backendHandle, gatewayHandle };
+          } catch (error) {
+            await gatewayHandle.dispose();
+            backendLogs.log(
+              `Backend failed to start: ${(error as Error)?.message ?? String(error)}`
+            );
+            throw error;
+          }
         });
 
-        const frontendPromise = gatewayPromise.then(async ({ backendHandle, gatewayHandle }) => {
+        // 3. Finally start the frontend once both backend and gateway are up.
+        const frontendPromise = backendPromise.then(async ({ backendHandle, gatewayHandle }) => {
           frontendLogs.log(`Starting frontend against backend ${backendHandle.url} and gateway ${gatewayHandle.url}`);
 
           // Set SSE_GATEWAY_URL before starting frontend so Vite can read it

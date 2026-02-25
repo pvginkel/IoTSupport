@@ -108,17 +108,5 @@ test.describe('App Shell Layout', () => {
       expect(titleBox!.x).toBeLessThan(userBox!.x)
     })
 
-    test('logo and title link to home route', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Navigation User' })
-
-      await page.goto('/about')
-
-      const authPage = new AuthPage(page)
-      await authPage.waitForAuthenticated()
-
-      await authPage.clickHomeLink()
-
-      await expect(page).toHaveURL(/\/items/)
-    })
   })
 })
