@@ -24,6 +24,8 @@ const config: KnipConfig = {
   ignore: [
     ...templateIgnore,
     'src/lib/api/generated/**',
+    // Used via Vite resolve.alias when VITE_TEST_MODE=true (knip can't follow aliases)
+    'tests/support/mocks/esptool-mock.ts',
   ],
   ignoreDependencies: [
     // Template-provided dependencies used in template-owned (ignored) code

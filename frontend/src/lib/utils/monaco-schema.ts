@@ -102,24 +102,3 @@ export function configureMonacoSchemaValidation(
 
   currentSchemaHash = schemaHash
 }
-
-/**
- * Clear all configured schemas.
- * Useful when navigating away or when schemas need to be refreshed.
- */
-export function clearMonacoSchemas(): void {
-  const monaco = (window as unknown as { monaco?: MonacoGlobal }).monaco
-  if (!monaco) {
-    return
-  }
-
-  // Reset to default diagnostics options (no custom schemas)
-  monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
-    validate: true,
-    schemaValidation: 'error',
-    enableSchemaRequest: false,
-    schemas: [],
-  })
-
-  currentSchemaHash = null
-}

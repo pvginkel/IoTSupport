@@ -5,7 +5,7 @@ import { emitTestEvent } from '@/lib/test/event-emitter'
 import { TestEventKind, type ListLoadingTestEvent } from '@/lib/test/test-events'
 
 // UI domain model (camelCase) - log entry
-export interface LogEntry {
+interface LogEntry {
   message: string
   timestamp: string
 }
@@ -32,7 +32,7 @@ interface SseDeviceLogsPayload {
 }
 
 // Hook state interface
-export interface UseDeviceLogsState {
+interface UseDeviceLogsState {
   logs: LogEntry[]
   isLoading: boolean
   hasEntityId: boolean
@@ -40,7 +40,7 @@ export interface UseDeviceLogsState {
 }
 
 // Hook return type
-export type UseDeviceLogsResult = UseDeviceLogsState
+type UseDeviceLogsResult = UseDeviceLogsState
 
 // Buffer cap increased from 1000 to 5000 per plan
 const MAX_BUFFER_SIZE = 5000

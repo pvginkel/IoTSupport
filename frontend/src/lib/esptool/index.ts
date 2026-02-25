@@ -11,7 +11,6 @@
 // Re-export everything from esptool-js
 // In test mode, Vite's resolve.alias will redirect this to the mock
 export { ESPLoader, Transport } from 'esptool-js';
-export type { LoaderOptions, FlashOptions, IEspLoaderTerminal } from 'esptool-js';
 
 /**
  * Partition table entry structure as defined in ESP-IDF
@@ -111,24 +110,6 @@ export function findNvsPartition(partitions: PartitionInfo[]): PartitionInfo | n
 
   // Fallback: find by type/subtype
   return partitions.find(p => p.type === 1 && p.subtype === 2) ?? null;
-}
-
-/**
- * Calculate MD5 hash of data using Web Crypto API.
- *
- * Note: Web Crypto doesn't support MD5 directly, so we use SubtleCrypto
- * to compute SHA-256 and then truncate. For actual MD5, the backend
- * should be used or a pure JS implementation.
- *
- * For flash verification, ESPLoader uses its own MD5 calculation.
- */
-export async function calculateMd5(data: Uint8Array): Promise<string> {
-  // Use simple checksum for now - ESPLoader handles actual MD5 verification
-  // Cast to ArrayBuffer to satisfy TypeScript's strict type checking
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data.buffer as ArrayBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  // Return first 16 bytes as hex (32 characters like MD5)
-  return hashArray.slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**

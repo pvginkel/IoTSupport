@@ -22,7 +22,7 @@ export interface DeviceModelSummary {
 }
 
 // Full device model with config schema
-export interface DeviceModel {
+interface DeviceModel {
   id: number
   code: string
   name: string

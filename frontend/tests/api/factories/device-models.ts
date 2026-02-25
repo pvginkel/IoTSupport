@@ -2,13 +2,13 @@ import { ulid } from 'ulid';
 import type { Page } from '@playwright/test';
 import { createApiClient, createPlaywrightFetch, apiRequest, type ApiClient } from '../client';
 
-export interface DeviceModelFactoryOptions {
+interface DeviceModelFactoryOptions {
   code?: string;
   name?: string;
   configSchema?: Record<string, unknown> | null;
 }
 
-export interface CreatedDeviceModel {
+interface CreatedDeviceModel {
   id: number;
   code: string;
   name: string;

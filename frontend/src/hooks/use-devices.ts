@@ -258,7 +258,7 @@ export function useDeleteDevice() {
 }
 
 // UI domain model for Keycloak client status
-export interface KeycloakClientStatus {
+interface KeycloakClientStatus {
   clientId: string
   exists: boolean
   consoleUrl: string | null

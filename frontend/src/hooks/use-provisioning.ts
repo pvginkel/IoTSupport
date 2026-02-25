@@ -30,7 +30,7 @@ import type { ProvisioningPhase } from '@/types/provisioning-events';
 /**
  * State for the provisioning workflow
  */
-export interface ProvisioningState {
+interface ProvisioningState {
   phase: ProvisioningPhase;
   progress: number;
   message: string;
@@ -40,7 +40,7 @@ export interface ProvisioningState {
 /**
  * Result of the provisioning hook
  */
-export interface UseProvisioningResult {
+interface UseProvisioningResult {
   /** Current provisioning state */
   state: ProvisioningState;
   /** Start the provisioning workflow */

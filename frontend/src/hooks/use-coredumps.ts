@@ -8,7 +8,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 
 // UI domain model (camelCase) - coredump summary for list view
-export interface CoredumpSummary {
+interface CoredumpSummary {
   id: number
   deviceId: number
   chip: string
@@ -21,7 +21,7 @@ export interface CoredumpSummary {
 }
 
 // Full coredump with parsed output (returned from detail endpoint)
-export interface CoredumpDetail extends CoredumpSummary {
+interface CoredumpDetail extends CoredumpSummary {
   parsedOutput: string | null
   updatedAt: string
 }

@@ -22,7 +22,7 @@ export interface RotationDashboardDevice {
 }
 
 // Rotation status (camelCase)
-export interface RotationStatus {
+interface RotationStatus {
   countsByState: Record<string, number>
   lastRotationCompletedAt: string | null
   nextScheduledRotation: string | null

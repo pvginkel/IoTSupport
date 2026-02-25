@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { createApiClient, createPlaywrightFetch, apiRequest, type ApiClient } from '../client';
 import { DeviceModelsFactory } from './device-models';
 
-export interface DeviceFactoryOptions {
+interface DeviceFactoryOptions {
   deviceModelId?: number;
   deviceName?: string;
   deviceEntityId?: string;
@@ -11,7 +11,7 @@ export interface DeviceFactoryOptions {
   config?: Record<string, unknown>;
 }
 
-export interface CreatedDevice {
+interface CreatedDevice {
   id: number;
   key: string;
   deviceModelId: number;
@@ -23,7 +23,7 @@ export interface CreatedDevice {
   clientId: string;
 }
 
-export interface CoredumpFactoryOptions {
+interface CoredumpFactoryOptions {
   deviceId: number;
   chip?: string;
   firmwareVersion?: string;
@@ -32,7 +32,7 @@ export interface CoredumpFactoryOptions {
   parsedOutput?: string | null;
 }
 
-export interface CreatedCoredump {
+interface CreatedCoredump {
   id: number;
   deviceId: number;
   chip: string;
