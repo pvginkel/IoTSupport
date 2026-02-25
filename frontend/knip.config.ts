@@ -34,6 +34,7 @@ const config: KnipConfig = {
     '@radix-ui/react-popover',
     '@tanstack/router-devtools',
     'class-variance-authority',
+    'lucide-react',
     'openapi-typescript',
     'postcss',
     'tailwindcss',
