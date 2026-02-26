@@ -293,7 +293,8 @@ class TestDeviceServiceUpdate:
 
                 updated = device_service.update_device(
                     device.id,
-                    config='{"new": "value"}'
+                    config='{"new": "value"}',
+                    active=True,
                 )
 
                 assert updated.config == '{"new": "value"}'
@@ -319,7 +320,7 @@ class TestDeviceServiceUpdate:
                 device = device_service.create_device(device_model_id=model.id, config="{}")
 
                 with pytest.raises(ValidationException):
-                    device_service.update_device(device.id, config="not json")
+                    device_service.update_device(device.id, config="not json", active=True)
 
     def test_update_device_nonexistent_raises(
         self, app: Flask, container: ServiceContainer
@@ -329,7 +330,7 @@ class TestDeviceServiceUpdate:
             device_service = container.device_service()
 
             with pytest.raises(RecordNotFoundException):
-                device_service.update_device(99999, config="{}")
+                device_service.update_device(99999, config="{}", active=True)
 
 
 class TestDeviceServiceDelete:
@@ -774,7 +775,8 @@ class TestDeviceServiceFieldExtraction:
                 # Update with new values
                 updated = device_service.update_device(
                     device.id,
-                    config='{"deviceName": "New Name", "enableOTA": false}'
+                    config='{"deviceName": "New Name", "enableOTA": false}',
+                    active=True,
                 )
 
                 assert updated.device_name == "New Name"
@@ -1132,7 +1134,7 @@ class TestDeviceServiceSchemaValidation:
 
                 # Update with invalid config (missing required field)
                 with pytest.raises(ValidationException):
-                    device_service.update_device(device.id, config='{"other": "value"}')
+                    device_service.update_device(device.id, config='{"other": "value"}', active=True)
 
     def test_create_device_without_schema_skips_validation(
         self, app: Flask, container: ServiceContainer
@@ -1162,3 +1164,136 @@ class TestDeviceServiceSchemaValidation:
                 )
 
                 assert device.id is not None
+
+
+class TestDeviceServiceActiveFlag:
+    """Tests for the active flag on devices."""
+
+    def test_update_device_set_inactive(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test deactivating an active device via update."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="patch1", name="Patch Test")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+
+                assert device.active is True
+
+                result = device_service.update_device(device.id, config="{}", active=False)
+
+                assert result.active is False
+                assert result.id == device.id
+
+    def test_update_device_set_active(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test reactivating an inactive device via update."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="patch2", name="Patch Test 2")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.active = False
+                container.db_session().flush()
+
+                result = device_service.update_device(device.id, config="{}", active=True)
+
+                assert result.active is True
+
+    def test_update_device_queued_does_not_cancel_rotation(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that deactivating a QUEUED device does not change rotation state."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="patch3", name="Patch Test 3")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.QUEUED.value
+                container.db_session().flush()
+
+                result = device_service.update_device(device.id, config="{}", active=False)
+
+                assert result.active is False
+                assert result.rotation_state == RotationState.QUEUED.value
+
+    def test_update_device_pending_does_not_cancel_rotation(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that deactivating a PENDING device does not change rotation state."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="patch4", name="Patch Test 4")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.PENDING.value
+                container.db_session().flush()
+
+                result = device_service.update_device(device.id, config="{}", active=False)
+
+                assert result.active is False
+                assert result.rotation_state == RotationState.PENDING.value
+
+    def test_new_device_defaults_to_active(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that newly created devices default to active=True."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="patch6", name="Patch Test 6")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+
+                assert device.active is True

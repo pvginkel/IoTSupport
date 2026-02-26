@@ -164,7 +164,7 @@ def update_device(
 
     try:
         data = DeviceUpdateSchema.model_validate(request.get_json())
-        device = device_service.update_device(device_id, config=data.config)
+        device = device_service.update_device(device_id, config=data.config, active=data.active)
 
         return DeviceResponseSchema.model_validate(device).model_dump()
 

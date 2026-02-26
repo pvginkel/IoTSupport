@@ -69,6 +69,20 @@
       "rotation_state": "TIMEOUT",
       "last_rotation_completed_at": "3 weeks ago",
       "last_rotation_attempt_at": "2 weeks ago"
+    },
+    {
+      "key": "stu22334",
+      "model_code": "thermostat",
+      "active": false,
+      "config": {
+        "deviceEntityId": "climate.attic",
+        "deviceName": "Attic Thermostat (Decommissioned)",
+        "enableOTA": false,
+        "targetTemp": 60,
+        "mode": "off"
+      },
+      "rotation_state": "OK",
+      "last_rotation_completed_at": "2 weeks ago"
     }
   ]
 }

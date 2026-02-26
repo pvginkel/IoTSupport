@@ -36,6 +36,10 @@ class DeviceUpdateSchema(BaseModel):
         ...,
         description="Device configuration as JSON string",
     )
+    active: bool = Field(
+        ...,
+        description="Whether device participates in automatic fleet rotation",
+    )
 
     @field_validator("config")
     @classmethod
@@ -56,6 +60,7 @@ class DeviceSummarySchema(BaseModel):
     id: int = Field(..., description="Device ID")
     key: str = Field(..., description="Unique 8-character device key")
     device_model_id: int = Field(..., description="Device model ID")
+    active: bool = Field(..., description="Whether device participates in automatic fleet rotation")
     device_name: str | None = Field(None, description="Device name from config")
     device_entity_id: str | None = Field(None, description="Device entity ID from config")
     enable_ota: bool | None = Field(None, description="OTA enabled flag from config")
@@ -84,6 +89,7 @@ class DeviceResponseSchema(BaseModel):
     key: str = Field(..., description="Unique 8-character device key")
     device_model_id: int = Field(..., description="Device model ID")
     device_model: DeviceModelInfoSchema = Field(..., description="Device model details")
+    active: bool = Field(..., description="Whether device participates in automatic fleet rotation")
     config: str = Field(..., description="Device configuration as JSON string")
     device_name: str | None = Field(None, description="Device name from config")
     device_entity_id: str | None = Field(None, description="Device entity ID from config")

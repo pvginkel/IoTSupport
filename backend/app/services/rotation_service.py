@@ -81,9 +81,10 @@ class RotationService:
         """Get current rotation status across all devices.
 
         Returns:
-            Dict with counts_by_state, pending_device_id, and last_rotation_completed_at
+            Dict with counts_by_state, inactive count, pending_device_id,
+            and last_rotation_completed_at
         """
-        # Count devices by state
+        # Count devices by rotation state (includes both active and inactive)
         counts_by_state = {}
         for state in RotationState:
             stmt = select(func.count()).select_from(Device).where(
@@ -91,6 +92,12 @@ class RotationService:
             )
             count = self.db.execute(stmt).scalar() or 0
             counts_by_state[state.value] = count
+
+        # Count inactive devices (orthogonal to rotation state)
+        inactive_stmt = select(func.count()).select_from(Device).where(
+            Device.active == False  # noqa: E712
+        )
+        inactive_count = self.db.execute(inactive_stmt).scalar() or 0
 
         # Get currently pending device
         pending_stmt = select(Device).where(
@@ -115,20 +122,25 @@ class RotationService:
 
         return {
             "counts_by_state": counts_by_state,
+            "inactive": inactive_count,
             "pending_device_id": pending_device_id,
             "last_rotation_completed_at": last_completion,
             "next_scheduled_rotation": next_scheduled,
         }
 
     def trigger_fleet_rotation(self) -> int:
-        """Queue all OK devices for rotation.
+        """Queue all active OK devices for rotation.
 
-        Sets all devices with OK state to QUEUED.
+        Sets all active devices with OK state to QUEUED.
+        Inactive devices are skipped regardless of their rotation state.
 
         Returns:
             Number of devices queued
         """
-        stmt = select(Device).where(Device.rotation_state == RotationState.OK.value)
+        stmt = select(Device).where(
+            Device.rotation_state == RotationState.OK.value,
+            Device.active == True,  # noqa: E712
+        )
         devices = list(self.db.scalars(stmt).all())
 
         for device in devices:
@@ -428,12 +440,13 @@ class RotationService:
         """Get device dashboard status grouped by health category.
 
         Groups devices into:
-        - healthy: OK, QUEUED, or PENDING states
-        - warning: TIMEOUT state, under critical threshold days
-        - critical: TIMEOUT state, at or over critical threshold days
+        - inactive: devices with active=False (checked first, before state-based grouping)
+        - healthy: active devices in OK, QUEUED, or PENDING states
+        - warning: active TIMEOUT devices, under critical threshold days
+        - critical: active TIMEOUT devices, at or over critical threshold days
 
         Returns:
-            Dict with healthy, warning, critical device lists and counts
+            Dict with healthy, warning, critical, inactive device lists and counts
         """
         from sqlalchemy.orm import joinedload
 
@@ -448,6 +461,7 @@ class RotationService:
         healthy: list[dict[str, Any]] = []
         warning: list[dict[str, Any]] = []
         critical: list[dict[str, Any]] = []
+        inactive: list[dict[str, Any]] = []
 
         for device in devices:
             # Calculate days since rotation
@@ -461,12 +475,18 @@ class RotationService:
                 "key": device.key,
                 "device_name": device.device_name,
                 "device_model_code": device.device_model.code,
+                "active": device.active,
                 "rotation_state": device.rotation_state,
                 "last_rotation_completed_at": device.last_rotation_completed_at,
                 "days_since_rotation": days_since,
             }
 
-            # Categorize by state
+            # Inactive devices go to their own group, regardless of rotation state
+            if not device.active:
+                inactive.append(device_data)
+                continue
+
+            # Categorize active devices by rotation state
             if device.rotation_state == RotationState.TIMEOUT.value:
                 # TIMEOUT devices go to warning or critical based on time
                 if days_since is not None and days_since >= threshold_days:
@@ -481,9 +501,11 @@ class RotationService:
             "healthy": healthy,
             "warning": warning,
             "critical": critical,
+            "inactive": inactive,
             "counts": {
                 "healthy": len(healthy),
                 "warning": len(warning),
                 "critical": len(critical),
+                "inactive": len(inactive),
             },
         }
