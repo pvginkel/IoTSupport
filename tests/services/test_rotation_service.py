@@ -834,3 +834,393 @@ class TestRotationServiceMqttNotification:
                     assert topic == "iotsupport/updates/provisioning"
                     payload = json.loads(payload_str)
                     assert payload["client_id"] == device_client_id
+
+
+class TestRotationServiceActiveFlag:
+    """Tests for active flag behavior in rotation operations."""
+
+    def test_fleet_rotation_skips_inactive_devices(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that fleet rotation only queues active OK devices."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actv1", name="Active Test 1")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+
+                # 3 active OK devices
+                d1 = device_service.create_device(device_model_id=model.id, config="{}")
+                d2 = device_service.create_device(device_model_id=model.id, config="{}")
+                d3 = device_service.create_device(device_model_id=model.id, config="{}")
+
+                # 1 inactive OK device
+                d4 = device_service.create_device(device_model_id=model.id, config="{}")
+                d4.active = False
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                count = rotation_service.trigger_fleet_rotation()
+
+                assert count == 3
+                assert d1.rotation_state == RotationState.QUEUED.value
+                assert d2.rotation_state == RotationState.QUEUED.value
+                assert d3.rotation_state == RotationState.QUEUED.value
+                # Inactive device remains in OK state
+                assert d4.rotation_state == RotationState.OK.value
+
+    def test_fleet_rotation_all_inactive_queues_zero(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test fleet rotation when all OK devices are inactive."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actv2", name="Active Test 2")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+
+                d1 = device_service.create_device(device_model_id=model.id, config="{}")
+                d2 = device_service.create_device(device_model_id=model.id, config="{}")
+                d1.active = False
+                d2.active = False
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                count = rotation_service.trigger_fleet_rotation()
+
+                assert count == 0
+                assert d1.rotation_state == RotationState.OK.value
+                assert d2.rotation_state == RotationState.OK.value
+
+    def test_fleet_rotation_inactive_queued_device_untouched(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that inactive QUEUED device is not affected by fleet rotation."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actv3", name="Active Test 3")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+
+                # 2 active OK devices
+                d1 = device_service.create_device(device_model_id=model.id, config="{}")
+                d2 = device_service.create_device(device_model_id=model.id, config="{}")
+
+                # 1 inactive QUEUED device (from a previous rotation)
+                d3 = device_service.create_device(device_model_id=model.id, config="{}")
+                d3.active = False
+                d3.rotation_state = RotationState.QUEUED.value
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                count = rotation_service.trigger_fleet_rotation()
+
+                # Only active OK devices queued
+                assert count == 2
+                assert d1.rotation_state == RotationState.QUEUED.value
+                assert d2.rotation_state == RotationState.QUEUED.value
+                # Inactive device stays QUEUED (not affected by fleet rotation)
+                assert d3.rotation_state == RotationState.QUEUED.value
+
+    def test_single_device_rotation_works_for_inactive(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that single-device rotation trigger works for inactive devices."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actv4", name="Active Test 4")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.active = False
+                container.db_session().flush()
+
+                # Single-device rotation should still work
+                result = device_service.trigger_rotation(device.id)
+
+                assert result == "queued"
+                assert device.rotation_state == RotationState.QUEUED.value
+
+    def test_rotation_status_inactive_count(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that get_rotation_status includes correct inactive count."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actv5", name="Active Test 5")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+
+                # 2 active devices
+                device_service.create_device(device_model_id=model.id, config="{}")
+                device_service.create_device(device_model_id=model.id, config="{}")
+
+                # 1 inactive device
+                d3 = device_service.create_device(device_model_id=model.id, config="{}")
+                d3.active = False
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                status = rotation_service.get_rotation_status()
+
+                assert status["inactive"] == 1
+                # counts_by_state still includes all devices
+                assert status["counts_by_state"][RotationState.OK.value] == 3
+
+    def test_rotation_status_no_inactive(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that inactive count is 0 when all devices are active."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actv6", name="Active Test 6")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device_service.create_device(device_model_id=model.id, config="{}")
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                status = rotation_service.get_rotation_status()
+
+                assert status["inactive"] == 0
+
+    def test_rotation_status_all_inactive(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that inactive count equals total when all devices are inactive."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actv7", name="Active Test 7")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                d1 = device_service.create_device(device_model_id=model.id, config="{}")
+                d2 = device_service.create_device(device_model_id=model.id, config="{}")
+                d1.active = False
+                d2.active = False
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                status = rotation_service.get_rotation_status()
+
+                assert status["inactive"] == 2
+
+    def test_dashboard_inactive_ok_device_in_inactive_group(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that inactive OK device appears in inactive group, not healthy."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actv8", name="Active Test 8")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.active = False
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                result = rotation_service.get_dashboard_status()
+
+                assert result["counts"]["inactive"] == 1
+                assert result["counts"]["healthy"] == 0
+                assert len(result["inactive"]) == 1
+                assert result["inactive"][0]["key"] == device.key
+                assert result["inactive"][0]["active"] is False
+
+    def test_dashboard_inactive_timeout_device_in_inactive_group(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that inactive TIMEOUT device appears in inactive group, not warning/critical."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actv9", name="Active Test 9")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.active = False
+                device.rotation_state = RotationState.TIMEOUT.value
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                result = rotation_service.get_dashboard_status()
+
+                assert result["counts"]["inactive"] == 1
+                assert result["counts"]["warning"] == 0
+                assert result["counts"]["critical"] == 0
+                assert len(result["inactive"]) == 1
+                assert result["inactive"][0]["key"] == device.key
+
+    def test_dashboard_mixed_active_and_inactive(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test dashboard with mix of active and inactive devices."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actv10", name="Active Test 10")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+
+                # Active OK device -> healthy
+                d_active = device_service.create_device(device_model_id=model.id, config="{}")
+                d_active.rotation_state = RotationState.OK.value
+
+                # Inactive OK device -> inactive
+                d_inactive = device_service.create_device(device_model_id=model.id, config="{}")
+                d_inactive.active = False
+                d_inactive.rotation_state = RotationState.OK.value
+
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                result = rotation_service.get_dashboard_status()
+
+                assert result["counts"]["healthy"] == 1
+                assert result["counts"]["inactive"] == 1
+
+                healthy_keys = {d["key"] for d in result["healthy"]}
+                inactive_keys = {d["key"] for d in result["inactive"]}
+
+                assert d_active.key in healthy_keys
+                assert d_inactive.key in inactive_keys
+
+    def test_dashboard_no_inactive_devices(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test dashboard with no inactive devices shows empty inactive list."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actv11", name="Active Test 11")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device_service.create_device(device_model_id=model.id, config="{}")
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                result = rotation_service.get_dashboard_status()
+
+                assert result["inactive"] == []
+                assert result["counts"]["inactive"] == 0
+
+    def test_dashboard_active_field_in_device_data(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that dashboard device data includes the active field."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actv12", name="Active Test 12")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device_service.create_device(device_model_id=model.id, config="{}")
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                result = rotation_service.get_dashboard_status()
+
+                assert result["healthy"][0]["active"] is True

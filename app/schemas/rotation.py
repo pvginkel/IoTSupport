@@ -10,8 +10,12 @@ class RotationStatusSchema(BaseModel):
 
     counts_by_state: dict[str, int] = Field(
         ...,
-        description="Count of devices in each rotation state",
+        description="Count of devices in each rotation state (includes both active and inactive devices)",
         examples=[{"OK": 10, "QUEUED": 2, "PENDING": 1, "TIMEOUT": 0}],
+    )
+    inactive: int = Field(
+        ...,
+        description="Count of devices with active=False (orthogonal to rotation state)",
     )
     pending_device_id: int | None = Field(
         None,
@@ -64,6 +68,7 @@ class DashboardDeviceSchema(BaseModel):
     key: str = Field(..., description="Unique 8-character device key")
     device_name: str | None = Field(None, description="Device name from config")
     device_model_code: str = Field(..., description="Device model code")
+    active: bool = Field(..., description="Whether device participates in automatic fleet rotation")
     rotation_state: str = Field(..., description="Current rotation state")
     last_rotation_completed_at: datetime | None = Field(
         None, description="When last rotation completed"
@@ -88,8 +93,12 @@ class DashboardResponseSchema(BaseModel):
         ...,
         description="Devices in critical state (TIMEOUT, over critical threshold)",
     )
+    inactive: list[DashboardDeviceSchema] = Field(
+        ...,
+        description="Devices with active=False, excluded from rotation",
+    )
     counts: dict[str, int] = Field(
         ...,
         description="Count of devices in each category",
-        examples=[{"healthy": 10, "warning": 2, "critical": 1}],
+        examples=[{"healthy": 10, "warning": 2, "critical": 1, "inactive": 0}],
     )

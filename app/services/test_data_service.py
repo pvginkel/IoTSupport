@@ -156,10 +156,14 @@ class TestDataService:
             device_entity_id = config.get("deviceEntityId")
             enable_ota = config.get("enableOTA")
 
+            # Active flag defaults to True if not specified
+            active = device_data.get("active", True)
+
             device = Device(
                 key=key,
                 device_model_id=model_id,
                 config=json.dumps(config),
+                active=active,
                 rotation_state=rotation_state,
                 last_rotation_completed_at=last_rotation_completed_at,
                 last_rotation_attempt_at=last_rotation_attempt_at,

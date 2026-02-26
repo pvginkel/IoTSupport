@@ -325,14 +325,15 @@ class DeviceService:
                 f"database operation failed: {e}"
             ) from e
 
-    def update_device(self, device_id: int, config: str) -> Device:
-        """Update a device's configuration.
+    def update_device(self, device_id: int, config: str, active: bool) -> Device:
+        """Update a device's configuration and active status.
 
         Updates the config, syncs to Keycloak, and notifies the device via MQTT.
 
         Args:
             device_id: Device ID
             config: New configuration JSON string
+            active: Whether device participates in automatic fleet rotation
 
         Returns:
             Updated Device instance
@@ -355,6 +356,7 @@ class DeviceService:
         self._validate_config_schema(config, device.device_model.config_schema)
 
         device.config = config
+        device.active = active
         # Extract and apply config fields for display
         self._apply_config_fields(device, config)
         self.db.flush()

@@ -62,6 +62,11 @@ class Device(db.Model):  # type: ignore[name-defined]
     device_entity_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     enable_ota: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
+    # Whether this device participates in automatic fleet rotation
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
+
     # Rotation state machine
     rotation_state: Mapped[str] = mapped_column(
         String(20), nullable=False, default=RotationState.OK.value

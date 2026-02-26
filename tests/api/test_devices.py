@@ -293,7 +293,7 @@ class TestDevicesUpdate:
         with patch.object(container.keycloak_admin_service(), "update_client_metadata"):
             response = client.put(
                 f"/api/devices/{device_id}",
-                json={"config": '{"new": "value"}'},
+                json={"config": '{"new": "value"}', "active": True},
             )
 
         assert response.status_code == 200
@@ -305,7 +305,7 @@ class TestDevicesUpdate:
         """Test updating a nonexistent device returns 404."""
         response = client.put(
             "/api/devices/99999",
-            json={"config": "{}"},
+            json={"config": "{}", "active": True},
         )
 
         assert response.status_code == 404
@@ -341,7 +341,7 @@ class TestDevicesUpdate:
         ):
             response = client.put(
                 f"/api/devices/{device_id}",
-                json={"config": '{"setting": "new"}'},
+                json={"config": '{"setting": "new"}', "active": True},
             )
 
             assert response.status_code == 200
@@ -1210,3 +1210,170 @@ class TestDevicesLogs:
         response = client.get(f"/api/devices/{device_id}/logs?start=not-a-date")
 
         assert response.status_code == 400
+
+
+class TestDevicesUpdateActiveFlag:
+    """Tests for active flag via PUT /api/devices/<id>."""
+
+    def test_update_device_set_inactive(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test deactivating a device via PUT."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="ptch1", name="Patch Test")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device_id = device.id
+
+        with patch.object(container.keycloak_admin_service(), "update_client_metadata"):
+            response = client.put(
+                f"/api/devices/{device_id}",
+                json={"config": "{}", "active": False},
+            )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["active"] is False
+        assert data["id"] == device_id
+
+    def test_update_device_set_active(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test reactivating a device via PUT."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="ptch2", name="Patch Test 2")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.active = False
+                container.db_session().flush()
+                device_id = device.id
+
+        with patch.object(container.keycloak_admin_service(), "update_client_metadata"):
+            response = client.put(
+                f"/api/devices/{device_id}",
+                json={"config": "{}", "active": True},
+            )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["active"] is True
+
+
+class TestDevicesActiveInListResponse:
+    """Tests for active field visibility in device list/detail responses."""
+
+    def test_list_devices_includes_active_field(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that device list response includes active boolean."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actlst1", name="Active List Test")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device_service.create_device(device_model_id=model.id, config="{}")
+                d2 = device_service.create_device(device_model_id=model.id, config="{}")
+                d2.active = False
+                container.db_session().flush()
+
+        response = client.get("/api/devices")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["devices"]) == 2
+
+        # All devices should have the active field
+        for device_data in data["devices"]:
+            assert "active" in device_data
+
+    def test_get_device_includes_active_field(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that device detail response includes active boolean."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="actget1", name="Active Get Test")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device_id = device.id
+
+        response = client.get(f"/api/devices/{device_id}")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "active" in data
+        assert data["active"] is True
+
+
+class TestSingleDeviceRotationForInactive:
+    """Tests for single-device rotation on inactive devices."""
+
+    def test_single_rotation_works_for_inactive_device(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that POST /devices/<id>/rotate works for inactive devices."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="sinrot1", name="Single Rot Test")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.active = False
+                container.db_session().flush()
+                device_id = device.id
+
+        response = client.post(f"/api/devices/{device_id}/rotate")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["status"] == "queued"
