@@ -238,6 +238,7 @@
               {
                 "critical": 1,
                 "healthy": 10,
+                "inactive": 0,
                 "warning": 2
               }
             ],
@@ -260,6 +261,14 @@
             "title": "Healthy",
             "type": "array"
           },
+          "inactive": {
+            "description": "Devices with active=False, excluded from rotation",
+            "items": {
+              "$ref": "#/components/schemas/DashboardResponseSchema.57872a8.DashboardDeviceSchema"
+            },
+            "title": "Inactive",
+            "type": "array"
+          },
           "warning": {
             "description": "Devices in warning state (TIMEOUT, under critical threshold)",
             "items": {
@@ -273,6 +282,7 @@
           "healthy",
           "warning",
           "critical",
+          "inactive",
           "counts"
         ],
         "title": "DashboardResponseSchema",
@@ -281,6 +291,11 @@
       "DashboardResponseSchema.57872a8.DashboardDeviceSchema": {
         "description": "Device summary for dashboard display.",
         "properties": {
+          "active": {
+            "description": "Whether device participates in automatic fleet rotation",
+            "title": "Active",
+            "type": "boolean"
+          },
           "days_since_rotation": {
             "anyOf": [
               {
@@ -346,9 +361,86 @@
           "id",
           "key",
           "device_model_code",
+          "active",
           "rotation_state"
         ],
         "title": "DashboardDeviceSchema",
+        "type": "object"
+      },
+      "DeploymentTriggerRequestSchema.6b6ce9f": {
+        "description": "Request schema for triggering version deployment events in testing mode.",
+        "properties": {
+          "changelog": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional banner text accompanying the deployment notification",
+            "examples": [
+              "New filters, improved performance, and bug fixes."
+            ],
+            "title": "Changelog"
+          },
+          "request_id": {
+            "description": "Correlation identifier associated with an SSE subscriber",
+            "examples": [
+              "playwright-run-1234"
+            ],
+            "title": "Request Id",
+            "type": "string"
+          },
+          "version": {
+            "description": "Frontend version string to broadcast",
+            "examples": [
+              "2024.03.15+abc123"
+            ],
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "version"
+        ],
+        "title": "DeploymentTriggerRequestSchema",
+        "type": "object"
+      },
+      "DeploymentTriggerResponseSchema.6b6ce9f": {
+        "description": "Response schema for deployment trigger acknowledgements.",
+        "properties": {
+          "delivered": {
+            "description": "Whether the event was delivered immediately to an active subscriber",
+            "examples": [
+              true
+            ],
+            "title": "Delivered",
+            "type": "boolean"
+          },
+          "request_id": {
+            "description": "Echoed correlation identifier",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "status": {
+            "description": "Delivery status message",
+            "examples": [
+              "delivered"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "delivered",
+          "status"
+        ],
+        "title": "DeploymentTriggerResponseSchema",
         "type": "object"
       },
       "DeviceCreateSchema.d48fbce": {
@@ -445,6 +537,11 @@
       "DeviceListResponseSchema.d48fbce.DeviceSummarySchema": {
         "description": "Summary schema for device list responses.",
         "properties": {
+          "active": {
+            "description": "Whether device participates in automatic fleet rotation",
+            "title": "Active",
+            "type": "boolean"
+          },
           "device_entity_id": {
             "anyOf": [
               {
@@ -537,6 +634,7 @@
           "id",
           "key",
           "device_model_id",
+          "active",
           "rotation_state"
         ],
         "title": "DeviceSummarySchema",
@@ -1043,6 +1141,11 @@
       "DeviceResponseSchema.d48fbce": {
         "description": "Response schema for device details.",
         "properties": {
+          "active": {
+            "description": "Whether device participates in automatic fleet rotation",
+            "title": "Active",
+            "type": "boolean"
+          },
           "client_id": {
             "description": "Keycloak client ID",
             "title": "Client Id",
@@ -1176,6 +1279,7 @@
           "key",
           "device_model_id",
           "device_model",
+          "active",
           "config",
           "rotation_state",
           "client_id",
@@ -1247,6 +1351,11 @@
       "DeviceUpdateSchema.d48fbce": {
         "description": "Request schema for updating a device.",
         "properties": {
+          "active": {
+            "description": "Whether device participates in automatic fleet rotation",
+            "title": "Active",
+            "type": "boolean"
+          },
           "config": {
             "description": "Device configuration as JSON string",
             "title": "Config",
@@ -1254,7 +1363,8 @@
           }
         },
         "required": [
-          "config"
+          "config",
+          "active"
         ],
         "title": "DeviceUpdateSchema",
         "type": "object"
@@ -1604,7 +1714,7 @@
             "additionalProperties": {
               "type": "integer"
             },
-            "description": "Count of devices in each rotation state",
+            "description": "Count of devices in each rotation state (includes both active and inactive devices)",
             "examples": [
               {
                 "OK": 10,
@@ -1615,6 +1725,11 @@
             ],
             "title": "Counts By State",
             "type": "object"
+          },
+          "inactive": {
+            "description": "Count of devices with active=False (orthogonal to rotation state)",
+            "title": "Inactive",
+            "type": "integer"
           },
           "last_rotation_completed_at": {
             "anyOf": [
@@ -1658,7 +1773,8 @@
           }
         },
         "required": [
-          "counts_by_state"
+          "counts_by_state",
+          "inactive"
         ],
         "title": "RotationStatusSchema",
         "type": "object"
@@ -1743,6 +1859,160 @@
         "title": "SubscriptionEntrySchema",
         "type": "object"
       },
+      "TaskEventRequestSchema.6b6ce9f": {
+        "description": "Request schema for sending fake task events in testing mode.",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional event-specific data payload",
+            "examples": [
+              {
+                "text": "Processing...",
+                "value": 0.5
+              }
+            ],
+            "title": "Data"
+          },
+          "event_type": {
+            "description": "Type of task event to send",
+            "enum": [
+              "task_started",
+              "progress_update",
+              "task_completed",
+              "task_failed"
+            ],
+            "examples": [
+              "progress_update"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "request_id": {
+            "description": "Request ID of the SSE connection to send the event to",
+            "examples": [
+              "playwright-run-1234"
+            ],
+            "title": "Request Id",
+            "type": "string"
+          },
+          "task_id": {
+            "description": "Task identifier for the event",
+            "examples": [
+              "task-xyz-456"
+            ],
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "task_id",
+          "event_type"
+        ],
+        "title": "TaskEventRequestSchema",
+        "type": "object"
+      },
+      "TaskEventResponseSchema.6b6ce9f": {
+        "description": "Response schema for task event send acknowledgement.",
+        "properties": {
+          "delivered": {
+            "description": "Whether the event was delivered successfully",
+            "examples": [
+              true
+            ],
+            "title": "Delivered",
+            "type": "boolean"
+          },
+          "event_type": {
+            "description": "Echoed event type",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "request_id": {
+            "description": "Echoed request ID",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "task_id": {
+            "description": "Echoed task ID",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "task_id",
+          "event_type",
+          "delivered"
+        ],
+        "title": "TaskEventResponseSchema",
+        "type": "object"
+      },
+      "TaskStartRequestSchema.6b6ce9f": {
+        "description": "Request schema for starting a test task.",
+        "properties": {
+          "params": {
+            "additionalProperties": true,
+            "description": "Task parameters (steps, delay, error_message)",
+            "examples": [
+              {
+                "delay": 0.1,
+                "steps": 3
+              }
+            ],
+            "title": "Params",
+            "type": "object"
+          },
+          "task_type": {
+            "default": "demo_task",
+            "description": "Type of test task to start",
+            "enum": [
+              "demo_task",
+              "failing_task"
+            ],
+            "examples": [
+              "demo_task"
+            ],
+            "title": "Task Type",
+            "type": "string"
+          }
+        },
+        "title": "TaskStartRequestSchema",
+        "type": "object"
+      },
+      "TaskStartResponseSchema.6b6ce9f": {
+        "description": "Response schema for test task start.",
+        "properties": {
+          "status": {
+            "default": "started",
+            "description": "Task status",
+            "examples": [
+              "started"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "description": "Unique task identifier",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "title": "TaskStartResponseSchema",
+        "type": "object"
+      },
       "TestCoredumpCreateSchema.355d24f": {
         "description": "Request schema for creating a test coredump record.",
         "properties": {
@@ -1793,6 +2063,30 @@
           "device_id"
         ],
         "title": "TestCoredumpCreateSchema",
+        "type": "object"
+      },
+      "TestErrorResponseSchema.6b6ce9f": {
+        "description": "Error response schema for testing endpoints.",
+        "properties": {
+          "error": {
+            "description": "Error message",
+            "title": "Error",
+            "type": "string"
+          },
+          "status": {
+            "description": "Error status code",
+            "examples": [
+              "not_found"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "status"
+        ],
+        "title": "TestErrorResponseSchema",
         "type": "object"
       },
       "TestSessionCreateSchema.e510e64": {
@@ -4029,10 +4323,41 @@
     },
     "/api/testing/deployments/version": {
       "post": {
-        "description": "Request body:     request_id: client request ID for pending version storage     version: version string to broadcast     changelog: optional changelog text",
+        "description": "",
         "operationId": "post__api_testing_deployments_version",
         "parameters": [],
-        "responses": {},
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeploymentTriggerRequestSchema.6b6ce9f"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentTriggerResponseSchema.6b6ce9f"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
         "summary": "Trigger a version event for integration testing.",
         "tags": []
       }
@@ -4183,12 +4508,84 @@
         "tags": []
       }
     },
+    "/api/testing/sse/task-event": {
+      "post": {
+        "description": "Allows integration tests to simulate task events without running actual background tasks. The event is sent directly to the SSE connection identified by request_id.",
+        "operationId": "post__api_testing_sse_task-event",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskEventRequestSchema.6b6ce9f"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskEventResponseSchema.6b6ce9f"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestErrorResponseSchema.6b6ce9f"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Send a fake task event to a specific SSE connection for testing.",
+        "tags": []
+      }
+    },
     "/api/testing/tasks/start": {
       "post": {
-        "description": "Request body:     task_type: \"demo_task\" or \"failing_task\"     params: dict of task parameters (steps, delay, error_message)",
+        "description": "",
         "operationId": "post__api_testing_tasks_start",
         "parameters": [],
-        "responses": {},
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskStartRequestSchema.6b6ce9f"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStartResponseSchema.6b6ce9f"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
         "summary": "Start a demo or failing task for integration testing.",
         "tags": []
       }

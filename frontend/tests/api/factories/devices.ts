@@ -14,6 +14,7 @@ interface DeviceFactoryOptions {
 interface CreatedDevice {
   id: number;
   key: string;
+  active: boolean;
   deviceModelId: number;
   config: string;
   deviceName: string | null;
@@ -107,6 +108,37 @@ export class DevicesFactory {
     return {
       id: data.id,
       key: data.key,
+      active: data.active,
+      deviceModelId: data.device_model_id,
+      config: data.config,
+      deviceName: data.device_name ?? null,
+      deviceEntityId: data.device_entity_id ?? null,
+      enableOta: data.enable_ota ?? null,
+      rotationState: data.rotation_state,
+      clientId: data.client_id,
+    };
+  }
+
+  /**
+   * Update a device by ID.
+   * Both `active` and `config` are required by the DeviceUpdateSchema.
+   */
+  async update(options: { id: number; active: boolean; config: string }): Promise<CreatedDevice> {
+    const result = await apiRequest(() =>
+      this.client.PUT('/api/devices/{device_id}', {
+        params: { path: { device_id: options.id } },
+        body: {
+          active: options.active,
+          config: options.config,
+        },
+      })
+    );
+
+    const data = result.data!;
+    return {
+      id: data.id,
+      key: data.key,
+      active: data.active,
       deviceModelId: data.device_model_id,
       config: data.config,
       deviceName: data.device_name ?? null,
@@ -142,6 +174,7 @@ export class DevicesFactory {
       return {
         id: data.id,
         key: data.key,
+        active: data.active,
         deviceModelId: data.device_model_id,
         config: data.config,
         deviceName: data.device_name ?? null,

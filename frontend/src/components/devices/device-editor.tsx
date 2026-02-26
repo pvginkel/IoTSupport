@@ -127,6 +127,24 @@ export function DeviceEditor({
             )}
           </div>
 
+          {/* Active indicator (read-only — backend always creates devices as active) */}
+          <div>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={true}
+                readOnly
+                disabled
+                data-testid="devices.editor.active-toggle"
+                className="h-4 w-4 rounded border-border accent-primary"
+              />
+              <span className="text-sm font-medium text-muted-foreground">Active</span>
+            </label>
+            <p className="mt-1 ml-6 text-xs text-muted-foreground">
+              New devices are always created as active
+            </p>
+          </div>
+
           {/* JSON Configuration */}
           <div>
             <div className="mb-2 flex items-center justify-between">

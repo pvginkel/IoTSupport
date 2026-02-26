@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast'
 export interface DeviceSummary {
   id: number
   key: string
+  active: boolean
   deviceModelId: number
   deviceName: string
   deviceEntityId: string
@@ -30,6 +31,7 @@ export interface DeviceSummary {
 export interface Device {
   id: number
   key: string
+  active: boolean
   deviceModelId: number
   deviceModel: {
     id: number
@@ -54,6 +56,7 @@ export interface Device {
 function transformDeviceSummary(apiDevice: {
   id: number
   key: string
+  active?: boolean
   device_model_id: number
   device_name: string | null
   device_entity_id: string | null
@@ -65,6 +68,7 @@ function transformDeviceSummary(apiDevice: {
   return {
     id: apiDevice.id,
     key: apiDevice.key,
+    active: apiDevice.active ?? true,
     deviceModelId: apiDevice.device_model_id,
     deviceName: apiDevice.device_name || '',
     deviceEntityId: apiDevice.device_entity_id || '',
@@ -79,6 +83,7 @@ function transformDeviceSummary(apiDevice: {
 function transformDeviceResponse(apiDevice: {
   id: number
   key: string
+  active?: boolean
   device_model_id: number
   device_model: {
     id: number
@@ -101,6 +106,7 @@ function transformDeviceResponse(apiDevice: {
   return {
     id: apiDevice.id,
     key: apiDevice.key,
+    active: apiDevice.active ?? true,
     deviceModelId: apiDevice.device_model_id,
     deviceModel: {
       id: apiDevice.device_model.id,
@@ -211,16 +217,18 @@ export function useUpdateDevice() {
   return {
     ...mutation,
     mutate: (
-      variables: { id: number; config: string },
+      variables: { id: number; config: string; active: boolean },
       options?: { onSuccess?: () => void; onError?: (error: Error) => void }
     ) => {
       const body: DeviceUpdateSchema_d48fbce = {
+        active: variables.active,
         config: variables.config
       }
       mutation.mutate({ path: { device_id: variables.id }, body }, options)
     },
-    mutateAsync: async (variables: { id: number; config: string }) => {
+    mutateAsync: async (variables: { id: number; config: string; active: boolean }) => {
       const body: DeviceUpdateSchema_d48fbce = {
+        active: variables.active,
         config: variables.config
       }
       return mutation.mutateAsync({ path: { device_id: variables.id }, body })

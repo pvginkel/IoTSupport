@@ -117,6 +117,11 @@ export class DevicesPage {
     return this.page.locator('[data-testid="devices.list.row"]').nth(index);
   }
 
+  // Locator - Active cell within a specific row
+  activeCell(row: Locator): Locator {
+    return row.locator('[data-testid="devices.list.row.active"]');
+  }
+
   // Locators - Editor
   get editor(): Locator {
     return this.page.locator('[data-testid="devices.editor"]');
@@ -132,6 +137,10 @@ export class DevicesPage {
 
   get modelSelect(): Locator {
     return this.page.locator('[data-testid="devices.editor.model-select"]');
+  }
+
+  get activeToggle(): Locator {
+    return this.page.locator('[data-testid="devices.editor.active-toggle"]');
   }
 
   get jsonEditorContainer(): Locator {

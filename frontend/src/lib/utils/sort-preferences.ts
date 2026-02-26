@@ -1,7 +1,7 @@
 const SORT_STORAGE_KEY = 'iot-support-device-sort'
 
 export interface SortPreference {
-  column: 'key' | 'deviceName' | 'deviceEntityId' | 'enableOta' | 'modelName' | 'rotationState' | 'lastCoredumpAt'
+  column: 'key' | 'deviceName' | 'deviceEntityId' | 'enableOta' | 'modelName' | 'rotationState' | 'lastCoredumpAt' | 'active'
   direction: 'asc' | 'desc'
 }
 
@@ -18,7 +18,7 @@ export function getSortPreference(): SortPreference {
     const parsed = JSON.parse(stored) as SortPreference
 
     // Validate the parsed data
-    const validColumns = ['key', 'deviceName', 'deviceEntityId', 'enableOta', 'modelName', 'rotationState', 'lastCoredumpAt']
+    const validColumns = ['key', 'deviceName', 'deviceEntityId', 'enableOta', 'modelName', 'rotationState', 'lastCoredumpAt', 'active']
     const validDirections = ['asc', 'desc']
 
     if (

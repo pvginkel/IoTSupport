@@ -19,6 +19,8 @@ interface UseDeviceFormOptions {
   initialKey?: string
   initialDeviceModelId?: number
   initialConfig?: string
+  /** Initial active state; defaults to true for new devices */
+  initialActive?: boolean
   /** Source device key shown in the title during duplicate flow (not used by the hook) */
   duplicateFrom?: string
   onSave?: () => void
@@ -31,6 +33,7 @@ export function useDeviceForm({
   initialKey = '',
   initialDeviceModelId,
   initialConfig = DEFAULT_TEMPLATE,
+  initialActive = true,
   // duplicateFrom is accepted for callers' convenience but not used in form logic
   onSave: onSaveCallback,
   onCancel: onCancelCallback,
@@ -46,6 +49,9 @@ export function useDeviceForm({
   const formId = mode === 'edit' ? 'DeviceEditor_edit' : mode === 'duplicate' ? 'DeviceEditor_duplicate' : 'DeviceEditor_new'
   const { trackSubmit, trackSuccess, trackError } = useFormInstrumentation({ formId, isOpen: true })
 
+  // Active flag: interactive in edit mode, read-only in new/duplicate
+  const [active, setActive] = useState(initialActive)
+
   // Device model is selectable for new devices, fixed for edits
   const [selectedModelId, setSelectedModelId] = useState<number | undefined>(initialDeviceModelId)
 
@@ -58,15 +64,16 @@ export function useDeviceForm({
   const originalModelId = initialDeviceModelId
   const originalJson = initialConfig
 
-  // Track dirty state
+  // Track dirty state — includes active flag in edit mode
   const isDirty = useMemo(() => {
     if (mode === 'edit') {
-      return jsonConfig !== originalJson
+      const activeChanged = active !== initialActive
+      return jsonConfig !== originalJson || activeChanged
     }
     const modelChanged = selectedModelId !== originalModelId
     const jsonChanged = jsonConfig !== originalJson
     return modelChanged || jsonChanged
-  }, [selectedModelId, jsonConfig, originalModelId, originalJson, mode])
+  }, [selectedModelId, jsonConfig, originalModelId, originalJson, mode, active, initialActive])
 
   // Use ref to track if we're intentionally navigating (bypassing blocker)
   const isNavigatingRef = useRef(false)
@@ -134,7 +141,7 @@ export function useDeviceForm({
       }
 
       updateDevice.mutate(
-        { id: deviceId, config: jsonConfig },
+        { id: deviceId, config: jsonConfig, active },
         {
           onSuccess: () => {
             trackSuccess({ deviceId })
@@ -166,7 +173,7 @@ export function useDeviceForm({
         }
       )
     }
-  }, [selectedModelId, jsonConfig, mode, deviceId, createDevice, updateDevice, validateJson, onSaveCallback, navigate, trackSubmit, trackSuccess, trackError])
+  }, [selectedModelId, jsonConfig, active, mode, deviceId, createDevice, updateDevice, validateJson, onSaveCallback, navigate, trackSubmit, trackSuccess, trackError])
 
   const handleCancel = useCallback(async () => {
     if (isDirty) {
@@ -206,6 +213,8 @@ export function useDeviceForm({
 
   return {
     // State
+    active,
+    setActive,
     jsonConfig,
     jsonError,
     selectedModelId,

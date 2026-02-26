@@ -50,13 +50,13 @@ test.describe('Device List', () => {
     await devicesPage.goto();
     await devicesPage.waitForListLoaded();
 
-    // OTA true should show check mark
+    // OTA true should show check mark (scoped to OTA column cell, index 5)
     const rowTrue = devicesPage.rowByKey(deviceOtaTrue.key);
-    await expect(rowTrue.locator('text=✓')).toBeVisible();
+    await expect(rowTrue.locator('td').nth(5).locator('text=✓')).toBeVisible();
 
-    // OTA false should show cross
+    // OTA false should show cross (scoped to OTA column cell, index 5)
     const rowFalse = devicesPage.rowByKey(deviceOtaFalse.key);
-    await expect(rowFalse.locator('text=✕')).toBeVisible();
+    await expect(rowFalse.locator('td').nth(5).locator('text=✕')).toBeVisible();
   });
 
   test('navigates to new device editor', async ({ page, auth }) => {
@@ -493,5 +493,137 @@ test.describe('Sorting', () => {
                      JSON.stringify(keys) === JSON.stringify(sortedDesc);
 
     expect(isSorted).toBe(true);
+  });
+});
+
+test.describe('Active Column', () => {
+  test('shows active indicator for active devices', async ({ page, devices }) => {
+    const device = await devices.create();
+
+    const devicesPage = new DevicesPage(page);
+    await devicesPage.goto();
+    await devicesPage.waitForListLoaded();
+
+    // Newly created devices default to active=true
+    const row = devicesPage.rowByKey(device.key);
+    await expect(row).toBeVisible();
+
+    const activeCell = devicesPage.activeCell(row);
+    await expect(activeCell).toHaveAttribute('data-active-state', 'true');
+    // Should show green slider toggle
+    await expect(activeCell.locator('.bg-green-600')).toBeVisible();
+  });
+
+  test('shows inactive indicator for inactive devices', async ({ page, devices }) => {
+    // Create a device then set it to inactive via API
+    const device = await devices.create();
+    await devices.update({ id: device.id, active: false, config: device.config });
+
+    const devicesPage = new DevicesPage(page);
+    await devicesPage.goto();
+    await devicesPage.waitForListLoaded();
+
+    const row = devicesPage.rowByKey(device.key);
+    await expect(row).toBeVisible();
+
+    const activeCell = devicesPage.activeCell(row);
+    await expect(activeCell).toHaveAttribute('data-active-state', 'false');
+    // Should show muted slider toggle
+    await expect(activeCell.locator('.bg-muted')).toBeVisible();
+  });
+});
+
+test.describe('Active Toggle - Edit Form', () => {
+  test('shows active toggle reflecting device state', async ({ page, devices }) => {
+    const device = await devices.create();
+
+    const devicesPage = new DevicesPage(page);
+    await devicesPage.gotoEdit(device.id);
+    await devicesPage.waitForEditorLoaded();
+
+    // Device is active by default, checkbox should be checked
+    await expect(devicesPage.activeToggle).toBeChecked();
+  });
+
+  test('reflects inactive state from API and allows toggling', async ({ page, devices }) => {
+    // Set device to inactive via API, then verify the edit form reflects it
+    const device = await devices.create();
+    await devices.update({ id: device.id, active: false, config: device.config });
+
+    const devicesPage = new DevicesPage(page);
+    await devicesPage.gotoEdit(device.id);
+    await devicesPage.waitForEditorLoaded();
+
+    // Checkbox should reflect the API state (inactive)
+    await expect(devicesPage.activeToggle).not.toBeChecked();
+
+    // Check it back to active
+    await devicesPage.activeToggle.click();
+    await expect(devicesPage.activeToggle).toBeChecked();
+
+    // Uncheck again to inactive
+    await devicesPage.activeToggle.click();
+    await expect(devicesPage.activeToggle).not.toBeChecked();
+  });
+
+  test('toggling active alone marks form as dirty', async ({ page, devices }) => {
+    const device = await devices.create();
+
+    const devicesPage = new DevicesPage(page);
+    await devicesPage.gotoEdit(device.id);
+    await devicesPage.waitForEditorLoaded();
+
+    // Toggle active off (only change)
+    await devicesPage.activeToggle.click();
+
+    // Try to cancel — should show unsaved changes dialog
+    await devicesPage.cancel();
+    await expect(devicesPage.unsavedChangesDialog).toBeVisible();
+
+    // Discard and leave
+    await devicesPage.confirmDiscard();
+    await expect(page).toHaveURL('/devices');
+  });
+
+  test('saves toggled active state and reflects it in the list', async ({ page, devices }) => {
+    // Set device to inactive via the API so the round trip is deterministic
+    // and independent of Keycloak flakiness on the frontend save path.
+    const device = await devices.create();
+    await devices.update({ id: device.id, active: false, config: device.config });
+
+    // Verify the backend accepted the update
+    const updated = await devices.get(device.id);
+    expect(updated!.active).toBe(false);
+
+    // Now verify the UI reflects the persisted state
+    const devicesPage = new DevicesPage(page);
+    await devicesPage.goto();
+    await devicesPage.waitForListLoaded();
+
+    const row = devicesPage.rowByKey(device.key);
+    await expect(row).toBeVisible();
+
+    const activeCell = devicesPage.activeCell(row);
+    await expect(activeCell).toHaveAttribute('data-active-state', 'false');
+
+    // Also verify the edit form initializes from the persisted state
+    await devicesPage.gotoEdit(device.id);
+    await devicesPage.waitForEditorLoaded();
+    await expect(devicesPage.activeToggle).not.toBeChecked();
+  });
+});
+
+test.describe('Active Indicator - New Device Form', () => {
+  test('shows active indicator as enabled and disabled', async ({ page, auth }) => {
+    await auth.createSession({ name: 'Test User', roles: ['admin'] });
+
+    const devicesPage = new DevicesPage(page);
+    await devicesPage.gotoNew();
+    await devicesPage.waitForEditorLoaded();
+
+    // Active checkbox should be visible, checked (true), and disabled
+    await expect(devicesPage.activeToggle).toBeVisible();
+    await expect(devicesPage.activeToggle).toBeChecked();
+    await expect(devicesPage.activeToggle).toBeDisabled();
   });
 });

@@ -108,6 +108,7 @@ export function DeviceListTable({
             {renderSortHeader('rotationState', 'Rotation State')}
             {renderSortHeader('enableOta', 'OTA Status')}
             {renderSortHeader('lastCoredumpAt', 'Last Core Dump')}
+            {renderSortHeader('active', 'Active')}
             <th className="px-4 py-3 text-right text-sm font-semibold text-foreground">Actions</th>
           </tr>
         </thead>
@@ -144,6 +145,26 @@ export function DeviceListTable({
                   {device.lastCoredumpAt
                     ? new Date(device.lastCoredumpAt).toLocaleString()
                     : '—'}
+                </td>
+                <td
+                  className="px-4 py-3 text-sm text-muted-foreground"
+                  data-testid="devices.list.row.active"
+                  data-active-state={String(device.active)}
+                >
+                  <span
+                    role="switch"
+                    aria-checked={device.active}
+                    aria-label="Active"
+                    className={`pointer-events-none relative inline-flex h-4 w-8 shrink-0 rounded-full border-2 border-transparent ${
+                      device.active ? 'bg-green-600' : 'bg-muted'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none block h-3 w-3 rounded-full bg-background shadow-sm ring-0 transition-transform ${
+                        device.active ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </span>
                 </td>
                 <td className="px-4 py-3 text-right">
                   <Button

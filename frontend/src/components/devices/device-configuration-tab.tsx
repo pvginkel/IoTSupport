@@ -22,6 +22,8 @@ export function DeviceConfigurationTab({ device }: DeviceConfigurationTabProps) 
   const [provisionModalOpen, setProvisionModalOpen] = useState(false)
 
   const {
+    active,
+    setActive,
     jsonConfig,
     jsonError,
     isPending,
@@ -41,6 +43,7 @@ export function DeviceConfigurationTab({ device }: DeviceConfigurationTabProps) 
     initialKey: device.key,
     initialDeviceModelId: device.deviceModelId,
     initialConfig: device.config,
+    initialActive: device.active,
   })
 
   return (
@@ -70,6 +73,24 @@ export function DeviceConfigurationTab({ device }: DeviceConfigurationTabProps) 
                 {device.deviceModel.name} ({device.deviceModel.code})
               </Link>
             </div>
+          </div>
+
+          {/* Active checkbox */}
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={active}
+                onChange={(e) => setActive(e.target.checked)}
+                disabled={isPending}
+                data-testid="devices.editor.active-toggle"
+                className="h-4 w-4 rounded border-border accent-primary"
+              />
+              <span className="text-sm font-medium text-foreground">Active</span>
+            </label>
+            <p className="mt-1 ml-6 text-xs text-muted-foreground">
+              Whether device participates in automatic fleet rotation
+            </p>
           </div>
 
           {/* JSON Configuration Editor */}
