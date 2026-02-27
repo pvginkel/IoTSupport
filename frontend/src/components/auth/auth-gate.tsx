@@ -82,6 +82,51 @@ function getErrorDisplay(error: Error): { title: string; description: string } {
 }
 
 /**
+ * Screen shown when the user is authenticated but has no app roles.
+ * The backend returns 403 from /api/auth/self in this case.
+ * Offers logout as the only action since nothing else is accessible.
+ */
+function AuthForbidden({ onLogout }: { onLogout: () => void }) {
+  return (
+    <div
+      className="flex h-screen w-full items-center justify-center bg-background"
+      data-testid="auth.gate.forbidden"
+    >
+      <div className="flex max-w-md flex-col items-center gap-4 rounded-lg border border-border bg-card p-8 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+          <svg
+            className="h-6 w-6 text-muted-foreground"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            {/* Lock icon */}
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+            />
+          </svg>
+        </div>
+        <h2 className="text-lg font-semibold text-foreground">No Access</h2>
+        <p className="text-sm text-muted-foreground">
+          Your account is not authorized to use this application. Please contact your administrator to request access.
+        </p>
+        <Button
+          variant="outline"
+          onClick={onLogout}
+          data-testid="auth.gate.forbidden.logout"
+        >
+          Log Out
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Error screen shown when auth check fails (non-401 errors).
  * Displays server-focused messaging since 401s redirect to login.
  */
@@ -130,19 +175,25 @@ function AuthError({ error, onRetry }: { error: Error; onRetry: () => void }) {
  *
  * States:
  * - Loading: Shows blank screen while checking auth
- * - Error (non-401): Shows error screen with retry button
+ * - Forbidden (403): Shows no-access screen with logout button
+ * - Error (non-401/403): Shows error screen with retry button
  * - Unauthenticated (401): Middleware handles redirect, gate shows blank
  * - Authenticated: Renders children
  */
 export function AuthGate({ children }: AuthGateProps) {
-  const { isLoading, isAuthenticated, error, refetch } = useAuthContext();
+  const { isLoading, isAuthenticated, isForbidden, error, refetch, logout } = useAuthContext();
 
   // Show loading state while auth check is in progress
   if (isLoading) {
     return <AuthLoading />;
   }
 
-  // Show error screen for non-401 errors (server errors, network issues)
+  // Show no-access screen when authenticated but lacking app roles (403)
+  if (isForbidden) {
+    return <AuthForbidden onLogout={logout} />;
+  }
+
+  // Show error screen for non-401/403 errors (server errors, network issues)
   if (error) {
     return <AuthError error={error} onRetry={refetch} />;
   }

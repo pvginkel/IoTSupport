@@ -13,6 +13,8 @@ const OUTPUT_DIR = path.join(__dirname, '../src/lib/api/generated');
 const TYPES_FILE = path.join(OUTPUT_DIR, 'types.ts');
 const CLIENT_FILE = path.join(OUTPUT_DIR, 'client.ts');
 const HOOKS_FILE = path.join(OUTPUT_DIR, 'hooks.ts');
+const ROLES_FILE = path.join(OUTPUT_DIR, 'roles.ts');
+const ROLE_MAP_FILE = path.join(OUTPUT_DIR, 'role-map.json');
 
 /**
  * Ensures output directory exists
@@ -467,6 +469,99 @@ function getFriendlyType(spec, path, method, type, typeMap) {
 }
 
 /**
+ * Derives the role constant name from a hook name.
+ * Strips the "use" prefix, lowercases the first character, and appends "Role".
+ * Example: "useDeleteItemsByItemId" -> "deleteItemsByItemIdRole"
+ */
+function hookNameToRoleConstant(hookName) {
+  const withoutUse = hookName.slice(3); // strip "use"
+  return withoutUse.charAt(0).toLowerCase() + withoutUse.slice(1) + 'Role';
+}
+
+/**
+ * Generates role constants (roles.ts) and hook-to-role mapping (role-map.json)
+ * from x-required-role annotations in the OpenAPI spec.
+ *
+ * Only endpoints whose x-required-role differs from the baseline read role
+ * (determined by x-auth-roles.read) get constants generated. The role map
+ * only includes mutation hooks (POST/PUT/PATCH/DELETE) since GET hooks
+ * correspond to reader-level access.
+ */
+function generateRoles(spec) {
+  console.log('🔄 Generating role constants and role map...');
+
+  // Determine the baseline read role from the spec root
+  const readRole = spec['x-auth-roles']?.read;
+  if (!readRole) {
+    console.warn('⚠️  x-auth-roles.read not found in spec; skipping role generation.');
+    return;
+  }
+
+  // Collect role constants and the mutation hook-to-constant mapping
+  const roleConstants = []; // { constantName, roleValue }
+  const roleMap = {};       // hookName -> constantName
+  const roleValues = new Set();
+
+  for (const [apiPath, pathItem] of Object.entries(spec.paths || {})) {
+    for (const [method, operation] of Object.entries(pathItem)) {
+      if (!operation.operationId) continue;
+
+      const requiredRole = operation['x-required-role'];
+      if (!requiredRole) {
+        console.warn(`⚠️  Skipping ${method.toUpperCase()} ${apiPath}: no x-required-role`);
+        continue;
+      }
+
+      // Only generate constants for non-read roles
+      if (requiredRole === readRole) continue;
+
+      const transformedId = transformOperationId(operation.operationId);
+      const hookName = `use${capitalize(transformedId)}`;
+      const constantName = hookNameToRoleConstant(hookName);
+
+      roleConstants.push({ constantName, roleValue: requiredRole });
+      roleValues.add(requiredRole);
+
+      // Only mutation methods go into the role map
+      const isMutation = ['post', 'put', 'patch', 'delete'].includes(method.toLowerCase());
+      if (isMutation) {
+        roleMap[hookName] = constantName;
+      }
+    }
+  }
+
+  // Build the RequiredRole union from distinct non-read role values
+  const unionMembers = Array.from(roleValues).sort().map(v => `"${v}"`).join(' | ');
+
+  // Write roles.ts
+  const lines = [
+    '// Generated role constants - do not edit manually',
+    '',
+  ];
+
+  // Sort constants alphabetically for stable output
+  const sorted = [...roleConstants].sort((a, b) => a.constantName.localeCompare(b.constantName));
+  for (const { constantName, roleValue } of sorted) {
+    lines.push(`export const ${constantName} = "${roleValue}" as const;`);
+  }
+
+  lines.push('');
+  lines.push(`export type RequiredRole = ${unionMembers || 'never'};`);
+  lines.push('');
+
+  writeFileSync(ROLES_FILE, lines.join('\n'));
+  console.log('✅ Role constants generated');
+
+  // Write role-map.json (sorted keys for stable output)
+  const sortedMap = {};
+  for (const key of Object.keys(roleMap).sort()) {
+    sortedMap[key] = roleMap[key];
+  }
+  writeFileSync(ROLE_MAP_FILE, JSON.stringify(sortedMap, null, 2) + '\n');
+  console.log('✅ Role map generated');
+}
+
+/**
  * Main generation function
  */
 async function generateAPI(options = {}) {
@@ -488,12 +583,15 @@ async function generateAPI(options = {}) {
     generateTypes();
     generateClient();
     generateHooks(spec);
+    generateRoles(spec);
 
     console.log('✅ API code generation completed successfully!');
     console.log(`   Generated files:`);
     console.log(`   - ${TYPES_FILE}`);
     console.log(`   - ${CLIENT_FILE}`);
     console.log(`   - ${HOOKS_FILE}`);
+    console.log(`   - ${ROLES_FILE}`);
+    console.log(`   - ${ROLE_MAP_FILE}`);
 
   } catch (error) {
     console.error('❌ API generation failed:', error.message);
@@ -512,4 +610,10 @@ if (process.argv[1] === __filename) {
     .catch(() => process.exit(1));
 }
 
-export { generateAPI };
+export {
+  generateAPI,
+  generateRoles,
+  transformOperationId,
+  capitalize,
+  hookNameToRoleConstant,
+};

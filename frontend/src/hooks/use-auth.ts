@@ -4,7 +4,7 @@
  */
 
 import { useGetAuthSelf, type UserInfoResponseSchema_a535b8c } from '@/lib/api/generated/hooks';
-import { isUnauthorizedError } from '@/lib/api/api-error';
+import { isForbiddenError, isUnauthorizedError } from '@/lib/api/api-error';
 
 /**
  * Frontend user info model.
@@ -25,6 +25,8 @@ export interface UseAuthResult {
   isLoading: boolean;
   isAuthenticated: boolean;
   isUnauthenticated: boolean;
+  /** True when /api/auth/self returns 403 — user is authenticated but has no app roles. */
+  isForbidden: boolean;
   error: Error | null;
   refetch: () => void;
 }
@@ -64,8 +66,9 @@ export function useAuth(): UseAuthResult {
 
   const { data, error, isLoading, refetch } = query;
 
-  // Determine if we have a 401 (unauthenticated) vs a real error
+  // Determine if we have a 401 (unauthenticated) or 403 (forbidden) vs a real error
   const is401 = error ? isUnauthorizedError(error) : false;
+  const is403 = error ? isForbiddenError(error) : false;
 
   // User is authenticated if we have data
   const user = data ? transformUserInfo(data) : null;
@@ -74,14 +77,18 @@ export function useAuth(): UseAuthResult {
   // User is unauthenticated if we got a 401 (not loading, explicit 401)
   const isUnauthenticated = !isLoading && is401;
 
-  // Only surface non-401 errors as actual errors
-  const effectiveError = error && !is401 ? (error as Error) : null;
+  // User is authenticated but has no app roles if we got a 403
+  const isForbidden = !isLoading && is403;
+
+  // Only surface errors that are neither 401 nor 403 as actual failures
+  const effectiveError = error && !is401 && !is403 ? (error as Error) : null;
 
   return {
     user,
     isLoading,
     isAuthenticated,
     isUnauthenticated,
+    isForbidden,
     error: effectiveError,
     refetch: () => void refetch(),
   };

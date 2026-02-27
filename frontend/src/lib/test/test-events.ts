@@ -121,7 +121,7 @@ export interface SseTestEvent extends BaseTestEvent {
 export interface UiStateTestEvent extends BaseTestEvent {
   kind: 'ui_state';
   scope: string;
-  phase: 'loading' | 'ready' | 'open' | 'submit' | 'success' | 'error';
+  phase: 'loading' | 'ready' | 'open' | 'submit' | 'success' | 'error' | 'forbidden';
   metadata?: Record<string, unknown>;
 }
 

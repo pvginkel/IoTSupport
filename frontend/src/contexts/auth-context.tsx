@@ -21,6 +21,8 @@ export interface AuthContextValue {
   user: UserInfo | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  /** True when /api/auth/self returns 403 — user is authenticated but has no app roles. */
+  isForbidden: boolean;
   error: Error | null;
   logout: () => void;
   refetch: () => void;
@@ -57,7 +59,7 @@ function performLogout(): void {
  * Does NOT handle 401 redirects -- that is the middleware's job.
  */
 export function AuthProvider({ children }: AuthProviderProps) {
-  const { user, isLoading, isAuthenticated, error, refetch } = useAuth();
+  const { user, isLoading, isAuthenticated, isForbidden, error, refetch } = useAuth();
 
   // Emit auth state events for test instrumentation
   useEffect(() => {
@@ -78,6 +80,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         metadata: { userId: user.subject },
       };
       emitTestEvent(readyPayload);
+    } else if (isForbidden) {
+      const forbiddenPayload: Omit<UiStateTestEvent, 'timestamp'> = {
+        kind: TestEventKind.UI_STATE,
+        scope: 'auth',
+        phase: 'forbidden',
+      };
+      emitTestEvent(forbiddenPayload);
     } else if (error) {
       const errorPayload: Omit<UiStateTestEvent, 'timestamp'> = {
         kind: TestEventKind.UI_STATE,
@@ -87,12 +96,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       };
       emitTestEvent(errorPayload);
     }
-  }, [isLoading, isAuthenticated, user, error]);
+  }, [isLoading, isAuthenticated, user, isForbidden, error]);
 
   const contextValue: AuthContextValue = {
     user,
     isLoading,
     isAuthenticated,
+    isForbidden,
     error,
     logout: performLogout,
     refetch,
