@@ -1,5 +1,5 @@
 # Multi-stage build for React frontend with NGINX deployment
-FROM node:lts-alpine AS build
+FROM node:lts-slim AS build
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
