@@ -137,11 +137,7 @@ def get_upload_script(
     """
     from flask import render_template
 
-    # Infer backend URL from request
-    # Use X-Forwarded-Proto/Host if behind a reverse proxy, otherwise use request host
-    proto = request.headers.get("X-Forwarded-Proto", request.scheme)
-    host = request.headers.get("X-Forwarded-Host", request.host)
-    backend_url = f"{proto}://{host}"
+    backend_url = request.url_root.rstrip("/")
 
     # Get token URL from config
     token_url = config.oidc_token_url or ""
@@ -180,11 +176,7 @@ def get_upload_script_powershell(
     """
     from flask import render_template
 
-    # Infer backend URL from request
-    # Use X-Forwarded-Proto/Host if behind a reverse proxy, otherwise use request host
-    proto = request.headers.get("X-Forwarded-Proto", request.scheme)
-    host = request.headers.get("X-Forwarded-Host", request.host)
-    backend_url = f"{proto}://{host}"
+    backend_url = request.url_root.rstrip("/")
 
     # Get token URL from config
     token_url = config.oidc_token_url or ""
