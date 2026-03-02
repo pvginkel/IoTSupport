@@ -105,12 +105,14 @@ export default defineConfig({
         target: gatewayProxyTarget,
         changeOrigin: true,
         secure: false,
+        xfwd: true,
       },
       '/api': {
         target: backendProxyTarget,
         changeOrigin: true,
         secure: false,
-      }
+        xfwd: true,
+      },
     },
     watch: process.env.VITE_TEST_MODE === 'true' ? { ignored: ['**'] } : undefined
   },
@@ -121,11 +123,13 @@ export default defineConfig({
         target: gatewayProxyTarget,
         changeOrigin: true,
         secure: false,
+        xfwd: true,
       },
       '/api': {
         target: backendProxyTarget,
         changeOrigin: true,
         secure: false,
+        xfwd: true,
       }
     }
   },
