@@ -9,6 +9,7 @@ from flask import Flask
 
 from app.exceptions import ExternalServiceException, ServiceUnavailableException
 from app.services.container import ServiceContainer
+from app.services.elasticsearch_service import ElasticsearchService
 
 
 class TestElasticsearchServiceQueryLogs:
@@ -685,3 +686,310 @@ class TestElasticsearchServiceBackwardMode:
             # Results should be reversed to chronological order
             assert result.logs[0].message == "Older"
             assert result.logs[1].message == "Newer"
+
+
+class TestElasticsearchServiceSeedLogs:
+    """Tests for in-memory seeded log functionality."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_seeded(self, app: Flask, container: ServiceContainer) -> None:
+        """Ensure seeded logs are cleared between tests."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            es.clear_all_seeded_logs()
+
+    def _get_service(self, app: Flask, container: ServiceContainer) -> ElasticsearchService:
+        with app.app_context():
+            return container.elasticsearch_service()
+
+    def test_seed_logs_generates_entries(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """1500 entries stored, sorted ascending, messages match format."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
+
+            count, ws, we = es.seed_logs("dev.a", 1500, start, end)
+
+            assert count == 1500
+            assert ws == start
+            assert we == end
+
+            entries = es._seeded_logs["dev.a"]
+            assert len(entries) == 1500
+            # Sorted ascending
+            for i in range(len(entries) - 1):
+                assert entries[i].timestamp <= entries[i + 1].timestamp
+            # Message format
+            assert entries[0].message == "Seeded log entry 1"
+            assert entries[1499].message == "Seeded log entry 1500"
+
+    def test_seed_logs_single_entry(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """count=1 produces a single entry at start_time."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            start = datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 3, 1, 13, 0, 0, tzinfo=UTC)
+
+            es.seed_logs("dev.a", 1, start, end)
+
+            entries = es._seeded_logs["dev.a"]
+            assert len(entries) == 1
+            assert entries[0].timestamp == start
+            assert entries[0].message == "Seeded log entry 1"
+
+    def test_seed_logs_two_entries(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """count=2 produces one at start_time and one at end_time."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            start = datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 3, 1, 13, 0, 0, tzinfo=UTC)
+
+            es.seed_logs("dev.a", 2, start, end)
+
+            entries = es._seeded_logs["dev.a"]
+            assert len(entries) == 2
+            assert entries[0].timestamp == start
+            assert entries[1].timestamp == end
+
+    def test_seed_logs_replaces_previous(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Re-seeding same entity_id replaces old data."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
+
+            es.seed_logs("dev.a", 10, start, end)
+            assert len(es._seeded_logs["dev.a"]) == 10
+
+            es.seed_logs("dev.a", 5, start, end)
+            assert len(es._seeded_logs["dev.a"]) == 5
+
+    def test_clear_seeded_logs(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Removes one entity_id."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
+
+            es.seed_logs("dev.a", 5, start, end)
+            es.seed_logs("dev.b", 5, start, end)
+
+            es.clear_seeded_logs("dev.a")
+            assert "dev.a" not in es._seeded_logs
+            assert "dev.b" in es._seeded_logs
+
+    def test_clear_all_seeded_logs(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Clears everything."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
+
+            es.seed_logs("dev.a", 5, start, end)
+            es.seed_logs("dev.b", 5, start, end)
+
+            es.clear_all_seeded_logs()
+            assert len(es._seeded_logs) == 0
+
+    def test_query_seeded_forward(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """1500 seeded, forward query returns 1000, has_more=True, correct window."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
+            es.seed_logs("dev.a", 1500, start, end)
+
+            result = es.query_logs(
+                entity_id="dev.a",
+                start=start,
+                end=end,
+            )
+
+            assert len(result.logs) == 1000
+            assert result.has_more is True
+            assert result.window_start == start
+            assert result.window_end == result.logs[-1].timestamp + timedelta(milliseconds=1)
+            # Chronological order
+            for i in range(len(result.logs) - 1):
+                assert result.logs[i].timestamp <= result.logs[i + 1].timestamp
+
+    def test_query_seeded_all_fit(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """500 seeded, returns all, has_more=False."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
+            es.seed_logs("dev.a", 500, start, end)
+
+            result = es.query_logs(
+                entity_id="dev.a",
+                start=start,
+                end=end,
+            )
+
+            assert len(result.logs) == 500
+            assert result.has_more is False
+
+    def test_query_seeded_backward(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Backward mode: results chronological, window_start has -1ms offset."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
+            es.seed_logs("dev.a", 500, start, end)
+
+            result = es.query_logs(
+                entity_id="dev.a",
+                start=None,
+                end=end,
+                backward=True,
+            )
+
+            assert len(result.logs) == 500
+            assert result.has_more is False
+            # Chronological order
+            for i in range(len(result.logs) - 1):
+                assert result.logs[i].timestamp <= result.logs[i + 1].timestamp
+            # Window boundaries for backward mode
+            assert result.window_start == result.logs[0].timestamp - timedelta(milliseconds=1)
+            assert result.window_end == result.logs[-1].timestamp
+
+    def test_query_seeded_time_range_filter(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Only entries within [start, end] returned."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
+            es.seed_logs("dev.a", 100, start, end)
+
+            # Query a narrow window in the middle
+            q_start = datetime(2026, 1, 1, 0, 20, 0, tzinfo=UTC)
+            q_end = datetime(2026, 1, 1, 0, 40, 0, tzinfo=UTC)
+
+            result = es.query_logs(
+                entity_id="dev.a",
+                start=q_start,
+                end=q_end,
+            )
+
+            # All returned entries must be within the queried range
+            for entry in result.logs:
+                assert entry.timestamp >= q_start
+                assert entry.timestamp <= q_end
+            # Should have fewer than total
+            assert len(result.logs) < 100
+
+    def test_query_seeded_wildcard_filter(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Query '*entry 5*' filters correctly."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
+            es.seed_logs("dev.a", 100, start, end)
+
+            result = es.query_logs(
+                entity_id="dev.a",
+                start=start,
+                end=end,
+                query="*entry 5*",
+            )
+
+            # Should match entries 5, 50, 51-59 = 12 entries
+            assert len(result.logs) > 0
+            for entry in result.logs:
+                assert "entry 5" in entry.message.lower()
+
+    def test_query_seeded_empty_match(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """No matches returns empty result with None windows."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
+            es.seed_logs("dev.a", 10, start, end)
+
+            result = es.query_logs(
+                entity_id="dev.a",
+                start=start,
+                end=end,
+                query="*nomatch*",
+            )
+
+            assert len(result.logs) == 0
+            assert result.has_more is False
+            assert result.window_start is None
+            assert result.window_end is None
+
+    def test_query_seeded_skips_es_disabled(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Seeded path works even when enabled=False."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            es.enabled = False
+            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
+            es.seed_logs("dev.a", 10, start, end)
+
+            result = es.query_logs(
+                entity_id="dev.a",
+                start=start,
+                end=end,
+            )
+
+            assert len(result.logs) == 10
+
+    def test_query_unseeded_entity_falls_through(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """entity_id not in seeded dict follows normal ES path."""
+        with app.app_context():
+            es = container.elasticsearch_service()
+            es.enabled = True
+            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+            end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
+
+            # Seed a different entity
+            es.seed_logs("dev.a", 10, start, end)
+
+            # Query for unseeded entity - should hit ES (mock it)
+            mock_response = MagicMock()
+            mock_response.raise_for_status = MagicMock()
+            mock_response.json.return_value = {"hits": {"hits": []}}
+
+            with patch.object(
+                es._http_client, "post", return_value=mock_response
+            ) as mock_post:
+                result = es.query_logs(
+                    entity_id="dev.other",
+                    start=start,
+                    end=end,
+                )
+
+                # Should have called ES
+                mock_post.assert_called_once()
+                assert result.logs == []

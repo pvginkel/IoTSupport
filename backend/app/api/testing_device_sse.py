@@ -25,8 +25,10 @@ from app.schemas.testing_device_sse import (
     SubscriptionsQuerySchema,
     SubscriptionsResponseSchema,
 )
+from app.schemas.testing_logs_seed import SeedLogsRequestSchema, SeedLogsResponseSchema
 from app.services.container import ServiceContainer
 from app.services.device_log_stream_service import DeviceLogStreamService
+from app.services.elasticsearch_service import ElasticsearchService
 from app.services.rotation_nudge_service import RotationNudgeService
 from app.utils.spectree_config import api
 
@@ -118,6 +120,49 @@ def get_log_subscriptions(
     return SubscriptionsResponseSchema.model_validate(
         {"subscriptions": subscriptions},
     ).model_dump(), 200
+
+
+# ---------------------------------------------------------------------------
+# Log seeding (in-memory, for backfill / download Playwright tests)
+# ---------------------------------------------------------------------------
+
+
+@testing_device_sse_bp.route("/devices/logs/seed", methods=["POST"])
+@api.validate(
+    json=SeedLogsRequestSchema,
+    resp=SpectreeResponse(HTTP_200=SeedLogsResponseSchema),
+)
+@inject
+def seed_device_logs(
+    elasticsearch_service: ElasticsearchService = Provide[
+        ServiceContainer.elasticsearch_service
+    ],
+) -> tuple[dict[str, Any], int]:
+    """Seed deterministic log entries in memory for a device.
+
+    The seeded data is served by ElasticsearchService.query_logs() without
+    hitting Elasticsearch, enabling Playwright tests for backfill and download.
+    """
+    data = SeedLogsRequestSchema.model_validate(request.get_json())
+
+    count, window_start, window_end = elasticsearch_service.seed_logs(
+        entity_id=data.device_entity_id,
+        count=data.count,
+        start_time=data.start_time,  # type: ignore[arg-type]  # defaulted by validator
+        end_time=data.end_time,  # type: ignore[arg-type]
+    )
+
+    logger.info(
+        "Seeded %d log entries for device %s",
+        count,
+        data.device_entity_id,
+    )
+
+    return SeedLogsResponseSchema(
+        seeded=count,
+        window_start=window_start,
+        window_end=window_end,
+    ).model_dump(mode="json"), 200
 
 
 # ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ from flask.testing import FlaskClient
 
 from app.services.container import ServiceContainer
 from app.services.device_log_stream_service import DeviceLogStreamService
+from app.services.elasticsearch_service import ElasticsearchService
 from app.services.rotation_nudge_service import RotationNudgeService
 
 # Re-use the testing fixtures defined in test_testing.py. Importing the
@@ -452,3 +453,180 @@ class TestRotationNudge:
         assert response.status_code == 200
         data = response.get_json()
         assert data["status"] == "accepted"
+
+
+# ===========================================================================
+# POST /api/testing/devices/logs/seed
+# ===========================================================================
+
+
+@pytest.fixture
+def elasticsearch_service(
+    testing_container: ServiceContainer,  # noqa: F811
+) -> Generator[ElasticsearchService]:
+    """Access the ElasticsearchService singleton and clean up seeded data."""
+    svc = testing_container.elasticsearch_service()
+    svc.clear_all_seeded_logs()
+    yield svc
+    svc.clear_all_seeded_logs()
+
+
+class TestSeedDeviceLogs:
+    """Tests for the log seed endpoint."""
+
+    def test_seed_logs_success(
+        self,
+        testing_client: FlaskClient,  # noqa: F811
+        elasticsearch_service: ElasticsearchService,
+    ) -> None:
+        """200, response has correct seeded/window fields."""
+        response = testing_client.post(
+            "/api/testing/devices/logs/seed",
+            json={
+                "device_entity_id": "sensor.test",
+                "count": 100,
+                "start_time": "2026-02-01T14:00:00Z",
+                "end_time": "2026-02-01T15:00:00Z",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["seeded"] == 100
+        assert data["window_start"] is not None
+        assert data["window_end"] is not None
+
+    def test_seed_logs_defaults(
+        self,
+        testing_client: FlaskClient,  # noqa: F811
+        elasticsearch_service: ElasticsearchService,
+    ) -> None:
+        """Omitted start/end applies defaults (no error)."""
+        response = testing_client.post(
+            "/api/testing/devices/logs/seed",
+            json={
+                "device_entity_id": "sensor.test",
+                "count": 10,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["seeded"] == 10
+
+    def test_seed_logs_count_zero_returns_400(
+        self,
+        testing_client: FlaskClient,  # noqa: F811
+    ) -> None:
+        """count=0 returns validation error."""
+        response = testing_client.post(
+            "/api/testing/devices/logs/seed",
+            json={
+                "device_entity_id": "sensor.test",
+                "count": 0,
+            },
+        )
+
+        assert response.status_code == 400
+
+    def test_seed_logs_count_exceeds_max_returns_400(
+        self,
+        testing_client: FlaskClient,  # noqa: F811
+    ) -> None:
+        """count=15001 returns validation error."""
+        response = testing_client.post(
+            "/api/testing/devices/logs/seed",
+            json={
+                "device_entity_id": "sensor.test",
+                "count": 15001,
+            },
+        )
+
+        assert response.status_code == 400
+
+    def test_seed_logs_start_after_end_returns_400(
+        self,
+        testing_client: FlaskClient,  # noqa: F811
+    ) -> None:
+        """start >= end returns validation error."""
+        response = testing_client.post(
+            "/api/testing/devices/logs/seed",
+            json={
+                "device_entity_id": "sensor.test",
+                "count": 10,
+                "start_time": "2026-02-01T16:00:00Z",
+                "end_time": "2026-02-01T15:00:00Z",
+            },
+        )
+
+        assert response.status_code == 400
+
+    def test_seed_logs_non_testing_returns_400(
+        self,
+        client: FlaskClient,
+    ) -> None:
+        """Non-testing mode returns 400."""
+        response = client.post(
+            "/api/testing/devices/logs/seed",
+            json={
+                "device_entity_id": "sensor.test",
+                "count": 10,
+            },
+        )
+
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["code"] == "ROUTE_NOT_AVAILABLE"
+
+    def test_seed_then_query_serves_from_memory(
+        self,
+        testing_client: FlaskClient,  # noqa: F811
+        elasticsearch_service: ElasticsearchService,
+        testing_container: ServiceContainer,  # noqa: F811
+    ) -> None:
+        """Seed, then GET logs returns seeded data (no ES mock needed)."""
+        # First create a device with entity_id in the DB
+        from app.models.device import Device
+        from app.models.device_model import DeviceModel
+
+        session = testing_container.db_session()
+        model = DeviceModel(code="seedtest", name="Seed Test")
+        session.add(model)
+        session.flush()
+        device = Device(
+            key="seed1234",
+            device_model_id=model.id,
+            config="{}",
+            rotation_state="OK",
+            device_entity_id="sensor.seed_test",
+        )
+        session.add(device)
+        session.flush()
+        device_id = device.id
+        session.commit()
+        testing_container.db_session.reset()
+
+        # Seed logs for that entity_id
+        testing_client.post(
+            "/api/testing/devices/logs/seed",
+            json={
+                "device_entity_id": "sensor.seed_test",
+                "count": 50,
+                "start_time": "2026-02-01T14:00:00Z",
+                "end_time": "2026-02-01T15:00:00Z",
+            },
+        )
+
+        # Query logs via the normal device logs API
+        response = testing_client.get(
+            f"/api/devices/{device_id}/logs",
+            query_string={
+                "start": "2026-02-01T14:00:00Z",
+                "end": "2026-02-01T15:00:00Z",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["logs"]) == 50
+        assert data["logs"][0]["message"] == "Seeded log entry 1"

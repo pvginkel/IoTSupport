@@ -1,5 +1,6 @@
 """Elasticsearch service for querying device logs."""
 
+import fnmatch
 import logging
 import time
 from dataclasses import dataclass
@@ -74,6 +75,9 @@ class ElasticsearchService:
         # Check if Elasticsearch is configured
         self.enabled = bool(config.elasticsearch_url)
 
+        # In-memory seeded logs for testing (entity_id -> sorted list of LogEntry)
+        self._seeded_logs: dict[str, list[LogEntry]] = {}
+
         if self.enabled:
             logger.info(
                 "ElasticsearchService initialized with URL: %s",
@@ -81,6 +85,57 @@ class ElasticsearchService:
             )
         else:
             logger.warning("ElasticsearchService disabled - ELASTICSEARCH_URL not configured")
+
+    # ------------------------------------------------------------------
+    # Seeded log management (testing only)
+    # ------------------------------------------------------------------
+
+    def seed_logs(
+        self,
+        entity_id: str,
+        count: int,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> tuple[int, datetime, datetime]:
+        """Generate deterministic log entries in memory for testing.
+
+        Args:
+            entity_id: Device entity ID to seed logs for
+            count: Number of entries to generate (>= 1)
+            start_time: Timestamp of the first entry
+            end_time: Timestamp of the last entry
+
+        Returns:
+            Tuple of (count, start_time, end_time)
+        """
+        if count == 1:
+            interval = timedelta(0)
+        else:
+            interval = (end_time - start_time) / (count - 1)
+
+        entries = [
+            LogEntry(
+                timestamp=start_time + interval * i,
+                message=f"Seeded log entry {i + 1}",
+            )
+            for i in range(count)
+        ]
+
+        # Ensure the last entry is exactly at end_time (avoids float rounding drift)
+        if count > 1:
+            entries[-1] = LogEntry(timestamp=end_time, message=entries[-1].message)
+
+        self._seeded_logs[entity_id] = entries
+        logger.info("Seeded %d log entries for entity_id=%s", count, entity_id)
+        return (count, start_time, end_time)
+
+    def clear_seeded_logs(self, entity_id: str) -> None:
+        """Remove seeded logs for a single entity_id."""
+        self._seeded_logs.pop(entity_id, None)
+
+    def clear_all_seeded_logs(self) -> None:
+        """Remove all seeded logs."""
+        self._seeded_logs.clear()
 
     def _get_auth(self) -> tuple[str, str] | None:
         """Get HTTP Basic Auth credentials if configured.
@@ -140,6 +195,10 @@ class ElasticsearchService:
                 window_start=None,
                 window_end=None,
             )
+
+        # Serve from in-memory seeded data when available (testing path)
+        if entity_id in self._seeded_logs:
+            return self._query_seeded_logs(entity_id, start, end, query, backward)
 
         if not self.enabled:
             raise ServiceUnavailableException(
@@ -387,6 +446,67 @@ class ElasticsearchService:
 
         return LogQueryResult(
             logs=logs,
+            has_more=has_more,
+            window_start=window_start,
+            window_end=window_end,
+        )
+
+    # ------------------------------------------------------------------
+    # Seeded log query (in-memory, mirrors ES query semantics)
+    # ------------------------------------------------------------------
+
+    def _query_seeded_logs(
+        self,
+        entity_id: str,
+        start: datetime | None,
+        end: datetime,
+        query: str | None,
+        backward: bool,
+    ) -> LogQueryResult:
+        """Query from in-memory seeded logs, mirroring ES query semantics."""
+        entries = self._seeded_logs[entity_id]  # already sorted ascending
+
+        # Filter by time range
+        filtered = [e for e in entries if e.timestamp <= end]
+        if start is not None:
+            filtered = [e for e in filtered if e.timestamp >= start]
+
+        # Filter by wildcard query (case-insensitive, fnmatch matches ES wildcards)
+        if query:
+            filtered = [
+                e for e in filtered
+                if fnmatch.fnmatch(e.message.lower(), query.lower())
+            ]
+
+        # Empty result short-circuit
+        if not filtered:
+            return LogQueryResult(
+                logs=[], has_more=False, window_start=None, window_end=None,
+            )
+
+        # Pagination and ordering
+        if backward:
+            # Reverse to desc, truncate, detect has_more, then reverse back
+            filtered.reverse()
+            has_more = len(filtered) > self.MAX_RESULTS
+            if has_more:
+                filtered = filtered[:self.MAX_RESULTS]
+            filtered.reverse()
+        else:
+            has_more = len(filtered) > self.MAX_RESULTS
+            if has_more:
+                filtered = filtered[:self.MAX_RESULTS]
+
+        # Window boundaries (same logic as _parse_response)
+        if backward:
+            window_start = filtered[0].timestamp - timedelta(milliseconds=1)
+            window_end = filtered[-1].timestamp
+        else:
+            window_start = filtered[0].timestamp
+            window_end = filtered[-1].timestamp + timedelta(milliseconds=1)
+
+        return LogQueryResult(
+            logs=filtered,
             has_more=has_more,
             window_start=window_start,
             window_end=window_end,
