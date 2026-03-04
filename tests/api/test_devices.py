@@ -1211,6 +1211,175 @@ class TestDevicesLogs:
 
         assert response.status_code == 400
 
+    def test_get_logs_with_only_end_uses_backward_mode(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that providing only `end` triggers backward scroll mode."""
+        from app.services.elasticsearch_service import LogEntry, LogQueryResult
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="logs8", name="Logs Test 8")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"deviceEntityId": "sensor.test"}',
+                )
+                device_id = device.id
+
+        mock_result = LogQueryResult(
+            logs=[
+                LogEntry(
+                    timestamp=datetime(2026, 2, 1, 13, 58, 0, tzinfo=UTC),
+                    message="Older entry",
+                ),
+                LogEntry(
+                    timestamp=datetime(2026, 2, 1, 13, 59, 0, tzinfo=UTC),
+                    message="Newer entry",
+                ),
+            ],
+            has_more=True,
+            window_start=datetime(2026, 2, 1, 13, 57, 59, 999000, tzinfo=UTC),
+            window_end=datetime(2026, 2, 1, 13, 59, 0, tzinfo=UTC),
+        )
+
+        with patch.object(
+            container.elasticsearch_service(),
+            "query_logs",
+            return_value=mock_result,
+        ) as mock_query:
+            response = client.get(
+                f"/api/devices/{device_id}/logs?end=2026-02-01T14:00:00Z"
+            )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data["logs"]) == 2
+
+        # Verify backward mode was used: start=None, backward=True
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args[1]
+        assert call_kwargs["start"] is None
+        assert call_kwargs["backward"] is True
+        assert call_kwargs["end"] == datetime(2026, 2, 1, 14, 0, 0, tzinfo=UTC)
+
+    def test_get_logs_backward_scroll_pagination(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test backward scroll pagination: has_more and window_start for chaining."""
+        from datetime import timedelta
+
+        from app.services.elasticsearch_service import LogEntry, LogQueryResult
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="logs9", name="Logs Test 9")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"deviceEntityId": "sensor.test"}',
+                )
+                device_id = device.id
+
+        oldest_ts = datetime(2026, 2, 1, 13, 0, 0, tzinfo=UTC)
+        newest_ts = datetime(2026, 2, 1, 13, 59, 0, tzinfo=UTC)
+
+        mock_result = LogQueryResult(
+            logs=[
+                LogEntry(timestamp=oldest_ts, message="Oldest"),
+                LogEntry(timestamp=newest_ts, message="Newest"),
+            ],
+            has_more=True,
+            # window_start is oldest - 1ms for backward chaining
+            window_start=oldest_ts - timedelta(milliseconds=1),
+            window_end=newest_ts,
+        )
+
+        with patch.object(
+            container.elasticsearch_service(),
+            "query_logs",
+            return_value=mock_result,
+        ):
+            response = client.get(
+                f"/api/devices/{device_id}/logs?end=2026-02-01T14:00:00Z"
+            )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["has_more"] is True
+        # window_start can be used as the next `end` param for continued backward scroll
+        assert data["window_start"] is not None
+        assert data["window_end"] is not None
+
+    def test_get_logs_with_start_and_end_uses_forward_mode(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that providing both start and end uses forward (not backward) mode."""
+        from app.services.elasticsearch_service import LogQueryResult
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="lgs10", name="Logs Test 10")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(
+                    device_model_id=model.id,
+                    config='{"deviceEntityId": "sensor.test"}',
+                )
+                device_id = device.id
+
+        mock_result = LogQueryResult(
+            logs=[],
+            has_more=False,
+            window_start=None,
+            window_end=None,
+        )
+
+        with patch.object(
+            container.elasticsearch_service(),
+            "query_logs",
+            return_value=mock_result,
+        ) as mock_query:
+            response = client.get(
+                f"/api/devices/{device_id}/logs"
+                "?start=2026-02-01T13:00:00Z&end=2026-02-01T14:00:00Z"
+            )
+
+        assert response.status_code == 200
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args[1]
+        assert call_kwargs["backward"] is False
+        assert call_kwargs["start"] is not None
+
 
 class TestDevicesUpdateActiveFlag:
     """Tests for active flag via PUT /api/devices/<id>."""

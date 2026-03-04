@@ -109,17 +109,20 @@ class ElasticsearchService:
     def query_logs(
         self,
         entity_id: str | None,
-        start: datetime,
+        start: datetime | None,
         end: datetime,
         query: str | None = None,
+        backward: bool = False,
     ) -> LogQueryResult:
         """Query device logs from Elasticsearch.
 
         Args:
             entity_id: Device entity ID to filter by. If None, returns empty result.
-            start: Start of time range (inclusive)
+            start: Start of time range (inclusive). None in backward mode (no lower bound).
             end: End of time range (inclusive)
             query: Optional wildcard query to filter messages
+            backward: If True, query in descending order and reverse results to
+                chronological order. Used for backward scroll (only `end` provided).
 
         Returns:
             LogQueryResult with logs, pagination info, and time window
@@ -148,7 +151,7 @@ class ElasticsearchService:
         status = "success"
 
         try:
-            result = self._execute_query(entity_id, start, end, query)
+            result = self._execute_query(entity_id, start, end, query, backward)
 
             duration = time.perf_counter() - start_time
             logger.info(
@@ -190,24 +193,26 @@ class ElasticsearchService:
     def _execute_query(
         self,
         entity_id: str,
-        start: datetime,
+        start: datetime | None,
         end: datetime,
         query: str | None,
+        backward: bool = False,
     ) -> LogQueryResult:
         """Execute the Elasticsearch query.
 
         Args:
             entity_id: Device entity ID to filter by
-            start: Start of time range
+            start: Start of time range (None omits the lower bound)
             end: End of time range
             query: Optional wildcard query for message field
+            backward: If True, sort descending and reverse results
 
         Returns:
             LogQueryResult with query results
         """
         # Build the Elasticsearch query
         # Request 1 extra to detect if more results exist
-        es_query = self._build_query(entity_id, start, end, query)
+        es_query = self._build_query(entity_id, start, end, query, backward)
 
         url = f"{self.config.elasticsearch_url}/{self.config.elasticsearch_index_pattern}/_search"
 
@@ -254,39 +259,37 @@ class ElasticsearchService:
             ) from e
 
         # Parse the response
-        return self._parse_response(response.json())
+        return self._parse_response(response.json(), backward)
 
     def _build_query(
         self,
         entity_id: str,
-        start: datetime,
+        start: datetime | None,
         end: datetime,
         query: str | None,
+        backward: bool = False,
     ) -> dict[str, Any]:
         """Build the Elasticsearch query.
 
         Args:
             entity_id: Device entity ID to filter by
-            start: Start of time range
+            start: Start of time range (None omits the lower bound)
             end: End of time range
             query: Optional wildcard query for message field
+            backward: If True, sort descending (caller reverses results)
 
         Returns:
             Elasticsearch query dict
         """
+        # Build time range filter — omit gte when start is None (backward scroll)
+        time_range: dict[str, str] = {"lte": end.isoformat()}
+        if start is not None:
+            time_range["gte"] = start.isoformat()
+
         # Build filter clauses
         must_clauses: list[dict[str, Any]] = [
-            # Filter by entity_id
             {"term": {"entity_id": entity_id}},
-            # Filter by time range
-            {
-                "range": {
-                    "@timestamp": {
-                        "gte": start.isoformat(),
-                        "lte": end.isoformat(),
-                    }
-                }
-            },
+            {"range": {"@timestamp": time_range}},
         ]
 
         # Add optional wildcard query on message field
@@ -300,6 +303,8 @@ class ElasticsearchService:
                 }
             })
 
+        sort_order = "desc" if backward else "asc"
+
         return {
             "query": {
                 "bool": {
@@ -307,18 +312,25 @@ class ElasticsearchService:
                 }
             },
             "sort": [
-                {"@timestamp": {"order": "asc"}}
+                {"@timestamp": {"order": sort_order}}
             ],
             # Request 1 extra to detect has_more
             "size": self.MAX_RESULTS + 1,
             "_source": ["@timestamp", "message"],
         }
 
-    def _parse_response(self, response_data: dict[str, Any]) -> LogQueryResult:
+    def _parse_response(
+        self,
+        response_data: dict[str, Any],
+        backward: bool = False,
+    ) -> LogQueryResult:
         """Parse Elasticsearch response into LogQueryResult.
 
         Args:
             response_data: Elasticsearch JSON response
+            backward: If True, results arrived in descending order and need
+                reversing. Window boundaries are also adjusted for backward
+                pagination.
 
         Returns:
             LogQueryResult with parsed logs and pagination info
@@ -353,14 +365,25 @@ class ElasticsearchService:
                     logger.warning("Failed to parse timestamp %s: %s", timestamp_str, e)
                     continue
 
+        # In backward mode, ES returned desc order — reverse to chronological
+        if backward:
+            logs.reverse()
+
         # Compute window_start and window_end from actual results
         window_start: datetime | None = None
         window_end: datetime | None = None
 
         if logs:
-            window_start = logs[0].timestamp
-            # Add 1ms to window_end so polling with it as start excludes the last message
-            window_end = logs[-1].timestamp + timedelta(milliseconds=1)
+            if backward:
+                # Backward scroll: window_start is the exclusive lower bound for the
+                # next backward request (subtract 1ms so the caller can pass it as `end`
+                # without re-fetching the oldest entry).
+                window_start = logs[0].timestamp - timedelta(milliseconds=1)
+                window_end = logs[-1].timestamp
+            else:
+                window_start = logs[0].timestamp
+                # Add 1ms to window_end so polling with it as start excludes the last message
+                window_end = logs[-1].timestamp + timedelta(milliseconds=1)
 
         return LogQueryResult(
             logs=logs,
