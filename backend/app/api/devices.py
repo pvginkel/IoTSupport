@@ -404,10 +404,18 @@ def get_device_logs(
         # Get the device to retrieve its entity_id
         device = device_service.get_device(device_id)
 
-        # Compute default time range
+        # Compute default time range and detect backward scroll mode
         now = datetime.now(UTC)
-        query_start = query_params.start if query_params.start else now - timedelta(hours=1)
-        query_end = query_params.end if query_params.end else now
+
+        if query_params.start is None and query_params.end is not None:
+            # Backward scroll: get up to 1000 entries ending at `end`
+            query_start = None
+            query_end = query_params.end
+            backward = True
+        else:
+            query_start = query_params.start if query_params.start else now - timedelta(hours=1)
+            query_end = query_params.end if query_params.end else now
+            backward = False
 
         # Query Elasticsearch for logs
         result = elasticsearch_service.query_logs(
@@ -415,6 +423,7 @@ def get_device_logs(
             start=query_start,
             end=query_end,
             query=query_params.query,
+            backward=backward,
         )
 
         # Convert to response schema

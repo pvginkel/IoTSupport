@@ -1,6 +1,6 @@
 """Tests for ElasticsearchService."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -498,3 +498,190 @@ class TestElasticsearchServiceParseResponse:
 
             assert len(result.logs) == 1
             assert result.logs[0].message == ""  # Empty string default
+
+
+class TestElasticsearchServiceBackwardMode:
+    """Tests for backward scroll mode."""
+
+    def test_build_query_backward_sort_desc(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Backward mode uses descending sort and omits gte when start is None."""
+        with app.app_context():
+            es_service = container.elasticsearch_service()
+
+            query = es_service._build_query(
+                entity_id="sensor.test",
+                start=None,
+                end=datetime(2026, 2, 1, 15, 0, 0, tzinfo=UTC),
+                query=None,
+                backward=True,
+            )
+
+            # Sort must be descending
+            assert query["sort"][0]["@timestamp"]["order"] == "desc"
+
+            # Time range must have lte but NOT gte
+            must_clauses = query["query"]["bool"]["must"]
+            range_clause = [c for c in must_clauses if "range" in c][0]
+            ts_range = range_clause["range"]["@timestamp"]
+            assert "lte" in ts_range
+            assert "gte" not in ts_range
+
+    def test_build_query_backward_with_start_includes_gte(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Backward mode with explicit start still includes gte."""
+        with app.app_context():
+            es_service = container.elasticsearch_service()
+
+            query = es_service._build_query(
+                entity_id="sensor.test",
+                start=datetime(2026, 2, 1, 14, 0, 0, tzinfo=UTC),
+                end=datetime(2026, 2, 1, 15, 0, 0, tzinfo=UTC),
+                query=None,
+                backward=True,
+            )
+
+            must_clauses = query["query"]["bool"]["must"]
+            range_clause = [c for c in must_clauses if "range" in c][0]
+            ts_range = range_clause["range"]["@timestamp"]
+            assert "gte" in ts_range
+            assert "lte" in ts_range
+
+    def test_parse_response_backward_reverses_results(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Backward mode reverses results to chronological order and adjusts window."""
+        with app.app_context():
+            es_service = container.elasticsearch_service()
+
+            # ES returns desc order: newest first
+            response_data = {
+                "hits": {
+                    "hits": [
+                        {
+                            "_source": {
+                                "@timestamp": "2026-02-01T14:02:00Z",
+                                "message": "Third",
+                            }
+                        },
+                        {
+                            "_source": {
+                                "@timestamp": "2026-02-01T14:01:00Z",
+                                "message": "Second",
+                            }
+                        },
+                        {
+                            "_source": {
+                                "@timestamp": "2026-02-01T14:00:00Z",
+                                "message": "First",
+                            }
+                        },
+                    ]
+                }
+            }
+
+            result = es_service._parse_response(response_data, backward=True)
+
+            # Results should be reversed to chronological (ascending) order
+            assert result.logs[0].message == "First"
+            assert result.logs[1].message == "Second"
+            assert result.logs[2].message == "Third"
+
+            # window_start should be first entry timestamp - 1ms (exclusive lower bound)
+            assert result.window_start == (
+                datetime(2026, 2, 1, 14, 0, 0, tzinfo=UTC)
+                - timedelta(milliseconds=1)
+            )
+            # window_end should be last entry timestamp (no offset)
+            assert result.window_end == datetime(2026, 2, 1, 14, 2, 0, tzinfo=UTC)
+
+    def test_parse_response_forward_unchanged(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Forward mode (default) keeps existing window boundary behavior."""
+        with app.app_context():
+            es_service = container.elasticsearch_service()
+
+            response_data = {
+                "hits": {
+                    "hits": [
+                        {
+                            "_source": {
+                                "@timestamp": "2026-02-01T14:00:00Z",
+                                "message": "First",
+                            }
+                        },
+                        {
+                            "_source": {
+                                "@timestamp": "2026-02-01T14:02:00Z",
+                                "message": "Last",
+                            }
+                        },
+                    ]
+                }
+            }
+
+            result = es_service._parse_response(response_data, backward=False)
+
+            assert result.window_start == datetime(2026, 2, 1, 14, 0, 0, tzinfo=UTC)
+            assert result.window_end == (
+                datetime(2026, 2, 1, 14, 2, 0, tzinfo=UTC)
+                + timedelta(milliseconds=1)
+            )
+
+    def test_query_logs_backward_mode(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Integration test: backward flag flows through query_logs to build and parse."""
+        with app.app_context():
+            es_service = container.elasticsearch_service()
+            es_service.enabled = True
+
+            mock_response = MagicMock()
+            mock_response.raise_for_status = MagicMock()
+            mock_response.json.return_value = {
+                "hits": {
+                    "hits": [
+                        {
+                            "_source": {
+                                "@timestamp": "2026-02-01T14:01:00Z",
+                                "message": "Newer",
+                            }
+                        },
+                        {
+                            "_source": {
+                                "@timestamp": "2026-02-01T14:00:00Z",
+                                "message": "Older",
+                            }
+                        },
+                    ]
+                }
+            }
+
+            with patch.object(
+                es_service._http_client,
+                "post",
+                return_value=mock_response,
+            ) as mock_post:
+                result = es_service.query_logs(
+                    entity_id="sensor.test",
+                    start=None,
+                    end=datetime(2026, 2, 1, 15, 0, 0, tzinfo=UTC),
+                    backward=True,
+                )
+
+                # Verify descending sort was used
+                call_args = mock_post.call_args
+                query_body = call_args[1]["json"]
+                assert query_body["sort"][0]["@timestamp"]["order"] == "desc"
+
+                # Verify no gte in time range
+                must_clauses = query_body["query"]["bool"]["must"]
+                range_clause = [c for c in must_clauses if "range" in c][0]
+                assert "gte" not in range_clause["range"]["@timestamp"]
+
+            # Results should be reversed to chronological order
+            assert result.logs[0].message == "Older"
+            assert result.logs[1].message == "Newer"

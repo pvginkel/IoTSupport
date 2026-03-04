@@ -10,12 +10,19 @@ class DeviceLogsQuerySchema(BaseModel):
 
     start: datetime | None = Field(
         default=None,
-        description="Start of time range (ISO datetime). Defaults to 1 hour ago.",
+        description=(
+            "Start of time range (ISO datetime). Defaults to 1 hour ago. "
+            "If omitted while `end` is set, returns up to 1000 entries ending "
+            "at `end` in backward scroll mode."
+        ),
         examples=["2026-02-01T14:00:00Z"],
     )
     end: datetime | None = Field(
         default=None,
-        description="End of time range (ISO datetime). Defaults to now.",
+        description=(
+            "End of time range (ISO datetime). Defaults to now. "
+            "When provided without `start`, triggers backward scroll mode."
+        ),
         examples=["2026-02-01T15:00:00Z"],
     )
     query: str | None = Field(
