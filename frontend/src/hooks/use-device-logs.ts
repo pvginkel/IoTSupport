@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useReducer, useRef } from 'react'
+import { useEffect, useCallback, useReducer, useRef, useState } from 'react'
 import { useSseContext } from '@/contexts/sse-context'
 import { isTestMode } from '@/lib/config/test-mode'
 import { emitTestEvent } from '@/lib/test/event-emitter'
@@ -31,42 +31,57 @@ interface SseDeviceLogsPayload {
   }>
 }
 
-// Hook state interface
+// Hook state interface -- extends reducer state with entity presence flag
 interface UseDeviceLogsState {
   logs: LogEntry[]
   isLoading: boolean
   hasEntityId: boolean
   isStreaming: boolean
+  hasMore: boolean
+  oldestTimestamp: string | null
+  prependCounter: number
 }
 
-// Hook return type
-type UseDeviceLogsResult = UseDeviceLogsState
+// Hook return type -- includes backfill controls
+type UseDeviceLogsResult = UseDeviceLogsState & {
+  fetchOlderLogs: () => Promise<void>
+  isFetchingOlder: boolean
+}
 
-// Buffer cap increased from 1000 to 5000 per plan
-const MAX_BUFFER_SIZE = 5000
+// Buffer cap raised from 5,000 to 10,000 for backfill support
+const MAX_BUFFER_SIZE = 10000
 
 /**
  * Combined state managed by a single reducer to avoid cascading setState calls.
- * The reducer handles logs buffer, loading status, and streaming flag together.
+ * The reducer handles logs buffer, loading status, streaming flag, and backfill
+ * pagination state (hasMore, oldestTimestamp) together.
  */
 interface LogsState {
   logs: LogEntry[]
   isLoading: boolean
   isStreaming: boolean
+  hasMore: boolean
+  oldestTimestamp: string | null
+  /** Incremented on each PREPEND dispatch so the viewer can key a useLayoutEffect for scroll restoration */
+  prependCounter: number
 }
 
 type LogsAction =
   | { type: 'RESET' }
   | { type: 'START_LOADING' }
-  | { type: 'SET'; logs: LogEntry[] }
+  | { type: 'SET'; logs: LogEntry[]; hasMore: boolean; oldestTimestamp: string | null }
   | { type: 'LOADED' }
   | { type: 'APPEND'; logs: LogEntry[] }
+  | { type: 'PREPEND'; logs: LogEntry[]; hasMore: boolean; oldestTimestamp: string | null }
   | { type: 'STREAMING' }
 
 const initialState: LogsState = {
   logs: [],
   isLoading: false,
   isStreaming: false,
+  hasMore: false,
+  oldestTimestamp: null,
+  prependCounter: 0,
 }
 
 function logsReducer(state: LogsState, action: LogsAction): LogsState {
@@ -80,7 +95,12 @@ function logsReducer(state: LogsState, action: LogsAction): LogsState {
       const logs = action.logs.length > MAX_BUFFER_SIZE
         ? action.logs.slice(action.logs.length - MAX_BUFFER_SIZE)
         : action.logs
-      return { ...state, logs }
+      return {
+        ...state,
+        logs,
+        hasMore: action.hasMore,
+        oldestTimestamp: action.oldestTimestamp,
+      }
     }
     case 'LOADED':
       return { ...state, isLoading: false }
@@ -90,6 +110,24 @@ function logsReducer(state: LogsState, action: LogsAction): LogsState {
         ? combined.slice(combined.length - MAX_BUFFER_SIZE)
         : combined
       return { ...state, logs }
+    }
+    case 'PREPEND': {
+      // Prepend older entries to the front of the buffer
+      const combined = [...action.logs, ...state.logs]
+      // If combined would exceed cap, refuse the prepend to preserve streaming tail
+      if (combined.length > MAX_BUFFER_SIZE) {
+        return {
+          ...state,
+          hasMore: false,
+        }
+      }
+      return {
+        ...state,
+        logs: combined,
+        hasMore: action.hasMore,
+        oldestTimestamp: action.oldestTimestamp,
+        prependCounter: state.prependCounter + 1,
+      }
     }
     case 'STREAMING':
       return { ...state, isStreaming: true }
@@ -106,7 +144,7 @@ interface UseDeviceLogsOptions {
 }
 
 /**
- * Custom hook for SSE-driven device log streaming.
+ * Custom hook for SSE-driven device log streaming with backward pagination.
  *
  * Lifecycle:
  * 1. Register SSE event listener for "device-logs" events (queue while loading).
@@ -116,6 +154,11 @@ interface UseDeviceLogsOptions {
  * 5. Flush queued SSE events newer than the last loaded timestamp.
  * 6. Switch to direct-append streaming mode.
  * 7. On unmount: remove listener, unsubscribe (best-effort).
+ *
+ * Backfill:
+ * - Exposes fetchOlderLogs() for the viewer to call on scroll-to-top.
+ * - Fetches one page of older logs using `end=oldestTimestamp` and dispatches PREPEND.
+ * - Guards against concurrent fetches and buffer overflow.
  */
 export function useDeviceLogs({
   deviceId,
@@ -127,9 +170,20 @@ export function useDeviceLogs({
 
   const { requestId, addEventListener } = useSseContext()
 
+  // Ref to guard against concurrent backfill fetches, paired with state for re-renders
+  const isFetchingOlderRef = useRef(false)
+  const [isFetchingOlder, setIsFetchingOlder] = useState(false)
+
+  // AbortController for in-flight backfill requests -- aborted on device change/unmount
+  const backfillAbortRef = useRef<AbortController | null>(null)
+
   // Reset logs when device changes -- dispatching a single action avoids cascading renders
   useEffect(() => {
     dispatch({ type: 'RESET' })
+    isFetchingOlderRef.current = false
+    setIsFetchingOlder(false)
+    backfillAbortRef.current?.abort()
+    backfillAbortRef.current = null
   }, [deviceId])
 
   // Emit instrumentation events in test mode
@@ -222,6 +276,8 @@ export function useDeviceLogs({
     // 3. Fetch initial log history
     const fetchHistory = async (): Promise<{
       logs: LogEntry[]
+      hasMore: boolean
+      windowStart: string | null
       windowEnd: string | null
     } | null> => {
       abortController = new AbortController()
@@ -244,7 +300,12 @@ export function useDeviceLogs({
           timestamp: log.timestamp,
         }))
 
-        return { logs: historyLogs, windowEnd: data.window_end }
+        return {
+          logs: historyLogs,
+          hasMore: data.has_more,
+          windowStart: data.window_start,
+          windowEnd: data.window_end,
+        }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') return null
         console.debug('[useDeviceLogs] History fetch error:', error)
@@ -273,10 +334,17 @@ export function useDeviceLogs({
       if (!isMounted) return
 
       const initialLogs = history?.logs ?? []
+      const hasMore = history?.hasMore ?? false
+      const windowStart = history?.windowStart ?? null
       const windowEnd = history?.windowEnd ?? null
 
-      // 4. Atomically render history
-      dispatch({ type: 'SET', logs: initialLogs })
+      // 4. Atomically render history with pagination metadata
+      dispatch({
+        type: 'SET',
+        logs: initialLogs,
+        hasMore,
+        oldestTimestamp: windowStart,
+      })
 
       // Record the cutoff timestamp for deduplication during flush
       if (initialLogs.length > 0) {
@@ -334,10 +402,151 @@ export function useDeviceLogs({
     }
   }, [deviceId, deviceEntityId, hasEntityId, requestId, addEventListener, emitLoadingEvent])
 
+  /**
+   * Fetch one page of older logs for backward pagination (infinite scroll).
+   *
+   * Guards:
+   * - Skips if already fetching, no more pages, no oldest timestamp, or buffer at capacity.
+   * - Uses isFetchingOlderRef to prevent concurrent calls.
+   */
+  const fetchOlderLogs = useCallback(async () => {
+    if (
+      isFetchingOlderRef.current ||
+      !state.hasMore ||
+      !state.oldestTimestamp ||
+      deviceId === undefined ||
+      state.logs.length >= MAX_BUFFER_SIZE
+    ) {
+      return
+    }
+
+    isFetchingOlderRef.current = true
+    setIsFetchingOlder(true)
+
+    const controller = new AbortController()
+    backfillAbortRef.current = controller
+
+    try {
+      const url = new URL(`/api/devices/${deviceId}/logs`, window.location.origin)
+      url.searchParams.set('end', state.oldestTimestamp)
+
+      const response = await fetch(url.toString(), {
+        credentials: 'include',
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        console.debug(`[useDeviceLogs] Backfill fetch failed: ${response.status}`)
+        return
+      }
+
+      const data: DeviceLogsApiResponse = await response.json()
+      const olderLogs: LogEntry[] = data.logs.map((log) => ({
+        message: log.message,
+        timestamp: log.timestamp,
+      }))
+
+      if (olderLogs.length > 0) {
+        dispatch({
+          type: 'PREPEND',
+          logs: olderLogs,
+          hasMore: data.has_more,
+          oldestTimestamp: data.window_start,
+        })
+      } else {
+        // No entries returned -- mark as exhausted without a PREPEND dispatch
+        dispatch({
+          type: 'SET',
+          logs: state.logs,
+          hasMore: false,
+          oldestTimestamp: state.oldestTimestamp,
+        })
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return
+      console.debug('[useDeviceLogs] Backfill fetch error:', error)
+    } finally {
+      isFetchingOlderRef.current = false
+      setIsFetchingOlder(false)
+      backfillAbortRef.current = null
+    }
+  }, [deviceId, state.hasMore, state.oldestTimestamp, state.logs])
+
   return {
     logs: state.logs,
     isLoading: state.isLoading,
     hasEntityId,
     isStreaming: state.isStreaming,
+    hasMore: state.hasMore,
+    oldestTimestamp: state.oldestTimestamp,
+    prependCounter: state.prependCounter,
+    fetchOlderLogs,
+    isFetchingOlder,
   }
+}
+
+/**
+ * Fetch device logs for download (independent of the hook's buffer).
+ *
+ * Performs sequential paginated API calls backward from `now`, collecting up to
+ * `lineCount` entries. Returns the collected log messages in chronological order.
+ *
+ * @param deviceId - Device ID to fetch logs for
+ * @param lineCount - Maximum number of log lines to collect
+ * @param onProgress - Callback with (fetched, total) for progress reporting
+ * @param signal - AbortSignal for cancellation
+ */
+export async function fetchLogsForDownload(
+  deviceId: number,
+  lineCount: number,
+  onProgress?: (fetched: number, total: number) => void,
+  signal?: AbortSignal,
+): Promise<LogEntry[]> {
+  const collected: LogEntry[] = []
+  let cursor: string = new Date().toISOString()
+  let hasMore = true
+
+  while (hasMore && collected.length < lineCount) {
+    if (signal?.aborted) break
+
+    const url = new URL(`/api/devices/${deviceId}/logs`, window.location.origin)
+    url.searchParams.set('end', cursor)
+
+    const response = await fetch(url.toString(), {
+      credentials: 'include',
+      signal,
+    })
+
+    if (!response.ok) {
+      console.debug(`[fetchLogsForDownload] Fetch failed: ${response.status}`)
+      break
+    }
+
+    const data: DeviceLogsApiResponse = await response.json()
+    const logs: LogEntry[] = data.logs.map((log) => ({
+      message: log.message,
+      timestamp: log.timestamp,
+    }))
+
+    // Collect pages in reverse-chronological order; we reverse at the end
+    collected.push(...logs)
+    hasMore = data.has_more
+    if (data.window_start) {
+      cursor = data.window_start
+    } else {
+      break
+    }
+
+    onProgress?.(collected.length, lineCount)
+  }
+
+  // Reverse to chronological order (pages were fetched newest-first)
+  collected.reverse()
+
+  // Trim to exact requested count (keep the most recent entries)
+  if (collected.length > lineCount) {
+    return collected.slice(collected.length - lineCount)
+  }
+
+  return collected
 }

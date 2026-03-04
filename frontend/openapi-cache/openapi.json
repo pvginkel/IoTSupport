@@ -746,7 +746,7 @@
               }
             ],
             "default": null,
-            "description": "End of time range (ISO datetime). Defaults to now.",
+            "description": "End of time range (ISO datetime). Defaults to now. When provided without `start`, triggers backward scroll mode.",
             "examples": [
               "2026-02-01T15:00:00Z"
             ],
@@ -780,7 +780,7 @@
               }
             ],
             "default": null,
-            "description": "Start of time range (ISO datetime). Defaults to 1 hour ago.",
+            "description": "Start of time range (ISO datetime). Defaults to 1 hour ago. If omitted while `end` is set, returns up to 1000 entries ending at `end` in backward scroll mode.",
             "examples": [
               "2026-02-01T14:00:00Z"
             ],
@@ -2277,6 +2277,13 @@
         "title": "ValidationErrorElement",
         "type": "object"
       }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "bearerFormat": "JWT",
+        "scheme": "bearer",
+        "type": "http"
+      }
     }
   },
   "info": {
@@ -2298,7 +2305,7 @@
     },
     "/api/auth/login": {
       "get": {
-        "description": "Generates authorization URL and redirects to OIDC provider. Stores PKCE state in signed cookie.\n\nQuery Parameters:     redirect: URL to redirect to after successful login (required)\n\nReturns:     302: Redirect to OIDC provider authorization endpoint     400: Missing or invalid redirect parameter",
+        "description": "Generates authorization URL and redirects to OIDC provider. PKCE state is encrypted into the OAuth state parameter.\n\nQuery Parameters:     redirect: URL to redirect to after successful login (required)\n\nReturns:     302: Redirect to OIDC provider authorization endpoint     400: Missing or invalid redirect parameter",
         "operationId": "get__api_auth_login",
         "parameters": [],
         "responses": {},
@@ -2318,7 +2325,7 @@
     },
     "/api/auth/self": {
       "get": {
-        "description": "This endpoint is @public because it handles authentication explicitly: in testing mode it checks test sessions and forced errors; otherwise it validates tokens or returns a default local-user when OIDC is off.\n\nReturns:     200: User information from validated token or test session     401: No valid token provided or token invalid",
+        "description": "This endpoint is @public because it handles authentication explicitly: in testing mode it checks test sessions and forced errors; otherwise it validates tokens or returns a default local-user when OIDC is off.\n\nReturns:     200: User information from validated token or test session     401: No valid token provided or token invalid     403: User authenticated but has no recognized hierarchical role",
         "operationId": "get__api_auth_self",
         "parameters": [],
         "responses": {
@@ -2404,8 +2411,14 @@
             "description": "Bad Request"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Subscribe an SSE connection to a device's log stream.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/device-logs/unsubscribe": {
@@ -2445,8 +2458,14 @@
             "description": "Bad Request"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Unsubscribe an SSE connection from a device's log stream.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/device-models": {
@@ -2525,8 +2544,14 @@
             "description": "Conflict"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Create a new device model.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/device-models/{model_id}": {
@@ -2580,8 +2605,14 @@
             "description": "Conflict"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Delete a device model.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       },
       "get": {
         "description": "",
@@ -2690,8 +2721,14 @@
             "description": "Not Found"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Update a device model.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/device-models/{model_id}/firmware": {
@@ -2761,8 +2798,14 @@
             "description": "Not Found"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Upload firmware binary for a device model.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/devices": {
@@ -2851,8 +2894,14 @@
             "description": "Bad Gateway"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Create a new device with Keycloak client.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/devices/{device_id}": {
@@ -2906,8 +2955,14 @@
             "description": "Bad Gateway"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Delete a device and its Keycloak client.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       },
       "get": {
         "description": "",
@@ -3016,8 +3071,14 @@
             "description": "Not Found"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Update a device's configuration.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/devices/{device_id}/coredumps": {
@@ -3061,8 +3122,14 @@
             "description": "Not Found"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Delete all coredumps for a device.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       },
       "get": {
         "description": "",
@@ -3166,8 +3233,14 @@
             "description": "Not Found"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Delete a single coredump.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       },
       "get": {
         "description": "",
@@ -3381,8 +3454,14 @@
             "description": "Bad Gateway"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Create Keycloak client for a device if missing.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/devices/{device_id}/logs": {
@@ -3401,7 +3480,7 @@
             }
           },
           {
-            "description": "Start of time range (ISO datetime). Defaults to 1 hour ago.",
+            "description": "Start of time range (ISO datetime). Defaults to 1 hour ago. If omitted while `end` is set, returns up to 1000 entries ending at `end` in backward scroll mode.",
             "in": "query",
             "name": "start",
             "required": false,
@@ -3416,7 +3495,7 @@
                 }
               ],
               "default": null,
-              "description": "Start of time range (ISO datetime). Defaults to 1 hour ago.",
+              "description": "Start of time range (ISO datetime). Defaults to 1 hour ago. If omitted while `end` is set, returns up to 1000 entries ending at `end` in backward scroll mode.",
               "examples": [
                 "2026-02-01T14:00:00Z"
               ],
@@ -3424,7 +3503,7 @@
             }
           },
           {
-            "description": "End of time range (ISO datetime). Defaults to now.",
+            "description": "End of time range (ISO datetime). Defaults to now. When provided without `start`, triggers backward scroll mode.",
             "in": "query",
             "name": "end",
             "required": false,
@@ -3439,7 +3518,7 @@
                 }
               ],
               "default": null,
-              "description": "End of time range (ISO datetime). Defaults to now.",
+              "description": "End of time range (ISO datetime). Defaults to now. When provided without `start`, triggers backward scroll mode.",
               "examples": [
                 "2026-02-01T15:00:00Z"
               ],
@@ -3643,8 +3722,14 @@
             "description": "Not Found"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Trigger rotation for a single device.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/images/lvgl": {
@@ -3874,8 +3959,14 @@
             "description": "Not Found"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Upload firmware binary for a device model by code.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "pipeline"
       }
     },
     "/api/pipeline/models/{code}/firmware-version": {
@@ -3925,8 +4016,14 @@
             "description": "Not Found"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get the current firmware version for a device model.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "pipeline"
       }
     },
     "/api/pipeline/upload.ps1": {
@@ -4048,8 +4145,14 @@
             "description": "Internal Server Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Manually trigger fleet-wide rotation.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/sse/callback": {
@@ -4058,8 +4161,14 @@
         "operationId": "post__api_sse_callback",
         "parameters": [],
         "responses": {},
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Handle SSE Gateway connect/disconnect callbacks.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/tasks/{task_id}": {
@@ -4078,8 +4187,14 @@
           }
         ],
         "responses": {},
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Remove a completed task from registry.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/tasks/{task_id}/cancel": {
@@ -4098,8 +4213,14 @@
           }
         ],
         "responses": {},
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Cancel a running task.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/tasks/{task_id}/status": {
@@ -4358,8 +4479,14 @@
             "description": "Bad Request"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Trigger a version event for integration testing.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/testing/devices/logs/inject": {
@@ -4399,8 +4526,14 @@
             "description": "Bad Request"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Inject log entries into the SSE device-log pipeline.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/testing/devices/logs/subscriptions": {
@@ -4504,8 +4637,14 @@
             "description": "Bad Request"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Broadcast a rotation-updated SSE event to all connected clients.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/testing/sse/task-event": {
@@ -4545,8 +4684,14 @@
             "description": "Bad Request"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Send a fake task event to a specific SSE connection for testing.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/api/testing/tasks/start": {
@@ -4586,8 +4731,14 @@
             "description": "Bad Request"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Start a demo or failing task for integration testing.",
-        "tags": []
+        "tags": [],
+        "x-required-role": "editor"
       }
     },
     "/health/drain": {
@@ -4725,5 +4876,10 @@
     }
   },
   "security": [],
-  "tags": []
+  "tags": [],
+  "x-auth-roles": {
+    "admin": null,
+    "read": null,
+    "write": "editor"
+  }
 }

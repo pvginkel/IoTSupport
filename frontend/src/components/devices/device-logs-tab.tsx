@@ -30,6 +30,7 @@ export function DeviceLogsTab({ device }: DeviceLogsTabProps) {
       <DeviceLogsViewer
         deviceId={device.id}
         deviceEntityId={device.deviceEntityId}
+        deviceName={device.deviceName}
         fullHeight
       />
     </div>
