@@ -219,11 +219,9 @@ export function useDeviceLogs({
     pendingUnsubscribeRef.current?.abort()
     pendingUnsubscribeRef.current = null
 
-    if (!hasEntityId || deviceId === undefined) {
+    if (!hasEntityId || deviceId === undefined || !requestId) {
       return
     }
-
-    const hasSse = Boolean(requestId)
 
     let isMounted = true
     let abortController: AbortController | null = null
@@ -239,31 +237,27 @@ export function useDeviceLogs({
     emitLoadingEvent('loading', 0)
 
     // 1. Register SSE event listener -- queue events until streaming switches on
-    // Only register if SSE is available
-    const removeListener = hasSse
-      ? addEventListener('device-logs', (data: unknown) => {
-          const payload = data as SseDeviceLogsPayload
-          // Only process events for our device
-          if (payload.device_entity_id !== deviceEntityId) return
+    const removeListener = addEventListener('device-logs', (data: unknown) => {
+      const payload = data as SseDeviceLogsPayload
+      // Only process events for our device
+      if (payload.device_entity_id !== deviceEntityId) return
 
-          const entries: LogEntry[] = payload.logs.map((log) => ({
-            message: log.message,
-            timestamp: log['@timestamp'],
-          }))
+      const entries: LogEntry[] = payload.logs.map((log) => ({
+        message: log.message,
+        timestamp: log['@timestamp'],
+      }))
 
-          if (isStreamingDirect) {
-            // Direct append mode -- events go straight into the buffer
-            dispatch({ type: 'APPEND', logs: entries })
-          } else {
-            // Queuing mode -- buffer until history is loaded and flushed
-            eventQueue.push(...entries)
-          }
-        })
-      : null
+      if (isStreamingDirect) {
+        // Direct append mode -- events go straight into the buffer
+        dispatch({ type: 'APPEND', logs: entries })
+      } else {
+        // Queuing mode -- buffer until history is loaded and flushed
+        eventQueue.push(...entries)
+      }
+    })
 
     // 2. Subscribe to the device log stream on the backend
     const subscribe = async (): Promise<boolean> => {
-      if (!hasSse) return false
       abortController = new AbortController()
       try {
         const response = await fetch('/api/device-logs/subscribe', {
@@ -385,10 +379,8 @@ export function useDeviceLogs({
     // 7. Cleanup: remove listener, unsubscribe (best-effort)
     return () => {
       isMounted = false
-      removeListener?.()
+      removeListener()
       abortController?.abort()
-
-      if (!hasSse) return
 
       // Best-effort unsubscribe -- abortable so StrictMode re-mount can cancel it.
       // keepalive is omitted intentionally: when the page actually closes, the SSE

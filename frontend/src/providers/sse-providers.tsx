@@ -6,12 +6,15 @@
 
 import type { ReactNode } from 'react';
 import { SseContextProvider } from '@/contexts/sse-context-provider';
+import { SseGate } from '@/components/sse/sse-gate';
 import { DeploymentProvider } from '@/contexts/deployment-context';
 
 export function SseProviders({ children }: { children: ReactNode }) {
   return (
     <SseContextProvider>
-      <DeploymentProvider>{children}</DeploymentProvider>
+      <SseGate>
+        <DeploymentProvider>{children}</DeploymentProvider>
+      </SseGate>
     </SseContextProvider>
   );
 }

@@ -312,13 +312,6 @@ export function SseContextProvider({ children }: SseContextProviderProps) {
 
   // Establish connection on mount
   useEffect(() => {
-    const hasSharedWorkerParam = typeof window !== 'undefined' &&
-      new URLSearchParams(window.location.search).has('__sharedWorker');
-    const shouldAutoConnect = !isTestMode() || hasSharedWorkerParam;
-    if (!shouldAutoConnect) {
-      return;
-    }
-
     if (useSharedWorker.current) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional SSE connection initiation
       createSharedWorkerConnection();
