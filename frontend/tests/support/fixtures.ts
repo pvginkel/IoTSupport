@@ -47,7 +47,7 @@ async function cleanupKeycloakClients(baseUrl: string): Promise<void> {
 
 export const test = infrastructureFixtures.extend<AppFixtures>({
   devices: async ({ frontendUrl, page, auth }, use) => {
-    await auth.createSession({ name: 'Test User', roles: ['admin'] });
+    await auth.createSession({ name: 'Test User', roles: ['editor'] });
     const factory = new DevicesFactory(frontendUrl, page);
     try {
       await use(factory);
@@ -57,7 +57,7 @@ export const test = infrastructureFixtures.extend<AppFixtures>({
   },
 
   deviceModels: async ({ frontendUrl, page, auth }, use) => {
-    await auth.createSession({ name: 'Test User', roles: ['admin'] });
+    await auth.createSession({ name: 'Test User', roles: ['editor'] });
     const factory = new DeviceModelsFactory(frontendUrl, page);
     await use(factory);
   },

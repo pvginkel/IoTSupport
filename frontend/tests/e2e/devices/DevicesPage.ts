@@ -221,6 +221,22 @@ export class DevicesPage {
     return this.page.locator('[data-testid="devices.logs.empty"]');
   }
 
+  get logsDownloadButton(): Locator {
+    return this.page.locator('[data-testid="devices.logs.download-button"]');
+  }
+
+  get logsDownloadDialog(): Locator {
+    return this.page.locator('[data-testid="devices.logs.download-dialog"]');
+  }
+
+  get logsDownloadDialogSubmit(): Locator {
+    return this.page.locator('[data-testid="devices.logs.download-dialog.submit"]');
+  }
+
+  logsDownloadDialogOption(count: number): Locator {
+    return this.page.locator(`[data-testid="devices.logs.download-dialog.option-${count}"]`);
+  }
+
   // Locators - Coredump Table
   get coredumpTable(): Locator {
     return this.page.locator('[data-testid="coredumps.table"]');
@@ -527,5 +543,14 @@ export class DevicesPage {
     await this.logsContainer.evaluate((el) => {
       el.scrollTop = el.scrollHeight;
     });
+  }
+
+  async getLogsLogCount(): Promise<number> {
+    const value = await this.logsContainer.getAttribute('data-log-count');
+    return value ? parseInt(value, 10) : 0;
+  }
+
+  async getLogsScrollTop(): Promise<number> {
+    return await this.logsContainer.evaluate((el) => el.scrollTop);
   }
 }
