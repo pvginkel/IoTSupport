@@ -1,4 +1,4 @@
-const DEFAULT_BACKEND_URL = 'http://localhost:5000';
+const DEFAULT_BACKEND_URL = 'http://localhost:3101';
 
 export function getBackendUrl(): string {
   return process.env.BACKEND_URL || DEFAULT_BACKEND_URL;
