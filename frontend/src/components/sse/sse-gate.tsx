@@ -1,8 +1,8 @@
 /**
  * SseGate component.
  * Blocks rendering of children until the SSE connection is established.
- * SSE runs as a Kubernetes sidecar, so if it's down the pod is down —
- * no error/retry UI is needed.
+ * SSE runs as a sidecar alongside the app, so connection is expected to be
+ * fast and reliable — no error or retry UI is needed here.
  */
 
 import type { ReactNode } from 'react';

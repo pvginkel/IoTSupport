@@ -5,6 +5,7 @@
   "src/routes/__root.tsx",
 
   "src/components/auth/**",
+  "src/components/sse/**",
   "src/components/icons/ExternalLinkIcon.tsx",
   "src/components/icons/ImagePlaceholderIcon.tsx",
   "src/components/icons/UploadIcon.tsx",
