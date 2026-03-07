@@ -190,6 +190,11 @@ export const infrastructureFixtures = base.extend<InfrastructureFixtures, Intern
             return;
           }
 
+          // Allow 400 errors (e.g. /api/auth/login when OIDC is disabled in test mode)
+          if (text.includes('400') || text.includes('BAD REQUEST')) {
+            return;
+          }
+
           // Allow 500 errors during auth error tests
           if (text.includes('500') || text.includes('INTERNAL SERVER ERROR')) {
             return;

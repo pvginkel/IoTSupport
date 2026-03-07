@@ -7,9 +7,13 @@
 
 import { test, expect } from '../../support/fixtures'
 import { AuthPage } from './AuthPage'
+import { SIDEBAR_VISIBLE } from '../../../src/lib/consts'
 
 test.describe('App Shell Layout', () => {
   test.describe('Sidebar Toggle (Desktop)', () => {
+    // Skip sidebar tests when the app hides the sidebar (SIDEBAR_VISIBLE = false)
+    test.skip(!SIDEBAR_VISIBLE, 'Sidebar is not visible in this app')
+
     test('collapses sidebar when hamburger clicked', async ({ page, auth }) => {
       await auth.createSession({ name: 'Sidebar User', roles: ['editor'] })
 
@@ -45,6 +49,8 @@ test.describe('App Shell Layout', () => {
   })
 
   test.describe('Mobile Menu Toggle', () => {
+    test.skip(!SIDEBAR_VISIBLE, 'Sidebar is not visible in this app')
+
     test('opens overlay menu on mobile when hamburger clicked', async ({ page, auth }) => {
       await auth.createSession({ name: 'Mobile User', roles: ['editor'] })
 
@@ -80,7 +86,7 @@ test.describe('App Shell Layout', () => {
   })
 
   test.describe('Top Bar Layout', () => {
-    test('shows hamburger, logo, title, and user dropdown in correct order', async ({ page, auth }) => {
+    test('shows logo, title, and user dropdown in correct order', async ({ page, auth }) => {
       await auth.createSession({ name: 'Layout User', roles: ['editor'] })
 
       await page.goto('/')
@@ -88,24 +94,27 @@ test.describe('App Shell Layout', () => {
       const authPage = new AuthPage(page)
       await authPage.waitForAuthenticated()
 
-      await expect(authPage.hamburgerButton).toBeVisible()
       await expect(authPage.logo).toBeVisible()
       await expect(authPage.title).toBeVisible()
       await expect(authPage.userDropdownTrigger).toBeVisible()
 
-      const hamburgerBox = await authPage.hamburgerButton.boundingBox()
       const logoBox = await authPage.logo.boundingBox()
       const titleBox = await authPage.title.boundingBox()
       const userBox = await authPage.userDropdownTrigger.boundingBox()
 
-      expect(hamburgerBox).not.toBeNull()
       expect(logoBox).not.toBeNull()
       expect(titleBox).not.toBeNull()
       expect(userBox).not.toBeNull()
 
-      expect(hamburgerBox!.x).toBeLessThan(logoBox!.x)
       expect(logoBox!.x).toBeLessThan(titleBox!.x)
       expect(titleBox!.x).toBeLessThan(userBox!.x)
+
+      if (SIDEBAR_VISIBLE) {
+        await expect(authPage.hamburgerButton).toBeVisible()
+        const hamburgerBox = await authPage.hamburgerButton.boundingBox()
+        expect(hamburgerBox).not.toBeNull()
+        expect(hamburgerBox!.x).toBeLessThan(logoBox!.x)
+      }
     })
 
   })
