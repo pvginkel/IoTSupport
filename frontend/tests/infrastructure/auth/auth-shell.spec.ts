@@ -11,7 +11,7 @@ import { AuthPage } from './AuthPage'
 test.describe('App Shell Layout', () => {
   test.describe('Sidebar Toggle (Desktop)', () => {
     test('collapses sidebar when hamburger clicked', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Sidebar User' })
+      await auth.createSession({ name: 'Sidebar User', roles: ['editor'] })
 
       await page.setViewportSize({ width: 1280, height: 720 })
       await page.goto('/')
@@ -28,7 +28,7 @@ test.describe('App Shell Layout', () => {
     })
 
     test('expands sidebar when hamburger clicked again', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Sidebar User' })
+      await auth.createSession({ name: 'Sidebar User', roles: ['editor'] })
 
       await page.setViewportSize({ width: 1280, height: 720 })
       await page.goto('/')
@@ -46,7 +46,7 @@ test.describe('App Shell Layout', () => {
 
   test.describe('Mobile Menu Toggle', () => {
     test('opens overlay menu on mobile when hamburger clicked', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Mobile User' })
+      await auth.createSession({ name: 'Mobile User', roles: ['editor'] })
 
       await page.setViewportSize({ width: 375, height: 667 })
       await page.goto('/')
@@ -62,7 +62,7 @@ test.describe('App Shell Layout', () => {
     })
 
     test('closes overlay when clicking outside', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Mobile User' })
+      await auth.createSession({ name: 'Mobile User', roles: ['editor'] })
 
       await page.setViewportSize({ width: 375, height: 667 })
       await page.goto('/')
@@ -81,7 +81,7 @@ test.describe('App Shell Layout', () => {
 
   test.describe('Top Bar Layout', () => {
     test('shows hamburger, logo, title, and user dropdown in correct order', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Layout User' })
+      await auth.createSession({ name: 'Layout User', roles: ['editor'] })
 
       await page.goto('/')
 

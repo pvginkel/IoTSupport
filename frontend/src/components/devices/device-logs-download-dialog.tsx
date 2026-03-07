@@ -8,6 +8,7 @@ import {
   DialogFooter,
 } from '@/components/primitives/dialog'
 import { Button } from '@/components/primitives/button'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { fetchLogsForDownload } from '@/hooks/use-device-logs'
 
 interface DeviceLogsDownloadDialogProps {
@@ -86,14 +87,19 @@ export function DeviceLogsDownloadDialog({
   const abortControllerRef = useRef<AbortController | null>(null)
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Wrap onOpenChange to reset state on open and abort on close
-  const handleOpenChange = useCallback((nextOpen: boolean) => {
-    if (nextOpen) {
-      // Reset to initial selection state when opening
+  // Reset to initial state whenever the dialog opens
+  useEffect(() => {
+    if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional reset when dialog opens
       setDownloadState({ phase: 'selecting' })
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional reset when dialog opens
       setSelectedCount(1000)
-    } else {
-      // Abort in-flight requests and clear auto-close timer when closing
+    }
+  }, [open])
+
+  // Wrap onOpenChange to abort in-flight requests on close
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    if (!nextOpen) {
       abortControllerRef.current?.abort()
       abortControllerRef.current = null
       if (autoCloseTimerRef.current) {
@@ -132,8 +138,13 @@ export function DeviceLogsDownloadDialog({
 
       if (controller.signal.aborted) return
 
-      // Build plain text content -- raw messages only, one per line
-      const content = logs.map((log) => log.message).join('\n')
+      // Build plain text content -- raw messages only, one per line.
+      // Normalize: ensure each message ends with exactly one newline
+      // (real MQTT messages have trailing newlines; seeded test data may not).
+      const content = logs.map((log) => {
+        const msg = log.message
+        return msg.endsWith('\n') ? msg : msg + '\n'
+      }).join('')
       const filename = buildFilename(deviceName)
       triggerDownload(content, filename)
 
@@ -173,25 +184,20 @@ export function DeviceLogsDownloadDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Line count options */}
+        {/* Line count selector */}
         {isSelecting && (
-          <div className="grid grid-cols-5 gap-2">
-            {LINE_COUNT_OPTIONS.map((count) => (
-              <button
-                key={count}
-                type="button"
-                onClick={() => setSelectedCount(count)}
-                data-testid={`devices.logs.download-dialog.option-${count}`}
-                className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                  selectedCount === count
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border bg-secondary/50 text-muted-foreground hover:bg-secondary'
-                }`}
-              >
-                {count.toLocaleString()}
-              </button>
-            ))}
-          </div>
+          <Select value={String(selectedCount)} onValueChange={(v) => setSelectedCount(Number(v))}>
+            <SelectTrigger data-testid="devices.logs.download-dialog.line-select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LINE_COUNT_OPTIONS.map((count) => (
+                <SelectItem key={count} value={String(count)}>
+                  {count.toLocaleString()} lines
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
 
         {/* Progress indicator during fetch */}

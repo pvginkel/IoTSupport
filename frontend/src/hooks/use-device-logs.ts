@@ -174,6 +174,14 @@ export function useDeviceLogs({
   const isFetchingOlderRef = useRef(false)
   const [isFetchingOlder, setIsFetchingOlder] = useState(false)
 
+  // Refs that track state values consumed by fetchOlderLogs to keep it stable
+  const hasMoreRef = useRef(state.hasMore)
+  const oldestTimestampRef = useRef(state.oldestTimestamp)
+  const logsLengthRef = useRef(state.logs.length)
+  useEffect(() => { hasMoreRef.current = state.hasMore }, [state.hasMore])
+  useEffect(() => { oldestTimestampRef.current = state.oldestTimestamp }, [state.oldestTimestamp])
+  useEffect(() => { logsLengthRef.current = state.logs.length }, [state.logs.length])
+
   // AbortController for in-flight backfill requests -- aborted on device change/unmount
   const backfillAbortRef = useRef<AbortController | null>(null)
 
@@ -275,7 +283,9 @@ export function useDeviceLogs({
       }
     }
 
-    // 3. Fetch initial log history
+    // 3. Fetch initial log history using backward pagination from a future
+    //    cursor. This reuses the same code path as backfill, so `has_more`
+    //    directly indicates whether older entries exist.
     const fetchHistory = async (): Promise<{
       logs: LogEntry[]
       hasMore: boolean
@@ -285,6 +295,10 @@ export function useDeviceLogs({
       abortController = new AbortController()
       try {
         const url = new URL(`/api/devices/${deviceId}/logs`, window.location.origin)
+        // Use a date one day in the future to ensure we capture all recent entries
+        // eslint-disable-next-line no-restricted-properties -- Real timestamp for API cursor, not ID generation
+        const futureEnd = new Date(Date.now() + 86_400_000).toISOString()
+        url.searchParams.set('end', futureEnd)
 
         const response = await fetch(url.toString(), {
           signal: abortController.signal,
@@ -406,13 +420,15 @@ export function useDeviceLogs({
    * - Skips if already fetching, no more pages, no oldest timestamp, or buffer at capacity.
    * - Uses isFetchingOlderRef to prevent concurrent calls.
    */
+  // Reads from refs so the callback identity only changes with deviceId,
+  // preventing handleScroll from being recreated on every log append.
   const fetchOlderLogs = useCallback(async () => {
     if (
       isFetchingOlderRef.current ||
-      !state.hasMore ||
-      !state.oldestTimestamp ||
+      !hasMoreRef.current ||
+      !oldestTimestampRef.current ||
       deviceId === undefined ||
-      state.logs.length >= MAX_BUFFER_SIZE
+      logsLengthRef.current >= MAX_BUFFER_SIZE
     ) {
       return
     }
@@ -425,7 +441,7 @@ export function useDeviceLogs({
 
     try {
       const url = new URL(`/api/devices/${deviceId}/logs`, window.location.origin)
-      url.searchParams.set('end', state.oldestTimestamp)
+      url.searchParams.set('end', oldestTimestampRef.current)
 
       const response = await fetch(url.toString(), {
         credentials: 'include',
@@ -451,12 +467,12 @@ export function useDeviceLogs({
           oldestTimestamp: data.window_start,
         })
       } else {
-        // No entries returned -- mark as exhausted without a PREPEND dispatch
+        // No entries returned -- mark as exhausted
         dispatch({
-          type: 'SET',
-          logs: state.logs,
+          type: 'PREPEND',
+          logs: [],
           hasMore: false,
-          oldestTimestamp: state.oldestTimestamp,
+          oldestTimestamp: oldestTimestampRef.current,
         })
       }
     } catch (error) {
@@ -467,7 +483,7 @@ export function useDeviceLogs({
       setIsFetchingOlder(false)
       backfillAbortRef.current = null
     }
-  }, [deviceId, state.hasMore, state.oldestTimestamp, state.logs])
+  }, [deviceId])
 
   return {
     logs: state.logs,

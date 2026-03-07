@@ -27,7 +27,7 @@ test.describe('Device Provisioning Modal', () => {
   });
 
   test('does not show provision device button in new mode', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User', roles: ['admin'] });
+    await auth.createSession({ name: 'Test User', roles: ['editor'] });
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.gotoNew();

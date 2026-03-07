@@ -16,7 +16,7 @@ test.describe('Authentication', () => {
   test.describe('Auth Loading State', () => {
     test('shows loading indicator before auth completes', async ({ page, auth }) => {
       await auth.clearSession()
-      await auth.createSession({ name: 'Test User' })
+      await auth.createSession({ name: 'Test User', roles: ['editor'] })
 
       await page.goto('/')
 
@@ -27,11 +27,9 @@ test.describe('Authentication', () => {
   })
 
   test.describe('Login Redirect on 401', () => {
-    // NOTE: These tests require the backend to return 401 when no session exists.
-    // The test backend auto-authenticates when OIDC is disabled, preventing
-    // these tests from verifying the redirect behavior.
-    test.skip('redirects to login when not authenticated', async ({ page, auth }) => {
+    test('redirects to login when not authenticated', async ({ page, auth }) => {
       await auth.clearSession()
+      await auth.forceError(401)
 
       const loginRequestPromise = page.waitForRequest(request =>
         request.url().includes('/api/auth/login')
@@ -44,8 +42,9 @@ test.describe('Authentication', () => {
       expect(loginRequest.url()).toContain('redirect=')
     })
 
-    test.skip('preserves full path including query params in redirect', async ({ page, auth }) => {
+    test('preserves full path including query params in redirect', async ({ page, auth }) => {
       await auth.clearSession()
+      await auth.forceError(401)
 
       const loginRequestPromise = page.waitForRequest(request =>
         request.url().includes('/api/auth/login')
@@ -78,7 +77,7 @@ test.describe('Authentication', () => {
 
     test('retry button triggers new auth check', async ({ page, auth }) => {
       await auth.forceError(500)
-      await auth.createSession({ name: 'Retry User' })
+      await auth.createSession({ name: 'Retry User', roles: ['editor'] })
 
       await page.goto('/')
 
@@ -96,7 +95,7 @@ test.describe('Authentication', () => {
 
   test.describe('Authenticated User Display', () => {
     test('displays user name in top bar when authenticated', async ({ page, auth }) => {
-      await auth.createSession({ name: 'John Doe' })
+      await auth.createSession({ name: 'John Doe', roles: ['editor'] })
 
       await page.goto('/')
 
@@ -107,7 +106,7 @@ test.describe('Authentication', () => {
     })
 
     test('displays "Unknown User" when name is null', async ({ page, auth }) => {
-      await auth.createSession({ name: null, email: 'test@example.com' })
+      await auth.createSession({ name: null, email: 'test@example.com', roles: ['editor'] })
 
       await page.goto('/')
 
@@ -120,7 +119,7 @@ test.describe('Authentication', () => {
 
   test.describe('Logout Flow', () => {
     test('shows dropdown menu when clicking user name', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Dropdown User' })
+      await auth.createSession({ name: 'Dropdown User', roles: ['editor'] })
 
       await page.goto('/')
 
@@ -135,7 +134,7 @@ test.describe('Authentication', () => {
     })
 
     test('clicking logout navigates to logout endpoint', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Logout User' })
+      await auth.createSession({ name: 'Logout User', roles: ['editor'] })
 
       await page.goto('/')
 

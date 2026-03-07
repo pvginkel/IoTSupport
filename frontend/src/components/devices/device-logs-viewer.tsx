@@ -36,7 +36,6 @@ export function DeviceLogsViewer({ deviceId, deviceEntityId, deviceName, fullHei
     logs,
     isLoading,
     hasEntityId,
-    isStreaming,
     hasMore,
     prependCounter,
     fetchOlderLogs,
@@ -60,6 +59,14 @@ export function DeviceLogsViewer({ deviceId, deviceEntityId, deviceName, fullHei
   // Store scrollHeight before a backfill fetch for position restoration
   const previousScrollHeightRef = useRef<number>(0)
 
+  // Refs that track values consumed by handleScroll so it remains stable
+  const fetchOlderLogsRef = useRef(fetchOlderLogs)
+  const hasMoreRef = useRef(hasMore)
+  const isFetchingOlderRef = useRef(isFetchingOlder)
+  useEffect(() => { fetchOlderLogsRef.current = fetchOlderLogs }, [fetchOlderLogs])
+  useEffect(() => { hasMoreRef.current = hasMore }, [hasMore])
+  useEffect(() => { isFetchingOlderRef.current = isFetchingOlder }, [isFetchingOlder])
+
   // Check if scroll is at bottom
   const checkIsAtBottom = useCallback(() => {
     const container = scrollContainerRef.current
@@ -77,10 +84,9 @@ export function DeviceLogsViewer({ deviceId, deviceEntityId, deviceName, fullHei
     return container.scrollTop <= SCROLL_THRESHOLD_PX
   }, [])
 
-  // Handle scroll events to track position and trigger backfill
-  // Ignores events triggered by programmatic auto-scroll to avoid race
-  // conditions where rapid log batches increase scrollHeight between the
-  // scrollTop assignment and the scroll event delivery.
+  // Handle scroll events to track position and trigger backfill.
+  // Reads backfill state from refs so the handler identity is stable and
+  // doesn't cause the onScroll listener to be reattached on every log append.
   const handleScroll = useCallback(() => {
     if (isAutoScrollingRef.current) return
     const atBottom = checkIsAtBottom()
@@ -90,15 +96,15 @@ export function DeviceLogsViewer({ deviceId, deviceEntityId, deviceName, fullHei
     wasAtBottomRef.current = atBottom
 
     // Trigger backfill when scrolled to top, if conditions allow
-    if (atTop && hasMore && !isFetchingOlder) {
+    if (atTop && hasMoreRef.current && !isFetchingOlderRef.current) {
       // Record scrollHeight before fetch for position restoration
       const container = scrollContainerRef.current
       if (container) {
         previousScrollHeightRef.current = container.scrollHeight
       }
-      void fetchOlderLogs()
+      void fetchOlderLogsRef.current()
     }
-  }, [checkIsAtBottom, checkIsAtTop, hasMore, isFetchingOlder, fetchOlderLogs])
+  }, [checkIsAtBottom, checkIsAtTop])
 
   // Restore scroll position after prepend (before browser paints)
   // keyed on prependCounter so it only fires after a PREPEND dispatch
@@ -146,36 +152,21 @@ export function DeviceLogsViewer({ deviceId, deviceEntityId, deviceName, fullHei
 
   return (
     <div data-testid="devices.logs.viewer" className={fullHeight ? 'flex flex-col flex-1 min-h-0 gap-2' : 'space-y-2'}>
-      {/* Header with label, download button, and streaming status */}
+      {/* Header with label and download button */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <label className="block text-sm font-medium text-muted-foreground">
-            Device Logs
-          </label>
-          <button
-            type="button"
-            onClick={() => setDownloadDialogOpen(true)}
-            className="inline-flex items-center justify-center rounded-md h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-secondary"
-            data-testid="devices.logs.download-button"
-            title="Download logs"
-          >
-            <Download className="h-4 w-4" />
-          </button>
-        </div>
-        <span
-          className={`flex items-center gap-1.5 text-xs font-medium ${
-            isStreaming ? 'text-green-500' : 'text-muted-foreground'
-          }`}
-          data-testid="devices.logs.streaming-status"
-          data-streaming={isStreaming ? 'true' : 'false'}
+        <label className="block text-sm font-medium text-muted-foreground">
+          Device Logs
+        </label>
+        <button
+          type="button"
+          onClick={() => setDownloadDialogOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-md px-2 h-7 text-sm cursor-pointer text-muted-foreground hover:text-foreground hover:bg-secondary"
+          data-testid="devices.logs.download-button"
+          title="Download logs"
         >
-          <span
-            className={`inline-block h-2 w-2 rounded-full ${
-              isStreaming ? 'bg-green-500' : 'bg-muted-foreground'
-            }`}
-          />
-          {isStreaming ? 'Connected' : 'Connecting...'}
-        </span>
+          <Download className="h-4 w-4" />
+          Download
+        </button>
       </div>
 
       {/* Log container with terminal styling */}

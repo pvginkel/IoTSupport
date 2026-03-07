@@ -186,13 +186,16 @@ test.describe('Device Logs Tab', () => {
         expect(initialCount).toBeGreaterThanOrEqual(490);
       }).toPass({ timeout: 10_000 });
 
-      // Scroll to top — should NOT trigger a backfill fetch
+      // Scroll to top — should NOT trigger a backfill fetch (has_more=false)
       await devicesPage.scrollLogsToTop();
 
-      // Brief wait then verify count is unchanged (no backfill occurred)
+      // Brief wait then verify count stayed near the initial value.
+      // SSE streaming may add a few entries during the wait, so allow
+      // a small tolerance.
       await page.waitForTimeout(1000);
       const countAfter = await devicesPage.getLogsLogCount();
-      expect(countAfter).toBe(initialCount);
+      expect(countAfter).toBeGreaterThanOrEqual(initialCount);
+      expect(countAfter).toBeLessThanOrEqual(initialCount + 10);
     });
   });
 
@@ -211,10 +214,8 @@ test.describe('Device Logs Tab', () => {
       await devicesPage.logsDownloadButton.click();
       await expect(devicesPage.logsDownloadDialog).toBeVisible();
 
-      // All line-count options should be visible
-      for (const count of [100, 500, 1000, 5000, 10000]) {
-        await expect(devicesPage.logsDownloadDialogOption(count)).toBeVisible();
-      }
+      // Line-count select should be visible
+      await expect(devicesPage.logsDownloadDialogLineSelect).toBeVisible();
 
       // Submit button should be visible
       await expect(devicesPage.logsDownloadDialogSubmit).toBeVisible();
@@ -233,7 +234,7 @@ test.describe('Device Logs Tab', () => {
       // Open dialog and select 100 lines
       await devicesPage.logsDownloadButton.click();
       await expect(devicesPage.logsDownloadDialog).toBeVisible();
-      await devicesPage.logsDownloadDialogOption(100).click();
+      await devicesPage.selectDownloadLineCount(100);
 
       // Start download and capture the file
       const [download] = await Promise.all([
@@ -268,7 +269,7 @@ test.describe('Device Logs Tab', () => {
 
       await devicesPage.logsDownloadButton.click();
       await expect(devicesPage.logsDownloadDialog).toBeVisible();
-      await devicesPage.logsDownloadDialogOption(100).click();
+      await devicesPage.selectDownloadLineCount(100);
 
       const [download] = await Promise.all([
         page.waitForEvent('download'),

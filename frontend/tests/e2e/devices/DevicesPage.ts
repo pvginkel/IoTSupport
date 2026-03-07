@@ -205,10 +205,6 @@ export class DevicesPage {
     return this.page.locator('[data-testid="devices.logs.viewer"]');
   }
 
-  get logsStreamingStatus(): Locator {
-    return this.page.locator('[data-testid="devices.logs.streaming-status"]');
-  }
-
   get logsContainer(): Locator {
     return this.page.locator('[data-testid="devices.logs.container"]');
   }
@@ -233,8 +229,13 @@ export class DevicesPage {
     return this.page.locator('[data-testid="devices.logs.download-dialog.submit"]');
   }
 
-  logsDownloadDialogOption(count: number): Locator {
-    return this.page.locator(`[data-testid="devices.logs.download-dialog.option-${count}"]`);
+  get logsDownloadDialogLineSelect(): Locator {
+    return this.page.locator('[data-testid="devices.logs.download-dialog.line-select"]');
+  }
+
+  async selectDownloadLineCount(count: number): Promise<void> {
+    await this.logsDownloadDialogLineSelect.click();
+    await this.page.locator(`[role="option"]:has-text("${count.toLocaleString()} lines")`).click();
   }
 
   // Locators - Coredump Table

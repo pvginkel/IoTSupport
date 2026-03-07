@@ -19,7 +19,7 @@ test.describe('Authentication', () => {
       await auth.clearSession()
 
       // Create session so auth will succeed (we just want to see loading state)
-      await auth.createSession({ name: 'Test User' })
+      await auth.createSession({ name: 'Test User', roles: ['editor'] })
 
       // Navigate and check for loading state
       // Note: Loading state may be very brief, so we check it was rendered
@@ -35,43 +35,33 @@ test.describe('Authentication', () => {
   })
 
   test.describe('Login Redirect on 401', () => {
-    // NOTE: These tests require the backend to return 401 when no session exists.
-    // Currently, the backend test mode may auto-authenticate requests, preventing
-    // these tests from verifying the redirect behavior. Backend investigation needed.
-    test.skip('redirects to login when not authenticated', async ({ page, auth }) => {
-      // Clear session so user is not authenticated
+    test('redirects to login when not authenticated', async ({ page, auth }) => {
       await auth.clearSession()
+      await auth.forceError(401)
 
-      // Set up request listener to catch the redirect to login
       const loginRequestPromise = page.waitForRequest(request =>
         request.url().includes('/api/auth/login')
       )
 
-      // Navigate to app
       await page.goto('/')
 
-      // Should make a request to login endpoint
       const loginRequest = await loginRequestPromise
       expect(loginRequest.url()).toContain('/api/auth/login')
       expect(loginRequest.url()).toContain('redirect=')
     })
 
-    test.skip('preserves full path including query params in redirect', async ({ page, auth }) => {
-      // Clear session
+    test('preserves full path including query params in redirect', async ({ page, auth }) => {
       await auth.clearSession()
+      await auth.forceError(401)
 
-      // Set up request listener
       const loginRequestPromise = page.waitForRequest(request =>
         request.url().includes('/api/auth/login')
       )
 
-      // Navigate to a specific path with query params
       await page.goto('/devices?filter=active&sort=name')
 
-      // Wait for login request
       const loginRequest = await loginRequestPromise
 
-      // Check redirect URL contains the original path
       const url = new URL(loginRequest.url())
       const redirectParam = url.searchParams.get('redirect')
       expect(redirectParam).toContain('/devices')
@@ -101,7 +91,7 @@ test.describe('Authentication', () => {
       await auth.forceError(500)
 
       // But create a session so retry succeeds
-      await auth.createSession({ name: 'Retry User' })
+      await auth.createSession({ name: 'Retry User', roles: ['editor'] })
 
       // Navigate to app
       await page.goto('/')
@@ -124,7 +114,7 @@ test.describe('Authentication', () => {
   test.describe('Authenticated User Display', () => {
     test('displays user name in top bar when authenticated', async ({ page, auth }) => {
       // Create session with specific name
-      await auth.createSession({ name: 'John Doe' })
+      await auth.createSession({ name: 'John Doe', roles: ['editor'] })
 
       // Navigate to app
       await page.goto('/')
@@ -138,7 +128,7 @@ test.describe('Authentication', () => {
 
     test('displays "Unknown User" when name is null', async ({ page, auth }) => {
       // Create session with null name
-      await auth.createSession({ name: null, email: 'test@example.com' })
+      await auth.createSession({ name: null, email: 'test@example.com', roles: ['editor'] })
 
       // Navigate to app
       await page.goto('/')
@@ -153,7 +143,7 @@ test.describe('Authentication', () => {
 
   test.describe('Logout Flow', () => {
     test('shows dropdown menu when clicking user name', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Dropdown User' })
+      await auth.createSession({ name: 'Dropdown User', roles: ['editor'] })
 
       await page.goto('/')
 
@@ -170,7 +160,7 @@ test.describe('Authentication', () => {
     })
 
     test('clicking logout navigates to logout endpoint', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Logout User' })
+      await auth.createSession({ name: 'Logout User', roles: ['editor'] })
 
       await page.goto('/')
 
@@ -199,7 +189,7 @@ test.describe('Authentication', () => {
 test.describe('App Shell Layout', () => {
   test.describe('Sidebar Toggle (Desktop)', () => {
     test('collapses sidebar to zero width when hamburger clicked', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Sidebar User' })
+      await auth.createSession({ name: 'Sidebar User', roles: ['editor'] })
 
       // Use desktop viewport
       await page.setViewportSize({ width: 1280, height: 720 })
@@ -220,7 +210,7 @@ test.describe('App Shell Layout', () => {
     })
 
     test('expands sidebar when hamburger clicked again', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Sidebar User' })
+      await auth.createSession({ name: 'Sidebar User', roles: ['editor'] })
 
       await page.setViewportSize({ width: 1280, height: 720 })
       await page.goto('/')
@@ -240,7 +230,7 @@ test.describe('App Shell Layout', () => {
 
   test.describe('Mobile Menu Toggle', () => {
     test('opens overlay menu on mobile when hamburger clicked', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Mobile User' })
+      await auth.createSession({ name: 'Mobile User', roles: ['editor'] })
 
       // Use mobile viewport
       await page.setViewportSize({ width: 375, height: 667 })
@@ -260,7 +250,7 @@ test.describe('App Shell Layout', () => {
     })
 
     test('closes overlay when clicking outside', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Mobile User' })
+      await auth.createSession({ name: 'Mobile User', roles: ['editor'] })
 
       await page.setViewportSize({ width: 375, height: 667 })
       await page.goto('/')
@@ -282,7 +272,7 @@ test.describe('App Shell Layout', () => {
 
   test.describe('Top Bar Layout', () => {
     test('shows hamburger, logo, title, and user dropdown in correct order', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Layout User' })
+      await auth.createSession({ name: 'Layout User', roles: ['editor'] })
 
       await page.goto('/')
 
@@ -313,7 +303,7 @@ test.describe('App Shell Layout', () => {
     })
 
     test('logo and title link to home route', async ({ page, auth }) => {
-      await auth.createSession({ name: 'Navigation User' })
+      await auth.createSession({ name: 'Navigation User', roles: ['editor'] })
 
       // Start on devices page
       await page.goto('/devices')

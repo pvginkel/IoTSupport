@@ -60,7 +60,7 @@ test.describe('Device List', () => {
   });
 
   test('navigates to new device editor', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User', roles: ['admin'] });
+    await auth.createSession({ name: 'Test User', roles: ['editor'] });
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.goto();
@@ -125,7 +125,7 @@ test.describe('Create Device', () => {
   });
 
   test('save button is disabled when no model is selected', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User', roles: ['admin'] });
+    await auth.createSession({ name: 'Test User', roles: ['editor'] });
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.gotoNew();
@@ -136,7 +136,7 @@ test.describe('Create Device', () => {
   });
 
   test('cancel navigates back to list', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User', roles: ['admin'] });
+    await auth.createSession({ name: 'Test User', roles: ['editor'] });
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.gotoNew();
@@ -399,7 +399,7 @@ test.describe('Error Handling', () => {
   });
 
   test('shows error when opening non-existent device', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User', roles: ['admin'] });
+    await auth.createSession({ name: 'Test User', roles: ['editor'] });
 
     const devicesPage = new DevicesPage(page);
 
@@ -414,7 +414,7 @@ test.describe('Error Handling', () => {
   });
 
   test('back to list button works on 404 page', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User', roles: ['admin'] });
+    await auth.createSession({ name: 'Test User', roles: ['editor'] });
 
     const devicesPage = new DevicesPage(page);
 
@@ -615,7 +615,7 @@ test.describe('Active Toggle - Edit Form', () => {
 
 test.describe('Active Indicator - New Device Form', () => {
   test('shows active indicator as enabled and disabled', async ({ page, auth }) => {
-    await auth.createSession({ name: 'Test User', roles: ['admin'] });
+    await auth.createSession({ name: 'Test User', roles: ['editor'] });
 
     const devicesPage = new DevicesPage(page);
     await devicesPage.gotoNew();
