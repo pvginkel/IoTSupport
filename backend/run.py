@@ -73,7 +73,7 @@ def main() -> None:
                 threads=threads,
                 trusted_proxy="*",
                 trusted_proxy_count=1,
-                trusted_proxy_headers="x-forwarded-for x-forwarded-proto x-forwarded-host"
+                trusted_proxy_headers="x-forwarded-for x-forwarded-proto x-forwarded-host",
             )
 
         thread = threading.Thread(target=runner, daemon=True)
