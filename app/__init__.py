@@ -5,6 +5,7 @@ import sys
 
 from flask import g
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from werkzeug.middleware.proxy_fix import ProxyFix
 
