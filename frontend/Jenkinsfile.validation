@@ -166,15 +166,8 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                 capture { content = content (content ? "\\n" : "") $0 }
                                 !capture { print }
                             ' validation-raw.log > validation-stripped.log
-
-                            # Strip ANSI escape sequences and non-ASCII bytes (emoji, unicode symbols)
-                            ESC=$(printf '\033')
-                            sed \
-                                -e "s/${ESC}\\[[0-9;]*[a-zA-Z]//g" \
-                                -e "s/${ESC}([a-zA-Z]//g" \
-                                validation-stripped.log \
-                                | LC_ALL=C tr -cd '\000-\177' > validation.log
                         '''
+                        utils.cleanLog('validation-stripped.log', 'validation.log')
                         archiveArtifacts artifacts: 'validation.log', allowEmptyArchive: true
                         junit testResults: 'test-results/*.xml', allowEmptyResults: true
 
