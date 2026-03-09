@@ -9,24 +9,39 @@ import type { APIRequestContext } from '@playwright/test';
  * @throws Error if the request fails
  */
 export async function apiRequest<T>(
-  requestFn: () => Promise<{ data?: T; error?: unknown; response: Response }>
+  requestFn: () => Promise<{ data?: T; error?: unknown; response: Response }>,
+  { retries = 3, retryDelayMs = 500 } = {}
 ): Promise<{ data?: T; response: Response }> {
-  const { data, error, response } = await requestFn();
+  // Transient status codes worth retrying (bad gateway, service unavailable, gateway timeout)
+  const RETRYABLE_STATUSES = new Set([502, 503, 504]);
 
-  if (error || !response.ok) {
-    const errorObj = error as { message?: string; detail?: string; error?: string } | undefined;
-    const errorMessage = typeof error === 'object' && error !== null
-      ? errorObj?.message || errorObj?.detail || errorObj?.error || JSON.stringify(error)
-      : '';
-    const statusInfo = `${response.status} ${response.statusText}`;
-    throw new Error(
-      errorMessage
-        ? `API request failed: ${statusInfo} - ${errorMessage}`
-        : `API request failed: ${statusInfo}`
-    );
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const { data, error, response } = await requestFn();
+
+    if (error || !response.ok) {
+      // Retry on transient server errors (unless last attempt)
+      if (RETRYABLE_STATUSES.has(response.status) && attempt < retries) {
+        await new Promise(r => setTimeout(r, retryDelayMs * (attempt + 1)));
+        continue;
+      }
+
+      const errorObj = error as { message?: string; detail?: string; error?: string } | undefined;
+      const errorMessage = typeof error === 'object' && error !== null
+        ? errorObj?.message || errorObj?.detail || errorObj?.error || JSON.stringify(error)
+        : '';
+      const statusInfo = `${response.status} ${response.statusText}`;
+      throw new Error(
+        errorMessage
+          ? `API request failed: ${statusInfo} - ${errorMessage}`
+          : `API request failed: ${statusInfo}`
+      );
+    }
+
+    return { data, response };
   }
 
-  return { data, response };
+  // Unreachable, but satisfies TypeScript
+  throw new Error('apiRequest: exhausted retries');
 }
 
 /**
