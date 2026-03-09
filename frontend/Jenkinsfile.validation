@@ -16,7 +16,6 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
         def frontendMeta
         def jobName = "iot-support-validation-${BUILD_NUMBER}"
         def k8sNamespace = kubectl.currentNamespace()
-        def secretName = "iot-support-validation-env-${BUILD_NUMBER}"
 
         stage('Clone repo') {
             git branch: 'main',
@@ -77,9 +76,15 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
 
         stage('Run validation') {
             container('k8s') {
-                withCredentials([file(credentialsId: 'iotsupport-test-env', variable: 'TEST_ENV_FILE')]) {
-                    sh "kubectl create secret generic ${secretName} --namespace=${k8sNamespace} --from-env-file=${TEST_ENV_FILE}"
-
+                withCredentials([
+                    string(credentialsId: 'S3_ENDPOINT_URL', variable: 'S3_ENDPOINT_URL'),
+                    string(credentialsId: 'S3_ACCESS_KEY_ID', variable: 'S3_ACCESS_KEY_ID'),
+                    string(credentialsId: 'S3_SECRET_ACCESS_KEY', variable: 'S3_SECRET_ACCESS_KEY'),
+                    string(credentialsId: 'KEYCLOAK_BASE_URL', variable: 'KEYCLOAK_BASE_URL'),
+                    string(credentialsId: 'KEYCLOAK_REALM', variable: 'KEYCLOAK_REALM'),
+                    string(credentialsId: 'KEYCLOAK_ADMIN_CLIENT_ID', variable: 'KEYCLOAK_ADMIN_CLIENT_ID'),
+                    string(credentialsId: 'KEYCLOAK_ADMIN_CLIENT_SECRET', variable: 'KEYCLOAK_ADMIN_CLIENT_SECRET'),
+                ]) {
                     try {
                         kubectl.startJob("""
                             apiVersion: batch/v1
@@ -102,9 +107,23 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                     - name: validation
                                       image: registry:5000/iot-support-validation:${currentBuild.number}
                                       imagePullPolicy: Always
-                                      envFrom:
-                                        - secretRef:
-                                            name: ${secretName}
+                                      env:
+                                        - name: S3_ENDPOINT_URL
+                                          value: "${S3_ENDPOINT_URL}"
+                                        - name: S3_ACCESS_KEY_ID
+                                          value: "${S3_ACCESS_KEY_ID}"
+                                        - name: S3_SECRET_ACCESS_KEY
+                                          value: "${S3_SECRET_ACCESS_KEY}"
+                                        - name: S3_BUCKET_NAME
+                                          value: "iot-support-validation"
+                                        - name: KEYCLOAK_BASE_URL
+                                          value: "${KEYCLOAK_BASE_URL}"
+                                        - name: KEYCLOAK_REALM
+                                          value: "${KEYCLOAK_REALM}"
+                                        - name: KEYCLOAK_ADMIN_CLIENT_ID
+                                          value: "${KEYCLOAK_ADMIN_CLIENT_ID}"
+                                        - name: KEYCLOAK_ADMIN_CLIENT_SECRET
+                                          value: "${KEYCLOAK_ADMIN_CLIENT_SECRET}"
                         """.stripIndent())
 
                         kubectl.waitForJob(jobName, k8sNamespace)
@@ -153,7 +172,6 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                         }
                     } finally {
                         kubectl.deleteJob(jobName, k8sNamespace)
-                        sh "kubectl delete secret ${secretName} --namespace=${k8sNamespace} --ignore-not-found"
                     }
                 }
             }

@@ -18,6 +18,5 @@ sse_gateway_port: 3102
 use_app_shell: true
 use_oidc: true
 use_sse: true
-validation_credential_id: iotsupport-test-env
 validation_image_name: registry:5000/iot-support-validation
 validation_jenkins_job: IoTSupportValidation
