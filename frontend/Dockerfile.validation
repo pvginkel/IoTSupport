@@ -1,0 +1,9 @@
+FROM registry:5000/modern-app-dev
+
+COPY backend-src /work/backend
+COPY frontend-src /work/frontend
+
+COPY scripts/validation-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+ENTRYPOINT ["/docker-entrypoint.sh"]

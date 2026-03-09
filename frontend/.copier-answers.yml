@@ -1,9 +1,13 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v0.14.3
+_commit: v0.15.0
 _src_path: ../../ModernAppTemplate/frontend
 author_email: dev@example.com
 author_name: Developer
+backend_image_name: registry:5000/iotsupport-app
+backend_jenkins_job: IoTSupport
 backend_port: 3101
+backend_repo_url: https://github.com/pvginkel/IoTSupport.git
+frontend_jenkins_job: IoTSupportUI
 frontend_port: 3100
 image_name: registry:5000/iotsupport-ui
 project_description: IoT device management and support platform
@@ -14,3 +18,6 @@ sse_gateway_port: 3102
 use_app_shell: true
 use_oidc: true
 use_sse: true
+validation_credential_id: iotsupport-test-env
+validation_image_name: registry:5000/iot-support-validation
+validation_jenkins_job: IoTSupportValidation

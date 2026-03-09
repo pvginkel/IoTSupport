@@ -11,18 +11,27 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko') {
         }
 
         stage("Building iot-support") {
-            sh 'git rev-parse HEAD > git-rev'
+            def gitRev = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+
+            writeFile file: 'git-rev', text: gitRev
 
             container('kaniko') {
                 helmCharts.kaniko([
-                    "registry:5000/iotsupport-ui:${currentBuild.number}",
-                    "registry:5000/iotsupport-ui:latest"
+                    "registry:5000/iotsupport-ui:${currentBuild.number}"
                 ])
             }
+
+            writeJSON file: 'frontend-build.json', json: [tag: ":${currentBuild.number}", gitRev: gitRev]
+            archiveArtifacts artifacts: 'frontend-build.json', fingerprint: true
         }
 
-        stage('Deploy Helm charts') {
-            build job: 'HelmCharts', wait: false
+        stage('Start validation') {
+            build job: 'IoTSupportValidation',
+                wait: false,
+                parameters: [
+                    string(name: 'FRONTEND_BUILD', value: "${currentBuild.number}"),
+                    string(name: 'TRIGGERED_BY', value: 'frontend')
+                ]
         }
     }
 }

@@ -1,0 +1,173 @@
+library('JenkinsPipelineUtils') _
+
+properties([
+    parameters([
+        string(name: 'BACKEND_BUILD', defaultValue: ''),
+        string(name: 'FRONTEND_BUILD', defaultValue: ''),
+        string(name: 'TRIGGERED_BY')
+    ])
+])
+
+podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+    containerTemplates.k8s('k8s')
+]) {
+    node(POD_LABEL) {
+        def backendMeta
+        def frontendMeta
+        def jobName = "iot-support-validation-${BUILD_NUMBER}"
+        def k8sNamespace = kubectl.currentNamespace()
+        def secretName = "iot-support-validation-env-${BUILD_NUMBER}"
+
+        stage('Clone repo') {
+            git branch: 'main',
+                credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
+                url: 'https://github.com/pvginkel/IoTSupportUI.git'
+        }
+
+        stage('Resolve image pair') {
+            copyArtifacts(
+                projectName: 'IoTSupport',
+                selector: params.BACKEND_BUILD ? specific(params.BACKEND_BUILD) : lastSuccessful(),
+                filter: 'backend-build.json',
+                target: 'backend-meta',
+                flatten: true
+            )
+
+            copyArtifacts(
+                projectName: 'IoTSupportUI',
+                selector: params.FRONTEND_BUILD ? specific(params.FRONTEND_BUILD) : lastSuccessful(),
+                filter: 'frontend-build.json',
+                target: 'frontend-meta',
+                flatten: true
+            )
+
+            backendMeta = readJSON file: 'backend-meta/backend-build.json'
+            frontendMeta = readJSON file: 'frontend-meta/frontend-build.json'
+
+            echo "Testing backend=${backendMeta.tag} (${backendMeta.gitRev})"
+            echo "Testing frontend=${frontendMeta.tag} (${frontendMeta.gitRev})"
+        }
+
+        stage('Clone source repos') {
+            dir('backend-src') {
+                git branch: 'main',
+                    credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
+                    url: 'https://github.com/pvginkel/IoTSupport.git'
+                sh "git checkout ${backendMeta.gitRev}"
+            }
+            dir('frontend-src') {
+                git branch: 'main',
+                    credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
+                    url: 'https://github.com/pvginkel/IoTSupportUI.git'
+                sh "git checkout ${frontendMeta.gitRev}"
+            }
+        }
+
+        stage('Build validation image') {
+            container('kaniko') {
+                helmCharts.kaniko(
+                    "Dockerfile.validation",
+                    ".",
+                    [
+                        "registry:5000/iot-support-validation:${currentBuild.number}"
+                    ]
+                )
+            }
+        }
+
+        stage('Run validation') {
+            container('k8s') {
+                withCredentials([file(credentialsId: 'iotsupport-test-env', variable: 'TEST_ENV_FILE')]) {
+                    sh "kubectl create secret generic ${secretName} --namespace=${k8sNamespace} --from-env-file=${TEST_ENV_FILE}"
+
+                    try {
+                        kubectl.startJob("""
+                            apiVersion: batch/v1
+                            kind: Job
+                            metadata:
+                              name: ${jobName}
+                              namespace: ${k8sNamespace}
+                              labels:
+                                app.kubernetes.io/name: iot-support-validation
+                                app.kubernetes.io/managed-by: jenkins
+                                jenkins/build-number: "${BUILD_NUMBER}"
+                            spec:
+                              backoffLimit: 0
+                              activeDeadlineSeconds: 3600
+                              ttlSecondsAfterFinished: 3600
+                              template:
+                                spec:
+                                  restartPolicy: Never
+                                  containers:
+                                    - name: validation
+                                      image: registry:5000/iot-support-validation:${currentBuild.number}
+                                      imagePullPolicy: Always
+                                      envFrom:
+                                        - secretRef:
+                                            name: ${secretName}
+                        """.stripIndent())
+
+                        kubectl.waitForJob(jobName, k8sNamespace)
+
+                        def podName = kubectl.getJobPodName(jobName, k8sNamespace)
+                        kubectl.savePodLogs(podName, 'validation', k8sNamespace, 'validation-raw.log')
+
+                        sh '''
+                            set -euo pipefail
+
+                            mkdir -p test-results
+
+                            awk '
+                                /^===JUNIT:.*===$/ {
+                                    fname = $0
+                                    sub(/^===JUNIT:/, "", fname)
+                                    sub(/===$/, "", fname)
+                                    content = ""
+                                    capture = 1
+                                    next
+                                }
+                                /^===JUNIT_END===$/ {
+                                    print content | "base64 -d > test-results/" fname
+                                    close("base64 -d > test-results/" fname)
+                                    capture = 0
+                                    next
+                                }
+                                capture { content = content (content ? "\\n" : "") $0 }
+                                !capture { print }
+                            ' validation-raw.log > validation.log
+                        '''
+                        archiveArtifacts artifacts: 'validation.log', allowEmptyArchive: true
+                        junit testResults: 'test-results/*.xml', allowEmptyResults: true
+
+                        def exitCode = kubectl.getContainerExitCode(podName, 'validation', k8sNamespace)
+                        def failReason = kubectl.getJobFailReason(jobName, k8sNamespace)
+
+                        currentBuild.description = "job=${jobName}, pod=${podName}, exit=${exitCode ?: 'n/a'}"
+
+                        if (!exitCode) {
+                            error("No exit code found for pod ${podName}${failReason ? " (reason: ${failReason})" : ""}")
+                        }
+
+                        if (exitCode != '0') {
+                            error("Validation failed with exit code ${exitCode}")
+                        }
+                    } finally {
+                        kubectl.deleteJob(jobName, k8sNamespace)
+                        sh "kubectl delete secret ${secretName} --namespace=${k8sNamespace} --ignore-not-found"
+                    }
+                }
+            }
+        }
+
+        stage('Promote build') {
+            container('k8s') {
+                sh "crane tag --insecure registry:5000/iotsupport-app${backendMeta.tag} latest"
+                sh "crane tag --insecure registry:5000/iotsupport-ui${frontendMeta.tag} latest"
+            }
+        }
+
+        stage('Deploy Helm charts') {
+            build job: 'HelmCharts', wait: false
+        }
+    }
+}
