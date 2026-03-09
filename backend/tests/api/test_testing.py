@@ -263,14 +263,15 @@ class TestCreateTestSession:
 
     def test_auth_self_returns_test_session_user(self, testing_client: FlaskClient):
         """After creating session, /api/auth/self returns the test user."""
-        # Create test session
+        # Create test session — use "editor" which is IoTSupport's write_role
+        # so the user passes the hierarchical role check on /api/auth/self.
         testing_client.post(
             "/api/testing/auth/session",
             json={
                 "subject": "alice-123",
                 "name": "Alice Smith",
                 "email": "alice@example.com",
-                "roles": ["admin"],
+                "roles": ["editor"],
             },
         )
 
@@ -282,7 +283,7 @@ class TestCreateTestSession:
         assert data["subject"] == "alice-123"
         assert data["name"] == "Alice Smith"
         assert data["email"] == "alice@example.com"
-        assert data["roles"] == ["admin"]
+        assert data["roles"] == ["editor"]
 
 
 @pytest.mark.usefixtures("clear_test_sessions")
@@ -365,9 +366,12 @@ class TestForceAuthError:
 
     def test_force_error_is_single_shot(self, testing_client: FlaskClient):
         """Forced error is consumed after one request."""
+        # Session needs a recognized hierarchical role so the second
+        # request (after the forced error is consumed) passes the
+        # role check on /api/auth/self and returns 200.
         testing_client.post(
             "/api/testing/auth/session",
-            json={"subject": "test-user"},
+            json={"subject": "test-user", "roles": ["editor"]},
         )
 
         # Force error
