@@ -35,7 +35,8 @@ echo "=== Installing Playwright browsers ==="
 pnpm playwright install chromium
 
 echo "=== Running frontend tests ==="
-PLAYWRIGHT_JUNIT_OUTPUT_NAME="$RESULTS_DIR/frontend.xml" \
+PLAYWRIGHT_BACKEND_LOG_STREAM=true \
+    PLAYWRIGHT_JUNIT_OUTPUT_NAME="$RESULTS_DIR/frontend.xml" \
     pnpm playwright test --retries=2 --reporter=list,junit || exit_code=$?
 
 exit $exit_code
