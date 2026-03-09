@@ -111,6 +111,10 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                     - name: validation
                                       image: registry:5000/iot-support-validation:${currentBuild.number}
                                       imagePullPolicy: Always
+                                      resources:
+                                        requests:
+                                          cpu: "1"
+                                          memory: 3584Mi
                                       env:
                                         - name: S3_ENDPOINT_URL
                                           value: "${S3_ENDPOINT_URL}"
