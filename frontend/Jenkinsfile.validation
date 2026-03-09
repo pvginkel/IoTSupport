@@ -156,7 +156,17 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                 }
                                 capture { content = content (content ? "\\n" : "") $0 }
                                 !capture { print }
-                            ' validation-raw.log > validation.log
+                            ' validation-raw.log > validation-stripped.log
+
+                            # Strip ANSI escape sequences and Unicode emoji/symbols
+                            LC_ALL=C sed \
+                                -e $'s/\x1b\[[0-9;]*[a-zA-Z]//g' \
+                                -e $'s/\x1b([a-zA-Z]//g' \
+                                -e 's/[\xc2-\xc3][\x80-\xbf]//g' \
+                                -e 's/\xe2[\x80-\xbf][\x80-\xbf]//g' \
+                                -e 's/\xef[\x80-\xbf][\x80-\xbf]//g' \
+                                -e 's/\xf0[\x80-\xbf][\x80-\xbf][\x80-\xbf]//g' \
+                                validation-stripped.log > validation.log
                         '''
                         archiveArtifacts artifacts: 'validation.log', allowEmptyArchive: true
                         junit testResults: 'test-results/*.xml', allowEmptyResults: true
