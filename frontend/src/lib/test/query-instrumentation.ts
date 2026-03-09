@@ -156,6 +156,7 @@ export function useListLoadingInstrumentation(options: ListLoadingInstrumentatio
 
   const testMode = isTestMode();
   const instrumentationActiveRef = useRef(false);
+  const mountedRef = useRef(false);
   const readyMetadataRef = useRef(getReadyMetadata);
   const errorMetadataRef = useRef(getErrorMetadata);
   const abortedMetadataRef = useRef(getAbortedMetadata);
@@ -179,6 +180,8 @@ export function useListLoadingInstrumentation(options: ListLoadingInstrumentatio
     }
 
     const inFlight = isLoading || isFetching;
+    const isFirstRun = !mountedRef.current;
+    mountedRef.current = true;
 
     if (inFlight && !instrumentationActiveRef.current) {
       instrumentationActiveRef.current = true;
@@ -194,6 +197,25 @@ export function useListLoadingInstrumentation(options: ListLoadingInstrumentatio
     if (!inFlight && instrumentationActiveRef.current) {
       instrumentationActiveRef.current = false;
 
+      const hasError = Boolean(error);
+      const metadata = hasError
+        ? errorMetadataRef.current?.(error)
+        : readyMetadataRef.current?.();
+
+      const completionPayload: Omit<ListLoadingTestEvent, 'timestamp'> = {
+        kind: TestEventKind.LIST_LOADING,
+        scope,
+        phase: hasError ? 'error' : 'ready',
+        ...(metadata ? { metadata } : {}),
+      };
+
+      emitTestEvent(completionPayload);
+      return;
+    }
+
+    // Data was already available on mount (cached query) — emit ready immediately
+    // so Playwright waiters don't hang waiting for a loading→ready transition.
+    if (isFirstRun && !inFlight) {
       const hasError = Boolean(error);
       const metadata = hasError
         ? errorMetadataRef.current?.(error)
