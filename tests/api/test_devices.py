@@ -103,7 +103,6 @@ class TestDevicesList:
                 session = container.db_session()
                 older = CoreDump(
                     device_id=device.id,
-                    filename="old.dmp",
                     chip="esp32s3",
                     firmware_version="1.0.0",
                     size=1024,
@@ -111,7 +110,6 @@ class TestDevicesList:
                 )
                 newer = CoreDump(
                     device_id=device.id,
-                    filename="new.dmp",
                     chip="esp32s3",
                     firmware_version="1.0.1",
                     size=2048,

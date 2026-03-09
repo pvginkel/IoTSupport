@@ -17,8 +17,6 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.coredump import CoreDump
-from app.models.device import Device
 from app.models.device_model import DeviceModel
 from app.models.firmware_version import FirmwareVersion
 from app.services.firmware_service import ARTIFACT_RENAMES
@@ -215,85 +213,15 @@ class MigrationService:
             existing.uploaded_at = datetime.now(UTC)
 
     def _migrate_coredumps(self) -> dict[str, int]:
-        """Migrate coredump .dmp files from COREDUMPS_DIR to S3.
+        """Coredump filesystem-to-S3 migration is complete.
 
-        Iterates device_key directories under COREDUMPS_DIR. For each .dmp
-        file, looks up the matching CoreDump DB record using the filename
-        column, then uploads to S3 as coredumps/{device_key}/{db_id}.dmp.
-
-        After successful upload, sets filename = NULL on the DB record to
-        signal migration completion.
+        The filename column was dropped in migration 007 after all coredumps
+        were migrated to S3 with deterministic ID-based keys. This method is
+        kept as a no-op so callers passing coredumps_dir still get a valid
+        summary.
 
         Returns:
-            Dict with 'migrated' and 'skipped' counts.
+            Dict with 'migrated' and 'skipped' counts (always zero).
         """
-        assert self.coredumps_dir is not None
-        migrated = 0
-        skipped = 0
-
-        for device_dir in sorted(self.coredumps_dir.iterdir()):
-            if not device_dir.is_dir():
-                continue
-
-            device_key = device_dir.name
-
-            # Verify device exists in DB
-            stmt = select(Device).where(Device.key == device_key)
-            device = self.db.execute(stmt).scalar_one_or_none()
-            if device is None:
-                warning = f"Device directory '{device_key}' has no matching DB record, skipping"
-                self.warnings.append(warning)
-                logger.warning(warning)
-                skipped += 1
-                continue
-
-            # Process .dmp files
-            for dmp_path in sorted(device_dir.glob("*.dmp")):
-                dmp_filename = dmp_path.name
-
-                # Look up coredump DB record by filename
-                stmt = select(CoreDump).where(
-                    CoreDump.device_id == device.id,
-                    CoreDump.filename == dmp_filename,
-                )
-                coredump = self.db.execute(stmt).scalar_one_or_none()
-
-                if coredump is None:
-                    warning = f"Orphaned coredump file {device_key}/{dmp_filename}: no matching DB record"
-                    self.warnings.append(warning)
-                    logger.warning(warning)
-                    skipped += 1
-                    continue
-
-                logger.info(
-                    "Migrating coredump: %s/%s -> coredumps/%s/%d.dmp",
-                    device_key, dmp_filename, device_key, coredump.id,
-                )
-
-                if self.dry_run:
-                    print(f"  [DRY RUN] Would migrate coredump: {device_key}/{dmp_filename} -> {device_key}/{coredump.id}.dmp")
-                    migrated += 1
-                    continue
-
-                try:
-                    # Upload to S3 with the new ID-based key
-                    s3_key = f"coredumps/{device_key}/{coredump.id}.dmp"
-                    self.s3_service.upload_file(
-                        BytesIO(dmp_path.read_bytes()),
-                        s3_key,
-                        content_type="application/octet-stream",
-                    )
-
-                    # Clear filename to signal migration complete
-                    coredump.filename = None
-                    migrated += 1
-
-                except Exception as e:
-                    warning = f"Failed to migrate coredump {device_key}/{dmp_filename}: {e}"
-                    self.warnings.append(warning)
-                    logger.error(warning)
-                    skipped += 1
-
-        self.db.flush()
-        logger.info("Coredump migration: %d migrated, %d skipped", migrated, skipped)
-        return {"migrated": migrated, "skipped": skipped}
+        logger.info("Coredump migration already complete (filename column dropped), skipping")
+        return {"migrated": 0, "skipped": 0}
