@@ -2,7 +2,6 @@
 
 import json
 import zipfile
-from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 
@@ -10,8 +9,6 @@ from flask import Flask
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.coredump import CoreDump, ParseStatus
-from app.models.device import Device
 from app.models.device_model import DeviceModel
 from app.models.firmware_version import FirmwareVersion
 from app.services.container import ServiceContainer
@@ -253,46 +250,16 @@ class TestMigrationServiceFirmware:
 
 
 class TestMigrationServiceCoredumps:
-    """Tests for coredump migration from COREDUMPS_DIR to S3."""
+    """Tests for coredump migration (now a no-op after filename column drop)."""
 
-    def test_migrate_coredumps(
+    def test_migrate_coredumps_is_noop(
         self, app: Flask, session: Session, container: ServiceContainer, tmp_path: Path
     ) -> None:
-        """Test migrating coredump .dmp files from filesystem to S3."""
-        # Create model and device
-        model = DeviceModel(code="migcd1", name="CD Migration Test")
-        session.add(model)
-        session.flush()
-
-        device = Device(
-            key="migcd001",
-            device_model_id=model.id,
-            config="{}",
-            rotation_state="OK",
-        )
-        session.add(device)
-        session.flush()
-
-        # Create a coredump DB record with a legacy filename
-        coredump = CoreDump(
-            device_id=device.id,
-            filename="coredump_20260101T120000_123456Z.dmp",
-            chip="esp32s3",
-            firmware_version="1.0.0",
-            size=256,
-            parse_status=ParseStatus.PARSED.value,
-            parsed_output="crash info",
-            uploaded_at=datetime.now(UTC),
-        )
-        session.add(coredump)
-        session.flush()
-
-        # Create legacy filesystem structure
+        """Test that coredump migration is a no-op (filename column dropped in 007)."""
         coredumps_dir = tmp_path / "coredumps"
-        device_dir = coredumps_dir / "migcd001"
+        device_dir = coredumps_dir / "somedevice"
         device_dir.mkdir(parents=True)
-        dmp_content = b"\xDE\xAD\xBE\xEF" * 64
-        (device_dir / "coredump_20260101T120000_123456Z.dmp").write_bytes(dmp_content)
+        (device_dir / "test.dmp").write_bytes(b"\x00" * 10)
 
         s3_service = container.s3_service()
         migration = MigrationService(
@@ -302,124 +269,8 @@ class TestMigrationServiceCoredumps:
 
         summary = migration.run()
 
-        assert summary["coredumps_migrated"] == 1
+        assert summary["coredumps_migrated"] == 0
         assert summary["coredumps_skipped"] == 0
-
-        # Verify S3 object exists with ID-based key
-        s3_key = f"coredumps/migcd001/{coredump.id}.dmp"
-        assert s3_service.file_exists(s3_key)
-        stream = s3_service.download_file(s3_key)
-        assert stream.read() == dmp_content
-
-        # Verify filename column was cleared
-        session.expire(coredump)
-        assert coredump.filename is None
-
-    def test_migrate_coredumps_orphaned_file(
-        self, app: Flask, session: Session, container: ServiceContainer, tmp_path: Path
-    ) -> None:
-        """Test that orphaned .dmp files (no DB record) are skipped."""
-        model = DeviceModel(code="migcd2", name="Orphan Test")
-        session.add(model)
-        session.flush()
-
-        device = Device(
-            key="migcd002",
-            device_model_id=model.id,
-            config="{}",
-            rotation_state="OK",
-        )
-        session.add(device)
-        session.flush()
-
-        coredumps_dir = tmp_path / "coredumps"
-        device_dir = coredumps_dir / "migcd002"
-        device_dir.mkdir(parents=True)
-        (device_dir / "orphaned_coredump.dmp").write_bytes(b"\x00" * 10)
-
-        s3_service = container.s3_service()
-        migration = MigrationService(
-            s3_service=s3_service, db=session,
-            assets_dir=None, coredumps_dir=coredumps_dir,
-        )
-
-        summary = migration.run()
-
-        assert summary["coredumps_migrated"] == 0
-        assert summary["coredumps_skipped"] == 1
-        assert any("Orphaned" in w for w in summary["warnings"])
-
-    def test_migrate_coredumps_no_matching_device(
-        self, app: Flask, session: Session, container: ServiceContainer, tmp_path: Path
-    ) -> None:
-        """Test that device directories with no matching DB record are skipped."""
-        coredumps_dir = tmp_path / "coredumps"
-        (coredumps_dir / "nodevice").mkdir(parents=True)
-        (coredumps_dir / "nodevice" / "test.dmp").write_bytes(b"\x00" * 10)
-
-        s3_service = container.s3_service()
-        migration = MigrationService(
-            s3_service=s3_service, db=session,
-            assets_dir=None, coredumps_dir=coredumps_dir,
-        )
-
-        summary = migration.run()
-
-        assert summary["coredumps_migrated"] == 0
-        assert summary["coredumps_skipped"] == 1
-        assert any("nodevice" in w for w in summary["warnings"])
-
-    def test_migrate_coredumps_dry_run(
-        self, app: Flask, session: Session, container: ServiceContainer, tmp_path: Path
-    ) -> None:
-        """Test that dry run does not upload or modify DB records."""
-        model = DeviceModel(code="migcd3", name="Dry Run CD Test")
-        session.add(model)
-        session.flush()
-
-        device = Device(
-            key="migcd003",
-            device_model_id=model.id,
-            config="{}",
-            rotation_state="OK",
-        )
-        session.add(device)
-        session.flush()
-
-        coredump = CoreDump(
-            device_id=device.id,
-            filename="test_cd.dmp",
-            chip="esp32",
-            firmware_version="1.0.0",
-            size=10,
-            parse_status=ParseStatus.PENDING.value,
-            uploaded_at=datetime.now(UTC),
-        )
-        session.add(coredump)
-        session.flush()
-
-        coredumps_dir = tmp_path / "coredumps"
-        device_dir = coredumps_dir / "migcd003"
-        device_dir.mkdir(parents=True)
-        (device_dir / "test_cd.dmp").write_bytes(b"\x00" * 10)
-
-        s3_service = container.s3_service()
-        migration = MigrationService(
-            s3_service=s3_service, db=session,
-            assets_dir=None, coredumps_dir=coredumps_dir,
-            dry_run=True,
-        )
-
-        summary = migration.run()
-
-        assert summary["coredumps_migrated"] == 1
-
-        # S3 should NOT have the object
-        assert not s3_service.file_exists(f"coredumps/migcd003/{coredump.id}.dmp")
-
-        # Filename should NOT have been cleared
-        session.expire(coredump)
-        assert coredump.filename == "test_cd.dmp"
 
     def test_migrate_coredumps_no_coredumps_dir(
         self, app: Flask, session: Session, container: ServiceContainer
@@ -442,31 +293,9 @@ class TestMigrationServiceFullMigration:
     def test_full_migration(
         self, app: Flask, session: Session, container: ServiceContainer, tmp_path: Path
     ) -> None:
-        """Test migrating both firmware and coredumps in a single run."""
-        # Set up model, device, coredump
+        """Test migrating firmware (coredump migration is now a no-op)."""
         model = DeviceModel(code="migfull", name="Full Migration")
         session.add(model)
-        session.flush()
-
-        device = Device(
-            key="migful01",
-            device_model_id=model.id,
-            config="{}",
-            rotation_state="OK",
-        )
-        session.add(device)
-        session.flush()
-
-        coredump = CoreDump(
-            device_id=device.id,
-            filename="cd_full.dmp",
-            chip="esp32s3",
-            firmware_version="1.0.0",
-            size=32,
-            parse_status=ParseStatus.PARSED.value,
-            uploaded_at=datetime.now(UTC),
-        )
-        session.add(coredump)
         session.flush()
 
         # Firmware filesystem
@@ -477,11 +306,9 @@ class TestMigrationServiceFullMigration:
             _create_legacy_firmware_zip("migfull", "1.0.0")
         )
 
-        # Coredump filesystem
+        # Coredump filesystem (will be ignored since migration is a no-op)
         coredumps_dir = tmp_path / "coredumps"
-        device_dir = coredumps_dir / "migful01"
-        device_dir.mkdir(parents=True)
-        (device_dir / "cd_full.dmp").write_bytes(b"\xAB" * 32)
+        coredumps_dir.mkdir(parents=True)
 
         s3_service = container.s3_service()
         migration = MigrationService(
@@ -492,13 +319,10 @@ class TestMigrationServiceFullMigration:
         summary = migration.run()
 
         assert summary["firmware_zips"] == 1
-        assert summary["coredumps_migrated"] == 1
+        assert summary["coredumps_migrated"] == 0
         assert summary["firmware_skipped"] == 0
         assert summary["coredumps_skipped"] == 0
         assert len(summary["warnings"]) == 0
 
         # Verify firmware in S3
         assert s3_service.file_exists("firmware/migfull/1.0.0/firmware.bin")
-
-        # Verify coredump in S3
-        assert s3_service.file_exists(f"coredumps/migful01/{coredump.id}.dmp")
