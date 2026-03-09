@@ -84,6 +84,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                     string(credentialsId: 'KEYCLOAK_TEST_REALM', variable: 'KEYCLOAK_REALM'),
                     string(credentialsId: 'KEYCLOAK_TEST_IOTSUPPORT_ADMIN_CLIENT_ID', variable: 'KEYCLOAK_ADMIN_CLIENT_ID'),
                     string(credentialsId: 'KEYCLOAK_TEST_IOTSUPPORT_ADMIN_CLIENT_SECRET', variable: 'KEYCLOAK_ADMIN_CLIENT_SECRET'),
+                    string(credentialsId: 'KEYCLOAK_TEST_OIDC_TOKEN_URL', variable: 'OIDC_TOKEN_URL'),
                 ]) {
                     try {
                         kubectl.startJob("""
@@ -124,6 +125,8 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                           value: "${KEYCLOAK_ADMIN_CLIENT_ID}"
                                         - name: KEYCLOAK_ADMIN_CLIENT_SECRET
                                           value: "${KEYCLOAK_ADMIN_CLIENT_SECRET}"
+                                        - name: OIDC_TOKEN_URL
+                                          value: "${OIDC_TOKEN_URL}"
                         """.stripIndent())
 
                         kubectl.waitForJob(jobName, k8sNamespace)
