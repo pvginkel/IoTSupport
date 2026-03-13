@@ -83,3 +83,12 @@ export { DescriptionList, DescriptionItem } from './description-list';
 
 // List section header
 export { ListSectionHeader, type ListSectionHeaderProps } from './list-section-header';
+
+// Routed tabs
+export {
+  RoutedTabs,
+  type RoutedTabDefinition,
+  getTabPreference,
+  setTabPreference,
+  useRestoreTab,
+} from './routed-tabs';

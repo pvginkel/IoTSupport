@@ -1,10 +1,15 @@
-import { Link, useLocation } from '@tanstack/react-router'
-import { useEffect } from 'react'
+import { Link } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 import type { Device } from '@/hooks/use-devices'
 import { useCoredumps } from '@/hooks/use-coredumps'
 import { getRotationStateBadge } from '@/lib/utils/device-badges'
-import { setDeviceTabPreference, type DeviceTab } from '@/lib/utils/device-tab-preference'
+import { RoutedTabs, type RoutedTabDefinition } from '@/components/primitives'
+
+/** localStorage key for persisting the active device detail tab. */
+export const DEVICE_TAB_STORAGE_KEY = 'iot-support-device-tab'
+
+/** Valid device tab values for preference persistence. */
+export const DEVICE_TAB_VALUES = ['edit', 'logs', 'coredumps'] as const
 
 interface DeviceDetailHeaderProps {
   device: Device
@@ -18,21 +23,6 @@ export function DeviceDetailHeader({ device }: DeviceDetailHeaderProps) {
   const { coredumps } = useCoredumps(device.id)
   const rotationBadge = getRotationStateBadge(device.rotationState)
 
-  // Persist the active tab so it can be restored on next device visit.
-  // Catches direct-URL navigation, back-button, etc.
-  // Persist the active tab so the index route redirect can restore it.
-  // Only write when we're on a device detail path — ignore navigations
-  // away (e.g. back to /devices list) which would clobber the preference.
-  const location = useLocation()
-  const devicePrefix = `/devices/${device.id}/`
-  useEffect(() => {
-    if (!location.pathname.startsWith(devicePrefix)) return
-    let tab: DeviceTab = 'edit'
-    if (location.pathname.includes('/logs')) tab = 'logs'
-    else if (location.pathname.includes('/coredumps')) tab = 'coredumps'
-    setDeviceTabPreference(tab)
-  }, [location.pathname, devicePrefix])
-
   // Title: prefer name, then entity ID, then key
   const displayTitle = (device.deviceName && device.deviceName.trim())
     ? device.deviceName
@@ -40,6 +30,43 @@ export function DeviceDetailHeader({ device }: DeviceDetailHeaderProps) {
   const displaySubtitle = (device.deviceEntityId && device.deviceEntityId.trim())
     ? device.deviceEntityId
     : null
+
+  const deviceIdStr = String(device.id)
+  const basePath = `/devices/${deviceIdStr}/`
+
+  // Build tab definitions with the coredumps badge composed as a ReactNode label
+  const tabs: RoutedTabDefinition[] = [
+    {
+      to: '/devices/$deviceId/edit',
+      params: { deviceId: deviceIdStr },
+      value: 'edit',
+      label: 'Configuration',
+      testId: 'devices.detail.tab.configuration',
+    },
+    {
+      to: '/devices/$deviceId/logs',
+      params: { deviceId: deviceIdStr },
+      value: 'logs',
+      label: 'Logs',
+      testId: 'devices.detail.tab.logs',
+    },
+    {
+      to: '/devices/$deviceId/coredumps',
+      params: { deviceId: deviceIdStr },
+      value: 'coredumps',
+      label: (
+        <>
+          Core Dumps
+          {coredumps.length > 0 && (
+            <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+              {coredumps.length}
+            </span>
+          )}
+        </>
+      ),
+      testId: 'devices.detail.tab.coredumps',
+    },
+  ]
 
   return (
     <div
@@ -107,71 +134,13 @@ export function DeviceDetailHeader({ device }: DeviceDetailHeaderProps) {
         </div>
       </div>
 
-      {/* Tab bar */}
-      <nav className="flex gap-0 px-4" data-testid="devices.detail.tabs">
-        <TabLink
-          to="/devices/$deviceId/edit"
-          params={{ deviceId: String(device.id) }}
-          tab="edit"
-          testId="devices.detail.tab.configuration"
-        >
-          Configuration
-        </TabLink>
-        <TabLink
-          to="/devices/$deviceId/logs"
-          params={{ deviceId: String(device.id) }}
-          tab="logs"
-          testId="devices.detail.tab.logs"
-        >
-          Logs
-        </TabLink>
-        <TabLink
-          to="/devices/$deviceId/coredumps"
-          params={{ deviceId: String(device.id) }}
-          tab="coredumps"
-          testId="devices.detail.tab.coredumps"
-        >
-          Core Dumps
-          {coredumps.length > 0 && (
-            <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-              {coredumps.length}
-            </span>
-          )}
-        </TabLink>
-      </nav>
+      {/* Tab bar — delegates rendering and persistence to the RoutedTabs primitive */}
+      <RoutedTabs
+        tabs={tabs}
+        testIdPrefix="devices.detail"
+        storageKey={DEVICE_TAB_STORAGE_KEY}
+        basePath={basePath}
+      />
     </div>
-  )
-}
-
-/** Tab link styled to match the sidebar active-link pattern */
-function TabLink({
-  to,
-  params,
-  tab,
-  testId,
-  children,
-}: {
-  to: string
-  params: Record<string, string>
-  tab: DeviceTab
-  testId: string
-  children: React.ReactNode
-}) {
-  return (
-    <Link
-      to={to}
-      params={params}
-      className="relative px-4 py-2.5 text-sm font-medium transition-colors text-muted-foreground hover:text-foreground [&.active]:text-foreground"
-      activeProps={{
-        className: 'active',
-        'aria-current': 'page',
-      }}
-      data-testid={testId}
-      onClick={() => setDeviceTabPreference(tab)}
-    >
-      {children}
-      {/* Active underline indicator rendered via CSS */}
-      <span className="absolute inset-x-0 bottom-0 h-0.5 bg-transparent [.active>&]:bg-primary" />
-    </Link>
   )
 }

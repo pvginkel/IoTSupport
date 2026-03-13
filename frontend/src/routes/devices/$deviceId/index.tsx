@@ -1,6 +1,6 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect } from 'react'
-import { getDeviceTabPreference } from '@/lib/utils/device-tab-preference'
+import { createFileRoute } from '@tanstack/react-router'
+import { useRestoreTab } from '@/components/primitives'
+import { DEVICE_TAB_STORAGE_KEY, DEVICE_TAB_VALUES } from '@/components/devices/device-detail-header'
 
 export const Route = createFileRoute('/devices/$deviceId/')({
   component: RedirectToPreferredTab,
@@ -10,16 +10,16 @@ export const Route = createFileRoute('/devices/$deviceId/')({
 // navigates there with replace. This route never renders visible content.
 function RedirectToPreferredTab() {
   const { deviceId } = Route.useParams()
-  const navigate = useNavigate()
-  const tab = getDeviceTabPreference()
 
-  useEffect(() => {
-    navigate({
+  useRestoreTab({
+    storageKey: DEVICE_TAB_STORAGE_KEY,
+    validValues: [...DEVICE_TAB_VALUES],
+    defaultValue: 'edit',
+    toPath: (tab) => ({
       to: `/devices/$deviceId/${tab}`,
       params: { deviceId },
-      replace: true,
-    })
-  }, [navigate, deviceId, tab])
+    }),
+  })
 
   return null
 }

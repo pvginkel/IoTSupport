@@ -5,7 +5,8 @@ import { useDeviceModels, useDeviceModel } from '@/hooks/use-device-models'
 import { useConfirm } from '@/hooks/use-confirm'
 import { useFormInstrumentation } from '@/hooks/use-form-instrumentation'
 import { configureMonacoSchemaValidation } from '@/lib/utils/monaco-schema'
-import { setDeviceTabPreference } from '@/lib/utils/device-tab-preference'
+import { setTabPreference } from '@/components/primitives'
+import { DEVICE_TAB_STORAGE_KEY } from '@/components/devices/device-detail-header'
 
 const DEFAULT_TEMPLATE = JSON.stringify({
   deviceName: '',
@@ -148,7 +149,7 @@ export function useDeviceForm({
             onSaveCallback?.()
             // Navigate to the device's logs tab so the user can see immediate
             // feedback that the device is operating with the new configuration.
-            setDeviceTabPreference('logs')
+            setTabPreference(DEVICE_TAB_STORAGE_KEY, 'logs')
             navigate({ to: '/devices/$deviceId/logs', params: { deviceId: String(deviceId) } })
           },
           onError: (err) => {
