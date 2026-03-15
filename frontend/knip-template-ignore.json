@@ -18,6 +18,7 @@
 
   "src/hooks/use-auth.ts",
   "src/hooks/use-confirm.ts",
+  "src/hooks/use-copy-to-clipboard.ts",
   "src/hooks/use-deployment-notification.ts",
   "src/hooks/use-form-instrumentation.ts",
   "src/hooks/use-form-state.ts",

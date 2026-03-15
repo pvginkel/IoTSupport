@@ -15,9 +15,9 @@ export function setupRouterInstrumentation(router: AnyRouter): () => void {
   const unsubscribe = router.subscribe('onResolved', (event) => {
     // Extract navigation information from the resolved event
     const fromPath = event.fromLocation
-      ? event.fromLocation.pathname + (event.fromLocation.search || '')
+      ? event.fromLocation.pathname + (event.fromLocation.searchStr || '')
       : '';
-    const toPath = event.toLocation.pathname + (event.toLocation.search || '');
+    const toPath = event.toLocation.pathname + (event.toLocation.searchStr || '');
 
     const routeEvent: Omit<RouteTestEvent, 'timestamp'> = {
       kind: TestEventKind.ROUTE,
