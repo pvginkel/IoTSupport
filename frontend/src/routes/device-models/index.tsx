@@ -96,7 +96,7 @@ function DeviceModelList() {
               <Button variant="primary">Create Device Model</Button>
             </Link>
           }
-          data-testid="device-models.list.empty"
+          testId="device-models.list.empty"
         />
       </div>
     )

@@ -83,7 +83,7 @@ function DeviceList() {
               <Button variant="primary">Create Device</Button>
             </Link>
           }
-          data-testid="devices.list.empty"
+          testId="devices.list.empty"
         />
       </div>
     )

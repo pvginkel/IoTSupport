@@ -410,7 +410,7 @@ export function RotationDashboard() {
 
       {/* Stacked Bar Chart */}
       {isLoading ? (
-        <Skeleton className="h-8 mb-6" />
+        <Skeleton height="h-8" className="mb-6" />
       ) : (
         <div className="mb-6" data-testid="rotation.dashboard.summary">
           <StackedBar
@@ -459,7 +459,7 @@ export function RotationDashboard() {
       {isLoading ? (
         <div className="space-y-4" data-testid="rotation.dashboard.loading">
           {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full" />
+            <Skeleton key={i} height="h-16" width="w-full" />
           ))}
         </div>
       ) : (

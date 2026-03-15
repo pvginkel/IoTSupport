@@ -105,7 +105,7 @@ export function CoredumpAccordionTable({ deviceId, expandedCoredumpId }: Coredum
       <div className="p-6" data-testid="coredumps.table">
         <div className="space-y-2" data-testid="coredumps.table.loading">
           {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full" />
+            <Skeleton key={i} height="h-12" width="w-full" />
           ))}
         </div>
       </div>
@@ -129,7 +129,7 @@ export function CoredumpAccordionTable({ deviceId, expandedCoredumpId }: Coredum
       <div className="p-6" data-testid="coredumps.table">
         <EmptyState
           title="No core dumps recorded for this device"
-          data-testid="coredumps.table.empty"
+          testId="coredumps.table.empty"
         />
       </div>
     )
@@ -253,8 +253,8 @@ function CoredumpExpansionPanel({ deviceId, coredumpId }: { deviceId: number; co
   if (isLoading) {
     return (
       <div className="p-6 space-y-3">
-        <Skeleton className="h-4 w-48" />
-        <Skeleton className="h-32 w-full" />
+        <Skeleton height="h-4" width="w-48" />
+        <Skeleton height="h-32" width="w-full" />
       </div>
     )
   }

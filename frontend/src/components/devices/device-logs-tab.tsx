@@ -19,7 +19,7 @@ export function DeviceLogsTab({ device }: DeviceLogsTabProps) {
         <EmptyState
           title="No entity ID configured"
           description="Logs require a device entity ID. Add one in the Configuration tab."
-          data-testid="devices.logs.empty"
+          testId="devices.logs.empty"
         />
       </div>
     )

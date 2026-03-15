@@ -50,7 +50,7 @@ export function DeviceModelListTable({
     return (
       <div className="space-y-2" data-testid="device-models.list.loading">
         {[...Array(6)].map((_, i) => (
-          <Skeleton key={i} className="h-16 w-full" />
+          <Skeleton key={i} height="h-16" width="w-full" />
         ))}
       </div>
     )
