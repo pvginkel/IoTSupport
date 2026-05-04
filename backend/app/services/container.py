@@ -155,6 +155,7 @@ class ServiceContainer(containers.DeclarativeContainer):
     mqtt_service = providers.Singleton(
         MqttService,
         config=app_config,
+        lifecycle_coordinator=lifecycle_coordinator,
     )
     register_for_background_startup(lambda c: c.mqtt_service().startup())
 
