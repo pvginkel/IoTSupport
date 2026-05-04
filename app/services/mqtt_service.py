@@ -5,7 +5,6 @@ to a broker. It supports both publishing (fire-and-forget notifications) and
 subscribing (with message callbacks).
 """
 
-import atexit
 import logging
 import time
 from collections.abc import Callable
@@ -19,6 +18,7 @@ from paho.mqtt.properties import Properties
 from paho.mqtt.reasoncodes import ReasonCode
 from prometheus_client import Counter, Gauge, Histogram
 
+from app.utils.lifecycle_coordinator import LifecycleCoordinatorProtocol, LifecycleEvent
 from app.utils.mqtt import parse_mqtt_url
 
 if TYPE_CHECKING:
@@ -41,16 +41,23 @@ class MqttService:
     The service uses persistent sessions (clean_start=False) so the broker
     queues messages while the client is disconnected.
 
-    The service is optional - if MQTT_URL is not configured, all operations
-    silently skip without errors.
+    If MQTT_URL is not configured the service stays disabled and any publish()
+    call is dropped with a warning, surfacing the misconfiguration loudly.
     """
 
     # Root topic for update notifications
     TOPIC_UPDATES = "iotsupport/updates"
 
+    # Sentinel topic used by the shutdown waiter as a delivery barrier. paho
+    # processes the QoS 1 outgoing queue FIFO, so when the sentinel's PUBACK
+    # arrives every prior publish has been ack'd too. The leading underscore
+    # marks this as internal; no service in this system subscribes to it.
+    TOPIC_FLUSH_SENTINEL = "iotsupport/_flush"
+
     def __init__(
         self,
         config: "AppSettings",
+        lifecycle_coordinator: LifecycleCoordinatorProtocol,
     ) -> None:
         """Initialize MQTT service state without connecting.
 
@@ -60,6 +67,7 @@ class MqttService:
 
         Args:
             config: Application settings with MQTT configuration
+            lifecycle_coordinator: Coordinator that drives flush + disconnect on shutdown
         """
         self.config = config
 
@@ -79,6 +87,15 @@ class MqttService:
 
         # Initialize Prometheus metrics
         self._initialize_metrics()
+
+        # Integrate with lifecycle: the waiter publishes a sentinel and blocks
+        # on its PUBACK as a delivery barrier; the SHUTDOWN notification then
+        # disconnects the client. This guarantees short-lived processes (e.g.
+        # the rotation cron) deliver their messages before exiting.
+        lifecycle_coordinator.register_shutdown_waiter(
+            "MqttService", self._flush_via_sentinel
+        )
+        lifecycle_coordinator.register_lifecycle_notification(self._on_lifecycle_event)
 
     def startup(self) -> None:
         """Connect to the MQTT broker and start the network loop.
@@ -148,9 +165,6 @@ class MqttService:
             # connection is confirmed. This prevents publish attempts during
             # the async connection establishment window.
             self.mqtt_enabled_gauge.set(1)
-
-            # Register shutdown handler for clean disconnect
-            atexit.register(self.shutdown)
 
         except Exception as e:
             logger.error("Failed to initialize MQTT client: %s", e)
@@ -328,8 +342,20 @@ class MqttService:
             topic: MQTT topic to publish to
             payload: Plain text payload to send
         """
-        # Skip if MQTT is disabled
-        if not self.enabled or self.client is None:
+        # Any publish() call expects MQTT delivery as part of its contract. If
+        # delivery cannot happen — whether because MQTT is unconfigured, the
+        # client was never started, or the broker connection is not yet
+        # established — log it loudly so the misconfiguration is visible.
+        if self.client is None or not self.enabled:
+            logger.warning(
+                "Skipping MQTT publish to topic '%s': service not ready "
+                "(mqtt_url=%s, client_initialized=%s, connected=%s).",
+                topic,
+                "set" if self.config.mqtt_url else "unset",
+                self.client is not None,
+                self.enabled,
+            )
+            self.mqtt_publish_total.labels(topic=topic, status="failure").inc()
             return
 
         start_time = time.perf_counter()
@@ -363,6 +389,54 @@ class MqttService:
         finally:
             duration = time.perf_counter() - start_time
             self.mqtt_publish_duration_seconds.labels(topic=topic).observe(duration)
+
+    def _on_lifecycle_event(self, event: LifecycleEvent) -> None:
+        """Lifecycle hook: disconnect on SHUTDOWN, after the waiter has flushed."""
+        if event is LifecycleEvent.SHUTDOWN:
+            self.shutdown()
+
+    def _flush_via_sentinel(self, timeout: float) -> bool:
+        """Block until prior QoS 1 publishes have been delivered to the broker.
+
+        Publishes a sentinel message and waits for its PUBACK. Because paho
+        processes the QoS 1 outgoing queue in FIFO order, every publish queued
+        before the sentinel is on the wire by the time the sentinel's PUBACK
+        arrives. This avoids tracking each MessageInfo individually.
+
+        Args:
+            timeout: Maximum seconds to wait for the sentinel's PUBACK
+
+        Returns:
+            True if the sentinel was acknowledged (or there was nothing to
+            flush because MQTT is not connected), False on timeout / error.
+        """
+        if self.client is None or not self.enabled:
+            # Nothing to flush — either MQTT is not configured or the
+            # connection never came up; in both cases there are no in-flight
+            # QoS 1 publishes the broker still owes us a PUBACK for.
+            return True
+
+        sentinel_topic = f"{self.TOPIC_FLUSH_SENTINEL}/{self.config.mqtt_client_id}"
+        info = self.client.publish(sentinel_topic, "flush", qos=1, retain=False)
+        if info.rc != 0:
+            logger.warning(
+                "MQTT flush sentinel publish failed: rc=%d", info.rc
+            )
+            return False
+
+        try:
+            info.wait_for_publish(timeout)
+        except (RuntimeError, ValueError) as e:
+            logger.warning("Error waiting for MQTT flush sentinel: %s", e)
+            return False
+
+        if not info.is_published():
+            logger.warning(
+                "MQTT flush sentinel not acknowledged within %.1fs", timeout
+            )
+            return False
+
+        return True
 
     def shutdown(self) -> None:
         """Gracefully shutdown MQTT connection.

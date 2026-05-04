@@ -4,6 +4,7 @@ from unittest.mock import ANY, MagicMock, Mock, patch
 
 from app.app_config import AppSettings
 from app.services.mqtt_service import MqttService
+from tests.testing_utils import StubLifecycleCoordinator, TestLifecycleCoordinator
 
 
 def _make_test_settings(
@@ -22,19 +23,22 @@ def _make_test_settings(
     )
 
 
-def _make_service(settings: AppSettings) -> MqttService:
+def _make_service(
+    settings: AppSettings,
+    lifecycle_coordinator: StubLifecycleCoordinator | None = None,
+) -> MqttService:
     """Create MqttService (not yet started)."""
-    return MqttService(config=settings)
+    return MqttService(
+        config=settings,
+        lifecycle_coordinator=lifecycle_coordinator or StubLifecycleCoordinator(),
+    )
 
 
 class TestMqttServiceInitialization:
     """Tests for MqttService initialization and startup."""
 
     @patch("app.services.mqtt_service.MqttClient")
-    @patch("app.services.mqtt_service.atexit.register")
-    def test_startup_with_mqtt_url_creates_client(
-        self, mock_atexit: Mock, mock_mqtt_client_class: Mock
-    ):
+    def test_startup_with_mqtt_url_creates_client(self, mock_mqtt_client_class: Mock):
         """MQTT client is created and connection initiated on startup()."""
         mock_client = MagicMock()
         mock_mqtt_client_class.return_value = mock_client
@@ -72,9 +76,6 @@ class TestMqttServiceInitialization:
 
         # Now service is enabled
         assert service.enabled is True
-
-        # Verify shutdown handler was registered
-        mock_atexit.assert_called_once_with(service.shutdown)
 
     @patch("app.services.mqtt_service.MqttClient")
     def test_startup_with_mqtts_url_configures_tls(self, mock_mqtt_client_class: Mock):
@@ -232,9 +233,15 @@ def _simulate_successful_connection(service: MqttService, mock_client: MagicMock
     service._on_connect(mock_client, None, mock_connect_flags, mock_reason_code, None)
 
 
-def _make_started_service(settings: AppSettings) -> MqttService:
+def _make_started_service(
+    settings: AppSettings,
+    lifecycle_coordinator: StubLifecycleCoordinator | None = None,
+) -> MqttService:
     """Create MqttService and call startup()."""
-    service = MqttService(config=settings)
+    service = MqttService(
+        config=settings,
+        lifecycle_coordinator=lifecycle_coordinator or StubLifecycleCoordinator(),
+    )
     service.startup()
     return service
 
@@ -422,13 +429,64 @@ class TestMqttServicePublish:
             "iotsupport/updates/assets", "firmware-v1.2.3.bin", qos=1, retain=False
         )
 
-    def test_publish_when_disabled_silent_skip(self):
-        """Publish is skipped silently when service is disabled."""
+    @patch("app.services.mqtt_service.logger")
+    def test_publish_when_mqtt_unconfigured_logs_warning(self, mock_logger: Mock):
+        """Calling publish() when MQTT is unconfigured surfaces the misconfiguration."""
         settings = _make_test_settings(mqtt_url=None)
         service = _make_service(settings)
 
-        # Should not raise exception
         service.publish("any/topic", "any-payload")
+
+        # The log message should make clear that MQTT_URL is unset, since this
+        # is the most common cause of silent publish failures in production.
+        assert mock_logger.warning.called
+        warning_args = mock_logger.warning.call_args
+        format_str = warning_args[0][0]
+        format_values = warning_args[0][1:]
+        rendered = format_str % format_values
+        assert "service not ready" in rendered
+        assert "mqtt_url=unset" in rendered
+
+    @patch("app.services.mqtt_service.logger")
+    def test_publish_when_configured_but_not_started_logs_warning(self, mock_logger: Mock):
+        """Publish logs a warning when MQTT is configured but startup() never ran."""
+        settings = _make_test_settings(mqtt_url="mqtt://localhost:1883")
+        service = _make_service(settings)
+
+        service.publish("any/topic", "any-payload")
+
+        assert mock_logger.warning.called
+        format_str = mock_logger.warning.call_args[0][0]
+        format_values = mock_logger.warning.call_args[0][1:]
+        rendered = format_str % format_values
+        assert "service not ready" in rendered
+        assert "mqtt_url=set" in rendered
+        assert "client_initialized=False" in rendered
+
+    @patch("app.services.mqtt_service.MqttClient")
+    @patch("app.services.mqtt_service.logger")
+    def test_publish_when_configured_but_not_connected_logs_warning(
+        self, mock_logger: Mock, mock_mqtt_client_class: Mock
+    ):
+        """Publish warns when startup() ran but the connection is not yet up."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+
+        settings = _make_test_settings(mqtt_url="mqtt://localhost:1883")
+        service = _make_started_service(settings)
+        # No _simulate_successful_connection: client exists but enabled is False
+
+        service.publish("any/topic", "any-payload")
+
+        assert mock_logger.warning.called
+        format_str = mock_logger.warning.call_args[0][0]
+        format_values = mock_logger.warning.call_args[0][1:]
+        rendered = format_str % format_values
+        assert "service not ready" in rendered
+        assert "client_initialized=True" in rendered
+        assert "connected=False" in rendered
+        # client.publish should not be called when not connected
+        mock_client.publish.assert_not_called()
 
     @patch("app.services.mqtt_service.MqttClient")
     def test_publish_sends_payload_unchanged(self, mock_mqtt_client_class: Mock):
@@ -551,6 +609,122 @@ class TestMqttServiceConnectionCallbacks:
 
         # Simulate disconnect callback - should not raise
         service._on_disconnect(mock_client, None, mock_disconnect_flags, mock_reason_code, None)
+
+
+class TestMqttServiceLifecycle:
+    """Tests for LifecycleCoordinator integration (flush sentinel + shutdown)."""
+
+    def test_registers_with_lifecycle_coordinator(self):
+        """MqttService registers a shutdown waiter and lifecycle notification."""
+        settings = _make_test_settings()
+        coordinator = StubLifecycleCoordinator()
+        _make_service(settings, lifecycle_coordinator=coordinator)
+
+        assert "MqttService" in coordinator._waiters
+        assert len(coordinator._notifications) == 1
+
+    def test_flush_returns_true_when_not_connected(self):
+        """The waiter is a no-op (returns True) when MQTT never connected."""
+        settings = _make_test_settings(mqtt_url=None)
+        service = _make_service(settings)
+
+        assert service._flush_via_sentinel(timeout=0.1) is True
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_flush_publishes_sentinel_and_waits_for_ack(
+        self, mock_mqtt_client_class: Mock
+    ):
+        """The waiter publishes a sentinel and waits for its PUBACK."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+
+        # Real publishes return one MessageInfo, the sentinel returns another
+        real_publish_info = MagicMock()
+        real_publish_info.rc = 0
+        sentinel_info = MagicMock()
+        sentinel_info.rc = 0
+        sentinel_info.is_published.return_value = True
+        mock_client.publish.side_effect = [real_publish_info, sentinel_info]
+
+        settings = _make_test_settings(mqtt_client_id="iotsupport-backend")
+        service = _make_started_service(settings)
+        _simulate_successful_connection(service, mock_client)
+
+        service.publish("test/topic", "payload")
+        assert service._flush_via_sentinel(timeout=1.0) is True
+
+        # Sentinel topic includes the backend client_id so it's clearly internal
+        sentinel_call = mock_client.publish.call_args_list[1]
+        assert sentinel_call[0][0] == "iotsupport/_flush/iotsupport-backend"
+        assert sentinel_call[1]["qos"] == 1
+        assert sentinel_call[1]["retain"] is False
+        sentinel_info.wait_for_publish.assert_called_once()
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_flush_returns_false_when_sentinel_not_acknowledged(
+        self, mock_mqtt_client_class: Mock
+    ):
+        """The waiter returns False when the sentinel never gets its PUBACK."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+
+        sentinel_info = MagicMock()
+        sentinel_info.rc = 0
+        sentinel_info.is_published.return_value = False
+        mock_client.publish.return_value = sentinel_info
+
+        settings = _make_test_settings()
+        service = _make_started_service(settings)
+        _simulate_successful_connection(service, mock_client)
+
+        assert service._flush_via_sentinel(timeout=0.1) is False
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_flush_returns_false_when_sentinel_publish_fails(
+        self, mock_mqtt_client_class: Mock
+    ):
+        """The waiter returns False when client.publish itself returns a non-zero rc."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+
+        sentinel_info = MagicMock()
+        sentinel_info.rc = 1  # MQTT_ERR_NOMEM or similar
+        mock_client.publish.return_value = sentinel_info
+
+        settings = _make_test_settings()
+        service = _make_started_service(settings)
+        _simulate_successful_connection(service, mock_client)
+
+        assert service._flush_via_sentinel(timeout=0.1) is False
+        # We never wait when the publish was rejected outright
+        sentinel_info.wait_for_publish.assert_not_called()
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_lifecycle_shutdown_event_flushes_then_disconnects(
+        self, mock_mqtt_client_class: Mock
+    ):
+        """Coordinator-driven SHUTDOWN flushes via the sentinel, then disconnects."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+
+        sentinel_info = MagicMock()
+        sentinel_info.rc = 0
+        sentinel_info.is_published.return_value = True
+        mock_client.publish.return_value = sentinel_info
+
+        coordinator = TestLifecycleCoordinator()
+        settings = _make_test_settings()
+        service = _make_started_service(settings, lifecycle_coordinator=coordinator)
+        _simulate_successful_connection(service, mock_client)
+
+        coordinator.simulate_full_shutdown(timeout=1.0)
+
+        # Waiter should have published + waited on the sentinel
+        mock_client.publish.assert_called_once()
+        sentinel_info.wait_for_publish.assert_called_once()
+        # SHUTDOWN notification should have triggered disconnect
+        mock_client.disconnect.assert_called_once()
+        mock_client.loop_stop.assert_called_once()
 
 
 class TestMqttServiceShutdown:

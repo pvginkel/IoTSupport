@@ -222,6 +222,14 @@ def register_cli_commands(cli: click.Group) -> None:
                 except ValueError as e:
                     print(f"Warning: Invalid last_scheduled_at value: {e}")
 
+            # The CLI is created with skip_background_services=True, so MQTT is
+            # not started automatically. Start it explicitly here because the
+            # rotation flow depends on MQTT to notify devices of credential
+            # rotation. The LifecycleCoordinator drives flush + disconnect at
+            # the end of this command so in-flight QoS 1 publishes are
+            # acknowledged before the process exits.
+            app.container.mqtt_service().startup()
+
             try:
                 rotation_service = app.container.rotation_service()
                 result = rotation_service.process_rotation_job(last_scheduled_at)
@@ -247,6 +255,11 @@ def register_cli_commands(cli: click.Group) -> None:
             except Exception as e:
                 print(f"Error during rotation job: {e}", file=sys.stderr)
                 sys.exit(1)
+            finally:
+                # Lifecycle shutdown runs registered waiters (MqttService waits
+                # for QoS 1 acks) and then fires SHUTDOWN, which disconnects
+                # the MQTT client.
+                app.container.lifecycle_coordinator().shutdown()
 
 
     @cli.command()
