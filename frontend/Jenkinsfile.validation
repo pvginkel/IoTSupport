@@ -76,19 +76,20 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
 
         stage('Run validation') {
             container('k8s') {
-                withCredentials([
-                    string(credentialsId: 'S3_ENDPOINT_URL', variable: 'S3_ENDPOINT_URL'),
-                    string(credentialsId: 'S3_ACCESS_KEY_ID', variable: 'S3_ACCESS_KEY_ID'),
-                    string(credentialsId: 'S3_SECRET_ACCESS_KEY', variable: 'S3_SECRET_ACCESS_KEY'),
-                    string(credentialsId: 'KEYCLOAK_TEST_BASE_URL', variable: 'KEYCLOAK_BASE_URL'),
-                    string(credentialsId: 'KEYCLOAK_TEST_REALM', variable: 'KEYCLOAK_REALM'),
-                    string(credentialsId: 'KEYCLOAK_TEST_IOTSUPPORT_ADMIN_CLIENT_ID', variable: 'KEYCLOAK_ADMIN_CLIENT_ID'),
-                    string(credentialsId: 'KEYCLOAK_TEST_IOTSUPPORT_ADMIN_CLIENT_SECRET', variable: 'KEYCLOAK_ADMIN_CLIENT_SECRET'),
-                    string(credentialsId: 'KEYCLOAK_TEST_OIDC_TOKEN_URL', variable: 'OIDC_TOKEN_URL'),
-                    string(credentialsId: 'ELASTICSEARCH_CLUSTER_URL', variable: 'ELASTICSEARCH_URL'),
-                    string(credentialsId: 'ELASTICSEARCH_USERNAME', variable: 'ELASTICSEARCH_USERNAME'),
-                    string(credentialsId: 'ELASTICSEARCH_PASSWORD', variable: 'ELASTICSEARCH_PASSWORD'),
-                ]) {
+                withVault([vaultSecrets: [
+                    [path: 'kv/shared/ceph-rgw/s3', engineVersion: 2, secretValues: [
+                        [envVar: 'S3_ACCESS_KEY_ID', vaultKey: 'access_key_id'],
+                        [envVar: 'S3_SECRET_ACCESS_KEY', vaultKey: 'secret_access_key'],
+                    ]],
+                    [path: 'kv/jenkins/keycloak-iotsupport-admin', engineVersion: 2, secretValues: [
+                        [envVar: 'KEYCLOAK_ADMIN_CLIENT_ID', vaultKey: 'client_id'],
+                        [envVar: 'KEYCLOAK_ADMIN_CLIENT_SECRET', vaultKey: 'client_secret'],
+                    ]],
+                    [path: 'kv/jenkins/elastic-test', engineVersion: 2, secretValues: [
+                        [envVar: 'ELASTICSEARCH_USERNAME', vaultKey: 'username'],
+                        [envVar: 'ELASTICSEARCH_PASSWORD', vaultKey: 'password'],
+                    ]],
+                ]]) {
                     try {
                         kubectl.startJob("""
                             apiVersion: batch/v1
@@ -130,17 +131,17 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                         - name: S3_BUCKET_NAME
                                           value: "iot-support-validation"
                                         - name: KEYCLOAK_BASE_URL
-                                          value: "${KEYCLOAK_BASE_URL}"
+                                          value: "${KEYCLOAK_TEST_BASE_URL}"
                                         - name: KEYCLOAK_REALM
-                                          value: "${KEYCLOAK_REALM}"
+                                          value: "${KEYCLOAK_TEST_REALM}"
                                         - name: KEYCLOAK_ADMIN_CLIENT_ID
                                           value: "${KEYCLOAK_ADMIN_CLIENT_ID}"
                                         - name: KEYCLOAK_ADMIN_CLIENT_SECRET
                                           value: "${KEYCLOAK_ADMIN_CLIENT_SECRET}"
                                         - name: OIDC_TOKEN_URL
-                                          value: "${OIDC_TOKEN_URL}"
+                                          value: "${KEYCLOAK_TEST_OIDC_TOKEN_URL}"
                                         - name: ELASTICSEARCH_URL
-                                          value: "${ELASTICSEARCH_URL}"
+                                          value: "${ELASTICSEARCH_CLUSTER_URL}"
                                         - name: ELASTICSEARCH_USERNAME
                                           value: "${ELASTICSEARCH_USERNAME}"
                                         - name: ELASTICSEARCH_PASSWORD
