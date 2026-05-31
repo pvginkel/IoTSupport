@@ -1,0 +1,114 @@
+schemaVersion: "0.1"
+producer: iotsupport-app
+
+# IoT Support backend — REST API for managing ESP32 IoT devices in a homelab.
+# Backend only; the admin UI is a separate producer. This artifact models the
+# logical, type-level surface: the SoftwareProduct identity, the one API service
+# it exposes (one interface per distinct consumer class), and its outbound
+# runtime-dependency edges. environment/cluster stay unset — per-env placement
+# is the deploying (helm-charts) producer's job.
+
+applicationComponents:
+  - id: app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7
+    label: IoT Support
+    summary: >-
+      Flask backend for managing ESP32 IoT devices: device-model and device
+      lifecycle, firmware distribution, provisioning, and automatic OAuth2
+      credential rotation.
+    introduced: 2026-01-09
+    lifecycle: active
+    stereotype: SoftwareProduct
+    sourceRepository: git:pvginkel/IoTSupport
+    stats:
+      image: registry:5000/iotsupport-app
+
+applicationServices:
+  - id: svc:iotsupport-api,b7c5b5ba-36eb-47b8-bf7e-5c50fa1a3656
+    label: IoT Support API
+    summary: >-
+      HTTP/REST API exposed by the IoT Support backend, serving both the admin
+      UI and the device fleet.
+    introduced: 2026-01-09
+    lifecycle: active
+
+applicationInterfaces:
+  - id: if:iotsupport-admin-api,5cd24be3-4067-4044-9acc-d5b4f59016f3
+    label: IoT Support admin API
+    summary: >-
+      /api surface consumed by the admin UI (device-model/device/rotation
+      management), authenticated via user OIDC sessions.
+    introduced: 2026-01-09
+    lifecycle: active
+
+  - id: if:iotsupport-device-api,01a9b280-38c5-4713-8da2-6930243b6d02
+    label: IoT Support device API
+    summary: >-
+      /api/iot surface consumed by ESP32 devices (config, firmware,
+      provisioning, coredump upload), authenticated via Keycloak M2M JWTs.
+    introduced: 2026-01-09
+    lifecycle: active
+
+relations:
+  # The product realizes its exposed API service.
+  - id: rel:iotsupport-realizes-api
+    source: app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7
+    target: svc:iotsupport-api,b7c5b5ba-36eb-47b8-bf7e-5c50fa1a3656
+    type: Realization
+
+  # One interface per distinct consumer class — admin UI and device fleet.
+  - id: rel:iotsupport-admin-if-assigned
+    source: if:iotsupport-admin-api,5cd24be3-4067-4044-9acc-d5b4f59016f3
+    target: svc:iotsupport-api,b7c5b5ba-36eb-47b8-bf7e-5c50fa1a3656
+    type: Assignment
+
+  - id: rel:iotsupport-device-if-assigned
+    source: if:iotsupport-device-api,01a9b280-38c5-4713-8da2-6930243b6d02
+    target: svc:iotsupport-api,b7c5b5ba-36eb-47b8-bf7e-5c50fa1a3656
+    type: Assignment
+
+  # Outbound runtime dependencies. Substitutable infra → capability + boundBy.
+  - id: rel:iotsupport-consumes-relational-database
+    source: app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7
+    target: cap:relational-database
+    type: Association
+    boundBy: "env:DATABASE_URL"
+
+  - id: rel:iotsupport-consumes-iam
+    source: app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7
+    target: cap:iam
+    type: Association
+    boundBy: "env:OIDC_ISSUER_URL"
+
+  - id: rel:iotsupport-consumes-pub-sub-broker
+    source: app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7
+    target: cap:pub-sub-broker
+    type: Association
+    boundBy: "env:MQTT_URL"
+
+  - id: rel:iotsupport-consumes-object-storage
+    source: app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7
+    target: cap:object-storage
+    type: Association
+    boundBy: "env:S3_ENDPOINT_URL"
+
+  - id: rel:iotsupport-consumes-logging
+    source: app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7
+    target: cap:logging
+    type: Association
+    boundBy: "env:ELASTICSEARCH_URL"
+
+  # In-house provider service — reference the SSE gateway's specific svc UUID.
+  - id: rel:iotsupport-consumes-ssegateway
+    source: app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7
+    target: svc:ssegateway,59a7d043-bb0c-4e44-a8b8-3e943338f807
+    type: Association
+    boundBy: "env:SSE_GATEWAY_URL"
+
+  # Parse sidecar: the backend posts ESP32 coredumps to the DockerImages-owned
+  # esp32-coredump-parser service to turn them into backtraces. Cross-producer
+  # svc (docker-images), resolved by UUID from the published dataset.
+  - id: rel:iotsupport-consumes-coredump-parser
+    source: app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7
+    target: svc:esp32-coredump-parser,a12421c1-3e03-4c24-bdf5-007a8781b01b
+    type: Association
+    boundBy: "env:PARSE_SIDECAR_URL"
