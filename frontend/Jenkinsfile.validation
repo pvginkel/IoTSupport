@@ -23,7 +23,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
 
         stage('Resolve image pair') {
             copyArtifacts(
-                projectName: 'IoTSupport/IoTSupport',
+                projectName: 'IoTSupport',
                 selector: params.BACKEND_BUILD ? specific(params.BACKEND_BUILD) : lastSuccessful(),
                 filter: 'backend-build.json',
                 target: 'backend-meta',
@@ -31,7 +31,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
             )
 
             copyArtifacts(
-                projectName: 'IoTSupport/IoTSupportUI',
+                projectName: 'IoTSupportUI',
                 selector: params.FRONTEND_BUILD ? specific(params.FRONTEND_BUILD) : lastSuccessful(),
                 filter: 'frontend-build.json',
                 target: 'frontend-meta',
