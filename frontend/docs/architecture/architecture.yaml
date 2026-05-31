@@ -1,0 +1,83 @@
+schemaVersion: "0.1"
+producer: iotsupport-ui
+
+# IoT Support UI — React SPA admin interface for the IoT Support backend.
+# Frontend only; the REST API it consumes is a separate producer (iotsupport-app),
+# and the SSE gateway it streams from is its own producer (ssegateway). This
+# artifact models the logical, type-level surface: the SoftwareProduct identity,
+# the static web surface it serves to browsers, the browser-mediated serial
+# flashing interface it exposes, and the app's outbound runtime-dependency edges.
+# environment/cluster stay unset (per-env placement is the helm-charts concern).
+
+applicationComponents:
+  - id: app:iotsupport-ui,2ab5d9e8-6450-4dd0-b201-29c93b99a24b
+    label: IoT Support UI
+    summary: >-
+      React 19 single-page admin UI for IoT Support: device-model and device
+      lifecycle management, Monaco-based config editing, firmware/provisioning
+      flows, and live event streaming. Served as static assets behind nginx.
+    introduced: 2026-01-09
+    lifecycle: active
+    stereotype: SoftwareProduct
+    sourceRepository: git:pvginkel/IoTSupportUI
+    stats:
+      image: registry:5000/iotsupport-ui
+
+applicationServices:
+  - id: svc:iotsupport-ui-web,55300a4f-2199-4dc0-9f1d-11a6f816dffc
+    label: IoT Support UI site
+    summary: Static HTTP surface serving the SPA to browsers (behind nginx); the deployer attaches the public host to this service.
+    introduced: 2026-01-09
+    lifecycle: active
+
+applicationInterfaces:
+  - id: if:iotsupport-ui-browser,18fd99a4-64ed-4999-a4c2-a1716e768998
+    label: Browser consumer surface
+    summary: The admin UI loaded in operators' browsers.
+    introduced: 2026-01-09
+    lifecycle: active
+
+  - id: if:iotsupport-ui-serial,6fcf6b19-b6a1-49a9-87eb-2a34c7eaff4a
+    label: Browser serial-device flashing surface
+    summary: >-
+      Browser-mediated serial connection (WebSerial / COM-over-USB) the UI exposes
+      to flash configuration onto a directly-attached IoT device. Load-bearing:
+      backend → frontend → Chrome → USB serial → IoT device. Not tied to a specific
+      device model.
+    introduced: 2026-01-09
+    lifecycle: active
+
+relations:
+  # The SPA realizes its static web surface; two consumer interfaces sit on it
+  # (the operator browser, and the browser-mediated serial flashing channel).
+  - id: rel:iotsupport-ui-realizes-web
+    source: app:iotsupport-ui,2ab5d9e8-6450-4dd0-b201-29c93b99a24b
+    target: svc:iotsupport-ui-web,55300a4f-2199-4dc0-9f1d-11a6f816dffc
+    type: Realization
+
+  - id: rel:iotsupport-ui-browser-if
+    source: if:iotsupport-ui-browser,18fd99a4-64ed-4999-a4c2-a1716e768998
+    target: svc:iotsupport-ui-web,55300a4f-2199-4dc0-9f1d-11a6f816dffc
+    type: Assignment
+
+  - id: rel:iotsupport-ui-serial-if
+    source: if:iotsupport-ui-serial,6fcf6b19-b6a1-49a9-87eb-2a34c7eaff4a
+    target: svc:iotsupport-ui-web,55300a4f-2199-4dc0-9f1d-11a6f816dffc
+    type: Assignment
+
+  # Frontend → backend: the SPA consumes the IoT Support REST API for every
+  # /api/ request (nginx proxies it to the backend on pod-local loopback).
+  # No boundBy: the deployed nginx hardcodes the loopback target; BACKEND_URL is
+  # a dev/preview-proxy-only env var, not a runtime binding of the deployed app.
+  - id: rel:iotsupport-ui-consumes-api
+    source: app:iotsupport-ui,2ab5d9e8-6450-4dd0-b201-29c93b99a24b
+    target: svc:iotsupport-api,b7c5b5ba-36eb-47b8-bf7e-5c50fa1a3656
+    type: Association
+
+  # Frontend → SSE gateway: the SPA opens an event stream at /api/sse/ (nginx
+  # proxies it to the gateway on pod-local loopback). In-house provider service,
+  # referenced by its specific svc UUID. No boundBy for the same loopback reason.
+  - id: rel:iotsupport-ui-consumes-ssegateway
+    source: app:iotsupport-ui,2ab5d9e8-6450-4dd0-b201-29c93b99a24b
+    target: svc:ssegateway,59a7d043-bb0c-4e44-a8b8-3e943338f807
+    type: Association
