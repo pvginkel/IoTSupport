@@ -235,6 +235,7 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
         successfully returns a response, so the flag is the reliable
         rollback signal for handled exceptions.
         """
+        committed = False
         try:
             db_session = container.db_session()
 
@@ -243,12 +244,21 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
                 db_session.rollback()
             else:
                 db_session.commit()
+                committed = True
 
             db_session.close()
+
+            # Fire the architecture pipeline trigger ONLY after a successful
+            # commit (never on rollback), so it reflects a durable write. The
+            # call is a no-op unless a CRUD path marked the request pending.
+            if committed:
+                container.architecture_pipeline_trigger_service().fire_if_pending()
 
         finally:
             # Ensure the scoped session is removed after each request
             container.db_session.reset()
+            # Reset the request-scoped pending flag (mirrors db_session.reset()).
+            container.architecture_pipeline_trigger_service().clear_pending()
 
     # Start background services only when not in CLI mode
     if not skip_background_services:

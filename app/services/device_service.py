@@ -23,6 +23,9 @@ from app.models.device import Device, RotationState
 
 if TYPE_CHECKING:
     from app.app_config import AppSettings
+    from app.services.architecture_pipeline_trigger_service import (
+        ArchitecturePipelineTriggerService,
+    )
     from app.services.device_model_service import DeviceModelService
     from app.services.keycloak_admin_service import KeycloakAdminService
     from app.services.mqtt_service import MqttService
@@ -44,6 +47,7 @@ class DeviceService:
         device_model_service: "DeviceModelService",
         keycloak_admin_service: "KeycloakAdminService",
         mqtt_service: "MqttService",
+        trigger_service: "ArchitecturePipelineTriggerService",
     ) -> None:
         """Initialize service with dependencies.
 
@@ -53,12 +57,14 @@ class DeviceService:
             device_model_service: Service for device model operations
             keycloak_admin_service: Service for Keycloak operations
             mqtt_service: Service for MQTT messaging
+            trigger_service: Architecture pipeline trigger (fleet-change marker)
         """
         self.db = db
         self.config = config
         self.device_model_service = device_model_service
         self.keycloak_admin_service = keycloak_admin_service
         self.mqtt_service = mqtt_service
+        self.trigger_service = trigger_service
 
         # Initialize Fernet cipher for secret encryption
         self._fernet = Fernet(config.fernet_key.encode())
@@ -203,6 +209,48 @@ class DeviceService:
 
         return list(self.db.scalars(stmt).all())
 
+    def get_fleet_projection(self) -> dict[str, Any]:
+        """Project the FULL device fleet for the architecture generator.
+
+        Returns every registered device row — explicitly NOT filtered on
+        ``Device.active`` (``active`` governs rotation only, never fleet
+        membership). The projection carries only identity/firmware-binding
+        fields plus fleet-wide config; no secrets, rotation state, or raw
+        config (identity fence — see feature plan §3/§6).
+
+        Returns:
+            Dict with ``devices`` (list of per-device dicts) and ``fleet``
+            (mqtt/oidc URLs). Shaped to validate against
+            ``FleetProjectionResponseSchema``.
+        """
+        # Unfiltered full-fleet query; eager-load the model so model_code /
+        # firmware_version read without an N+1.
+        stmt = (
+            select(Device)
+            .options(selectinload(Device.device_model))
+            .order_by(Device.key)
+        )
+        devices = list(self.db.scalars(stmt).all())
+
+        device_rows = [
+            {
+                "key": device.key,
+                "model_code": device.device_model.code,
+                "firmware_version": device.device_model.firmware_version,
+                "device_name": device.device_name,
+                "created_at": device.created_at,
+            }
+            for device in devices
+        ]
+
+        return {
+            "devices": device_rows,
+            "fleet": {
+                "mqtt_url": self.config.device_mqtt_url,
+                "oidc_issuer_url": self.config.oidc_token_url,
+            },
+        }
+
     def get_device(self, device_id: int) -> Device:
         """Get a device by ID.
 
@@ -306,6 +354,8 @@ class DeviceService:
             )
 
             logger.info("Created device %s for model %s", key, model.code)
+            # Fleet changed: mark for a post-commit architecture re-generation.
+            self.trigger_service.mark_pending()
             return device
 
         except Exception as e:
@@ -373,6 +423,8 @@ class DeviceService:
         self.mqtt_service.publish(f"{MqttService.TOPIC_UPDATES}/config", payload)
 
         logger.info("Updated device %s config", device.key)
+        # Fleet changed: mark for a post-commit architecture re-generation.
+        self.trigger_service.mark_pending()
         return device
 
     def delete_device(self, device_id: int) -> str:
@@ -407,6 +459,8 @@ class DeviceService:
                 e,
             )
 
+        # Fleet changed: mark for a post-commit architecture re-generation.
+        self.trigger_service.mark_pending()
         return key
 
     def get_provisioning_package(self, device_id: int, partition_size: int) -> dict[str, Any]:

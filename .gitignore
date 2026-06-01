@@ -12,3 +12,7 @@ dist/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+
+# Generated architecture artifact (built in CI by tools/gen-architecture.py,
+# never committed — it is published as a Jenkins archive instead).
+docs/architecture/deployed-architecture.yaml

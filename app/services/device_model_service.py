@@ -19,6 +19,9 @@ from app.models.device_model import DeviceModel
 if TYPE_CHECKING:
     from io import BytesIO
 
+    from app.services.architecture_pipeline_trigger_service import (
+        ArchitecturePipelineTriggerService,
+    )
     from app.services.firmware_service import FirmwareService
     from app.services.mqtt_service import MqttService
 
@@ -40,6 +43,7 @@ class DeviceModelService:
         db: Session,
         firmware_service: "FirmwareService",
         mqtt_service: "MqttService",
+        trigger_service: "ArchitecturePipelineTriggerService",
     ) -> None:
         """Initialize service with database session and dependent services.
 
@@ -47,10 +51,12 @@ class DeviceModelService:
             db: SQLAlchemy database session
             firmware_service: Service for firmware file management
             mqtt_service: Service for MQTT messaging
+            trigger_service: Architecture pipeline trigger (fleet-change marker)
         """
         self.db = db
         self.firmware_service = firmware_service
         self.mqtt_service = mqtt_service
+        self.trigger_service = trigger_service
 
     def list_device_models(self) -> list[DeviceModel]:
         """List all device models ordered by code.
@@ -137,6 +143,8 @@ class DeviceModelService:
         self.db.flush()
 
         logger.info("Created device model: %s (%s)", model.code, model.name)
+        # Fleet changed: mark for a post-commit architecture re-generation.
+        self.trigger_service.mark_pending()
         return model
 
     def update_device_model(
@@ -170,6 +178,8 @@ class DeviceModelService:
         self.db.flush()
 
         logger.info("Updated device model: %s (%s)", model.code, model.name)
+        # Fleet changed: mark for a post-commit architecture re-generation.
+        self.trigger_service.mark_pending()
         return model
 
     def delete_device_model(self, model_id: int) -> None:
@@ -201,6 +211,8 @@ class DeviceModelService:
         self.db.flush()
 
         logger.info("Deleted device model: %s", model.code)
+        # Fleet changed: mark for a post-commit architecture re-generation.
+        self.trigger_service.mark_pending()
 
     def upload_firmware(self, model_id: int, content: bytes) -> DeviceModel:
         """Upload firmware for a device model.
@@ -248,6 +260,8 @@ class DeviceModelService:
             version,
             len(model.devices),
         )
+        # Fleet changed (firmware version): mark for post-commit re-generation.
+        self.trigger_service.mark_pending()
         return model
 
     def get_firmware_stream(self, model_id: int) -> tuple["BytesIO", str]:

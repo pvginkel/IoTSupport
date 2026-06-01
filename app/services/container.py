@@ -8,6 +8,9 @@ from sqlalchemy.orm import sessionmaker
 
 from app.app_config import AppSettings
 from app.config import Settings
+from app.services.architecture_pipeline_trigger_service import (
+    ArchitecturePipelineTriggerService,
+)
 from app.services.auth_service import AuthService
 from app.services.cas_image_service import CasImageService
 from app.services.coredump_service import CoredumpService
@@ -180,6 +183,14 @@ class ServiceContainer(containers.DeclarativeContainer):
         config=app_config,
     )
 
+    # ArchitecturePipelineTriggerService - Singleton; holds the request-scoped
+    # pending flag (ContextVar) and httpx client. Read by teardown_request to
+    # fire the trigger post-commit.
+    architecture_pipeline_trigger_service = providers.Singleton(
+        ArchitecturePipelineTriggerService,
+        config=app_config,
+    )
+
     # ElasticsearchService - Singleton for device log queries
     elasticsearch_service = providers.Singleton(
         ElasticsearchService,
@@ -222,6 +233,7 @@ class ServiceContainer(containers.DeclarativeContainer):
         db=db_session,
         firmware_service=firmware_service,
         mqtt_service=mqtt_service,
+        trigger_service=architecture_pipeline_trigger_service,
     )
 
     # DeviceService - Factory creates new instance per request with database session
@@ -232,6 +244,7 @@ class ServiceContainer(containers.DeclarativeContainer):
         device_model_service=device_model_service,
         keycloak_admin_service=keycloak_admin_service,
         mqtt_service=mqtt_service,
+        trigger_service=architecture_pipeline_trigger_service,
     )
 
     # RotationService - Factory creates new instance per request with database session

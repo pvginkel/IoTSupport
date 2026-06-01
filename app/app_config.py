@@ -78,6 +78,11 @@ class AppEnvironment(BaseSettings):
     # Internal API URL for CronJob -> web process notifications
     INTERNAL_API_URL: str | None = Field(default=None)
 
+    # Architecture pipeline trigger URL (opaque Jenkins webhook). When set,
+    # committed device/model writes best-effort POST to this URL to regenerate
+    # the deployed-architecture artifact. Unset -> trigger is a no-op.
+    ARCHITECTURE_PIPELINE_TRIGGER_URL: str | None = Field(default=None)
+
 
 class AppSettings(BaseModel):
     """IoT Support application-specific settings."""
@@ -132,6 +137,9 @@ class AppSettings(BaseModel):
 
     # Internal API URL for CronJob -> web process notifications
     internal_api_url: str | None = None
+
+    # Architecture pipeline trigger URL (opaque Jenkins webhook)
+    architecture_pipeline_trigger_url: str | None = None
 
     # Secret Encryption Key (derived from secret_key)
     fernet_key: str = ""
@@ -194,5 +202,6 @@ class AppSettings(BaseModel):
             elasticsearch_password=env.ELASTICSEARCH_PASSWORD,
             elasticsearch_index_pattern=env.ELASTICSEARCH_INDEX_PATTERN,
             internal_api_url=strip_slashes(env.INTERNAL_API_URL),
+            architecture_pipeline_trigger_url=env.ARCHITECTURE_PIPELINE_TRIGGER_URL,
             fernet_key=fernet_key,
         )
