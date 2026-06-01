@@ -115,3 +115,12 @@ relations:
     target: svc:esp32-coredump-parser,a12421c1-3e03-4c24-bdf5-007a8781b01b
     type: Association
     boundBy: "env:PARSE_SIDECAR_URL"
+
+  # On device/device-model writes the backend best-effort POSTs to a Jenkins
+  # webhook that regenerates the deployed-architecture artifact. Substitutable
+  # CI capability + boundBy; unset URL = disabled (no edge effect at runtime).
+  - id: rel:iotsupport-consumes-continuous-integration
+    source: app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7
+    target: cap:continuous-integration
+    type: Association
+    boundBy: "env:ARCHITECTURE_PIPELINE_TRIGGER_URL"

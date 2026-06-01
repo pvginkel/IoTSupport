@@ -1,0 +1,24 @@
+# DeviceModel.code -> firmware «SoftwareProduct» UUID.
+#
+# Committed annotation layer for the generated `iotsupport-app` producer
+# (docs/architecture/deployed-architecture.yaml). The generator
+# (tools/gen-architecture.py) maps each registered device's model code to the
+# firmware product it Specializes, reading the UUIDs below.
+#
+# IMPORTANT:
+#   * Keys are the snake_case `DeviceModel.code` values (the CMake project()
+#     name). They intentionally differ from the kebab-case `ss:` hint in the
+#     published dataset (e.g. code `calendar_display` -> `ss:calendar-display`);
+#     the mapping is explicit here, NOT derived by string munging.
+#   * UUIDs are resolved from the published federated dataset; do not hand-edit.
+#   * A device whose model code is absent here FAILS the generator (no silent
+#     skip). When you add a new firmware model, add its product UUID here.
+products:
+  calendar_display:              09ccb207-004b-4918-b672-7909fb4050b7
+  doorbell_receiver:             5862dd9d-b6a2-482b-96de-b312507ded9b
+  gesture_device:                a002a971-868f-4723-80b9-7740349ebcf9
+  infra_statistics_display:      3199b06f-ae1a-4df0-af38-96229376c00e
+  intercom:                      c943f60c-e495-4355-af9a-bef67c46f0df
+  paper_clock:                   1304162f-51fc-4279-9aff-7942d7d800e7
+  somfy_remote:                  3e684732-6621-4297-926f-a4d9f82c538e
+  underfloor_heating_controller: 682de51a-d76e-4507-9eed-627725247303

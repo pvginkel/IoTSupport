@@ -12,9 +12,13 @@ from app.app_config import AppSettings
 from app.exceptions import RecordNotFoundException
 from app.schemas.device_model import DeviceModelFirmwareResponseSchema
 from app.schemas.error import ErrorResponseSchema
-from app.schemas.pipeline import FirmwareVersionResponseSchema
+from app.schemas.pipeline import (
+    FirmwareVersionResponseSchema,
+    FleetProjectionResponseSchema,
+)
 from app.services.container import ServiceContainer
 from app.services.device_model_service import DeviceModelService
+from app.services.device_service import DeviceService
 from app.utils.auth import allow_roles, public
 from app.utils.error_handling import handle_api_errors
 from app.utils.iot_metrics import record_operation
@@ -114,6 +118,39 @@ def get_firmware_version(
         code=model.code,
         firmware_version=model.firmware_version,
     ).model_dump()
+
+
+@pipeline_bp.route("/fleet-projection", methods=["GET"])
+@api.validate(
+    resp=SpectreeResponse(
+        HTTP_200=FleetProjectionResponseSchema,
+    )
+)
+@handle_api_errors
+@allow_roles("pipeline")
+@inject
+def get_fleet_projection(
+    device_service: DeviceService = Provide[ServiceContainer.device_service],
+) -> Any:
+    """Project the full device fleet for the architecture generator.
+
+    Returns every registered device (NOT filtered on ``active``) plus
+    fleet-wide config (MQTT/OIDC URLs). Read-only; no secrets are exposed.
+    """
+    start_time = time.perf_counter()
+    status = "success"
+
+    try:
+        projection = device_service.get_fleet_projection()
+        return FleetProjectionResponseSchema.model_validate(projection).model_dump(mode="json")
+
+    except Exception:
+        status = "error"
+        raise
+
+    finally:
+        duration = time.perf_counter() - start_time
+        record_operation("pipeline_fleet_projection", status, duration)
 
 
 @pipeline_bp.route("/upload.sh", methods=["GET"])

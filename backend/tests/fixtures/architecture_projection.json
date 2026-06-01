@@ -1,0 +1,36 @@
+{
+  "fleet": {
+    "mqtt_url": "mqtt://mosquitto.home:1883",
+    "oidc_issuer_url": "https://auth.ginbov.nl/realms/iot/protocol/openid-connect/token"
+  },
+  "devices": [
+    {
+      "key": "aa11bb22",
+      "model_code": "calendar_display",
+      "firmware_version": "1.0.0",
+      "device_name": "Hallway clock",
+      "created_at": "2026-03-14T09:21:07"
+    },
+    {
+      "key": "cc33dd44",
+      "model_code": "doorbell_receiver",
+      "firmware_version": null,
+      "device_name": null,
+      "created_at": "2026-02-01T00:00:00"
+    },
+    {
+      "key": "ee55ff66",
+      "model_code": "calendar_display",
+      "firmware_version": "1.0.0",
+      "device_name": "Kitchen clock",
+      "created_at": "2026-01-05T08:00:00"
+    },
+    {
+      "key": "gg77hh88",
+      "model_code": "intercom",
+      "firmware_version": "2.0.0",
+      "device_name": "Front door",
+      "created_at": "2026-05-10T12:00:00Z"
+    }
+  ]
+}

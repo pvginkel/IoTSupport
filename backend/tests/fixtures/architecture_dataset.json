@@ -1,0 +1,607 @@
+{
+  "schemaVersion": "0.1",
+  "producers": [],
+  "nodes": [],
+  "devices": [],
+  "systemSoftware": [
+    {
+      "id": "ss:home-assistant,4c3075c2-2a67-4788-851a-ff9f49cc7b09",
+      "label": "Home Assistant",
+      "summary": "Open-source home-automation platform.",
+      "introduced": "2026-05-28",
+      "lifecycle": "active",
+      "stereotype": "SoftwareProduct",
+      "homepage": "https://www.home-assistant.io/",
+      "logo": "home-assistant",
+      "producer": "architecture"
+    },
+    {
+      "id": "ss:home-assistant-prd,398e32ec-cbe7-40e4-8a66-094029653650",
+      "label": "Home Assistant (prd)",
+      "summary": "Production Home Assistant instance on srvhomeassistant. Integrates with ZigBee (via MQTT), the SlimmeLezer P1 reader, the Ecowitt weather gateway, and the SURE Petcare hub. Surfaces its API externally via the nginxmanager external-services entry at homeassistant.webathome.org.",
+      "introduced": "2026-05-28",
+      "lifecycle": "active",
+      "environment": "prd",
+      "logo": "home-assistant",
+      "producer": "architecture"
+    },
+    {
+      "id": "ss:calendar-display,09ccb207-004b-4918-b672-7909fb4050b7",
+      "label": "Calendar Display firmware",
+      "summary": "ESP-IDF firmware for the IT8951 e-paper wall calendar (ESP32-S3). Fetches upcoming events from the Calendar Support service and renders a multi-day view; managed over the air by IoT Support.",
+      "introduced": "2024-09-15",
+      "lifecycle": "active",
+      "stereotype": "SoftwareProduct",
+      "sourceRepository": "git:pvginkel/CalendarDisplay",
+      "stats": {
+        "mcu": "esp32-s3",
+        "display": "IT8951 e-paper"
+      },
+      "producer": "calendar-display"
+    },
+    {
+      "id": "ss:doorbell-receiver,5862dd9d-b6a2-482b-96de-b312507ded9b",
+      "label": "Doorbell Receiver firmware",
+      "summary": "ESP-IDF firmware (ESP32-S3) that debounces a doorbell pushbutton on GPIO and publishes a press trigger over MQTT; managed over the air by IoT Support.",
+      "introduced": "2026-02-13",
+      "lifecycle": "active",
+      "stereotype": "SoftwareProduct",
+      "sourceRepository": "git:pvginkel/DoorbellReceiver",
+      "stats": {
+        "mcu": "esp32-s3"
+      },
+      "producer": "doorbell-receiver"
+    },
+    {
+      "id": "ss:keycloak,9409aeb9-c50a-59db-a7dc-450b47ee90d8",
+      "label": "Keycloak",
+      "summary": "Open-source identity and access management / OIDC provider.",
+      "homepage": "https://www.keycloak.org/",
+      "logo": "keycloak",
+      "stereotype": "SoftwareProduct",
+      "lifecycle": "active",
+      "introduced": "2024-07-13",
+      "producer": "helm-charts"
+    },
+    {
+      "id": "ss:keycloak-dev-keycloak-keycloak,b7b6b6a4-ac52-54de-abbc-7160bf398bdd",
+      "label": "keycloak/keycloak (dev)",
+      "summary": "SystemSoftware container 'keycloak' of workload 'keycloak' in release 'keycloak@dev'.",
+      "introduced": "2026-01-15",
+      "lifecycle": "active",
+      "environment": "dev",
+      "cluster": "prd",
+      "stats": {
+        "release": "keycloak@dev",
+        "workload": "keycloak",
+        "container": "keycloak",
+        "image": "registry:5000/keycloak:26.5.1-postgres-health-ispn"
+      },
+      "producer": "helm-charts"
+    },
+    {
+      "id": "ss:keycloak-prd-keycloak-keycloak,2bce489f-1256-58ba-85d9-64d7866388c4",
+      "label": "keycloak/keycloak (prd)",
+      "summary": "SystemSoftware container 'keycloak' of workload 'keycloak' in release 'keycloak@prd'.",
+      "introduced": "2026-01-15",
+      "lifecycle": "active",
+      "environment": "prd",
+      "cluster": "prd",
+      "stats": {
+        "release": "keycloak@prd",
+        "workload": "keycloak",
+        "container": "keycloak",
+        "image": "registry:5000/keycloak:26.5.1-postgres-health-ispn"
+      },
+      "producer": "helm-charts"
+    },
+    {
+      "id": "ss:mosquitto,9a6db5ed-3ea0-5448-b44c-fdd820046ac8",
+      "label": "Eclipse Mosquitto",
+      "summary": "MQTT message broker.",
+      "homepage": "https://mosquitto.org/",
+      "logo": "mosquitto",
+      "stereotype": "SoftwareProduct",
+      "lifecycle": "active",
+      "introduced": "2024-07-13",
+      "producer": "helm-charts"
+    },
+    {
+      "id": "ss:mosquitto-mosquitto-mosquitto,607459b5-b30f-5210-824e-8f643bedc265",
+      "label": "mosquitto/mosquitto (prd)",
+      "summary": "SystemSoftware container 'mosquitto' of workload 'mosquitto' in release 'mosquitto'.",
+      "introduced": "2026-01-24",
+      "lifecycle": "active",
+      "environment": "prd",
+      "cluster": "prd",
+      "stats": {
+        "release": "mosquitto",
+        "workload": "mosquitto",
+        "container": "mosquitto",
+        "image": "ghcr.io/lhns/mosquitto-go-auth:3.3.0-mosquitto_2.0.22"
+      },
+      "producer": "helm-charts"
+    },
+    {
+      "id": "ss:intercom,c943f60c-e495-4355-af9a-bef67c46f0df",
+      "label": "Intercom firmware",
+      "summary": "ESP-IDF firmware for an ESP32 audio intercom (I2S microphone and speaker). Uses MQTT for call signalling and a peer UDP stream for audio with the Intercom Server; managed by IoT Support.",
+      "introduced": "2025-02-15",
+      "lifecycle": "active",
+      "stereotype": "SoftwareProduct",
+      "sourceRepository": "git:pvginkel/Intercom",
+      "stats": {
+        "mcu": "esp32"
+      },
+      "producer": "intercom"
+    }
+  ],
+  "applicationComponents": [
+    {
+      "id": "app:calendar-support,f719ff37-e984-46d8-9723-1b5a5c58eebc",
+      "label": "Calendar Support",
+      "summary": "HTTP service that reads an upstream Google Calendar and exposes selected events as an OIDC-protected JSON API.",
+      "introduced": "2024-09-28",
+      "lifecycle": "active",
+      "stereotype": "SoftwareProduct",
+      "sourceRepository": "git:pvginkel/DockerImages",
+      "producer": "docker-images"
+    },
+    {
+      "id": "app:calendar-support-calendar-support-calendar-support-app,1f50848c-b619-5de8-bcd4-216cb13c94d5",
+      "label": "calendar-support/calendar-support-app (prd)",
+      "summary": "ApplicationComponent container 'calendar-support-app' of workload 'calendar-support' in release 'calendar-support'.",
+      "introduced": "2024-09-29",
+      "lifecycle": "active",
+      "environment": "prd",
+      "cluster": "prd",
+      "stats": {
+        "release": "calendar-support",
+        "workload": "calendar-support",
+        "container": "calendar-support-app",
+        "image": "registry:5000/calendar-support:latest"
+      },
+      "producer": "helm-charts"
+    },
+    {
+      "id": "app:iot-iotsupport-iotsupport-app,2e054770-e6d2-50cc-a8c9-45c70fea3b90",
+      "label": "iotsupport/iotsupport-app (prd)",
+      "summary": "ApplicationComponent container 'iotsupport-app' of workload 'iotsupport' in release 'iot'.",
+      "introduced": "2026-01-31",
+      "lifecycle": "active",
+      "environment": "prd",
+      "cluster": "prd",
+      "stats": {
+        "release": "iot",
+        "workload": "iotsupport",
+        "container": "iotsupport-app",
+        "image": "registry:5000/iotsupport-app:latest"
+      },
+      "producer": "helm-charts"
+    },
+    {
+      "id": "app:iot-iotsupport-rotation-cronjob-iotsupport-setup,9d006c8e-f303-59cd-b867-a507096d1c1a",
+      "label": "iotsupport-rotation-cronjob/iotsupport-setup (prd)",
+      "summary": "ApplicationComponent container 'iotsupport-setup' of workload 'iotsupport-rotation-cronjob' in release 'iot'.",
+      "introduced": "2026-01-31",
+      "lifecycle": "active",
+      "environment": "prd",
+      "cluster": "prd",
+      "stats": {
+        "release": "iot",
+        "workload": "iotsupport-rotation-cronjob",
+        "container": "iotsupport-setup",
+        "image": "registry:5000/iotsupport-app:latest"
+      },
+      "producer": "helm-charts"
+    },
+    {
+      "id": "app:iot-iotsupport-setup-iotsupport-setup,c68de0f6-43c2-5d65-bdbd-b7e362219685",
+      "label": "iotsupport-setup/iotsupport-setup (prd)",
+      "summary": "ApplicationComponent container 'iotsupport-setup' of workload 'iotsupport-setup' in release 'iot'.",
+      "introduced": "2026-01-31",
+      "lifecycle": "active",
+      "environment": "prd",
+      "cluster": "prd",
+      "stats": {
+        "release": "iot",
+        "workload": "iotsupport-setup",
+        "container": "iotsupport-setup",
+        "image": "registry:5000/iotsupport-app:latest"
+      },
+      "producer": "helm-charts"
+    },
+    {
+      "id": "app:intercom-server,c313fb20-b8df-4f6c-be1b-23af65e26705",
+      "label": "Intercom Server",
+      "summary": ".NET service that orchestrates the home audio intercom: it subscribes to the intercom MQTT topics, relays call events, and triggers playback on the Intercom devices.",
+      "introduced": "2025-02-17",
+      "lifecycle": "active",
+      "stereotype": "SoftwareProduct",
+      "sourceRepository": "git:pvginkel/IntercomServer",
+      "stats": {
+        "image": "registry:5000/intercom-server"
+      },
+      "producer": "intercom-server"
+    },
+    {
+      "id": "app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7",
+      "label": "IoT Support",
+      "summary": "Flask backend for managing ESP32 IoT devices: device-model and device lifecycle, firmware distribution, provisioning, and automatic OAuth2 credential rotation.",
+      "introduced": "2026-01-09",
+      "lifecycle": "active",
+      "stereotype": "SoftwareProduct",
+      "sourceRepository": "git:pvginkel/IoTSupport",
+      "stats": {
+        "image": "registry:5000/iotsupport-app"
+      },
+      "producer": "iotsupport-app"
+    }
+  ],
+  "applicationServices": [
+    {
+      "id": "svc:calendar-support,e469b02a-13b8-480c-b1c6-db17a3783210",
+      "label": "Calendar events API",
+      "summary": "Read-only JSON API returning selected upcoming calendar events; every request is authenticated with an OIDC bearer token.",
+      "introduced": "2024-09-28",
+      "lifecycle": "active",
+      "producer": "docker-images"
+    },
+    {
+      "id": "svc:keycloak-prd-keycloak,eb0a784b-e37d-5b4c-a30d-5d4789cec819",
+      "label": "keycloak (prd)",
+      "summary": "Application service 'keycloak' of release 'keycloak@prd', reachable at auth.ginbov.nl.",
+      "introduced": "2026-01-15",
+      "lifecycle": "active",
+      "environment": "prd",
+      "cluster": "prd",
+      "stats": {
+        "hosts": "auth.ginbov.nl"
+      },
+      "producer": "helm-charts"
+    },
+    {
+      "id": "svc:mosquitto-mosquitto,8e8e5484-a726-5222-a81e-75fb4434b3c2",
+      "label": "mosquitto (prd)",
+      "summary": "Application service 'mosquitto' of release 'mosquitto', reachable at mosquitto.home.",
+      "introduced": "2026-01-24",
+      "lifecycle": "active",
+      "environment": "prd",
+      "cluster": "prd",
+      "stats": {
+        "hosts": "mosquitto.home"
+      },
+      "producer": "helm-charts"
+    },
+    {
+      "id": "svc:intercom,5914e568-7f39-461a-91fe-9981d5275fe1",
+      "label": "Intercom relay",
+      "summary": "The intercom call/relay service: device registration, call routing, and audio-endpoint brokering, spoken over a fixed MQTT topic contract.",
+      "introduced": "2025-02-17",
+      "lifecycle": "active",
+      "producer": "intercom-server"
+    },
+    {
+      "id": "svc:iotsupport-api,b7c5b5ba-36eb-47b8-bf7e-5c50fa1a3656",
+      "label": "IoT Support API",
+      "summary": "HTTP/REST API exposed by the IoT Support backend, serving both the admin UI and the device fleet.",
+      "introduced": "2026-01-09",
+      "lifecycle": "active",
+      "producer": "iotsupport-app"
+    }
+  ],
+  "applicationInterfaces": [],
+  "technologyServices": [
+    {
+      "id": "svc:home-assistant-mqtt,23572189-9185-4a6d-a073-2b2820578e11",
+      "label": "Home Assistant MQTT integration",
+      "summary": "Home Assistant's MQTT integration over the home broker (mosquitto): it ingests devices that publish MQTT discovery (surfacing them as HA entities, with commands flowing back), and it publishes automation/AppDaemon-derived data that other MQTT clients consume. The in-house ESP32 devices integrate here. environment unset \u2014 a logical type-level surface.",
+      "introduced": "2026-06-01",
+      "lifecycle": "active",
+      "producer": "architecture"
+    }
+  ],
+  "technologyInterfaces": [],
+  "capabilities": [
+    {
+      "id": "cap:iam",
+      "label": "Identity & Access Management",
+      "summary": "Identity store, authentication, authorisation, SSO realisation.",
+      "lifecycle": "active",
+      "introduced": "2024-07-12",
+      "producer": "schema"
+    },
+    {
+      "id": "cap:pub-sub-broker",
+      "label": "Pub/sub broker",
+      "summary": "Topic-based publish/subscribe (MQTT-style).",
+      "lifecycle": "active",
+      "introduced": "2024-07-12",
+      "producer": "schema"
+    }
+  ],
+  "businessServices": [],
+  "groupings": [],
+  "relations": [
+    {
+      "id": "rel:home-assistant-prd-spec",
+      "source": "ss:home-assistant-prd,398e32ec-cbe7-40e4-8a66-094029653650",
+      "target": "ss:home-assistant,4c3075c2-2a67-4788-851a-ff9f49cc7b09",
+      "type": "Specialization"
+    },
+    {
+      "id": "rel:home-assistant-prd-realizes-mqtt",
+      "source": "ss:home-assistant-prd,398e32ec-cbe7-40e4-8a66-094029653650",
+      "target": "svc:home-assistant-mqtt,23572189-9185-4a6d-a073-2b2820578e11",
+      "type": "Realization"
+    },
+    {
+      "id": "rel:calendar-display-consumes-iotsupport",
+      "source": "ss:calendar-display,09ccb207-004b-4918-b672-7909fb4050b7",
+      "target": "svc:iotsupport-api,b7c5b5ba-36eb-47b8-bf7e-5c50fa1a3656",
+      "type": "Association"
+    },
+    {
+      "id": "rel:calendar-display-consumes-pub-sub",
+      "source": "ss:calendar-display,09ccb207-004b-4918-b672-7909fb4050b7",
+      "target": "cap:pub-sub-broker",
+      "type": "Association"
+    },
+    {
+      "id": "rel:calendar-display-consumes-iam",
+      "source": "ss:calendar-display,09ccb207-004b-4918-b672-7909fb4050b7",
+      "target": "cap:iam",
+      "type": "Association"
+    },
+    {
+      "id": "rel:calendar-display-consumes-calendar-support",
+      "source": "ss:calendar-display,09ccb207-004b-4918-b672-7909fb4050b7",
+      "target": "svc:calendar-support,e469b02a-13b8-480c-b1c6-db17a3783210",
+      "type": "Association"
+    },
+    {
+      "id": "rel:calendar-support-provides-api",
+      "source": "app:calendar-support,f719ff37-e984-46d8-9723-1b5a5c58eebc",
+      "target": "svc:calendar-support,e469b02a-13b8-480c-b1c6-db17a3783210",
+      "type": "Realization"
+    },
+    {
+      "id": "rel:calendar-support-consumes-iam",
+      "source": "app:calendar-support,f719ff37-e984-46d8-9723-1b5a5c58eebc",
+      "target": "cap:iam",
+      "type": "Association",
+      "boundBy": "env:OIDC_ISSUER_URL"
+    },
+    {
+      "id": "rel:doorbell-receiver-consumes-iotsupport",
+      "source": "ss:doorbell-receiver,5862dd9d-b6a2-482b-96de-b312507ded9b",
+      "target": "svc:iotsupport-api,b7c5b5ba-36eb-47b8-bf7e-5c50fa1a3656",
+      "type": "Association"
+    },
+    {
+      "id": "rel:doorbell-receiver-consumes-pub-sub",
+      "source": "ss:doorbell-receiver,5862dd9d-b6a2-482b-96de-b312507ded9b",
+      "target": "cap:pub-sub-broker",
+      "type": "Association"
+    },
+    {
+      "id": "rel:doorbell-receiver-consumes-iam",
+      "source": "ss:doorbell-receiver,5862dd9d-b6a2-482b-96de-b312507ded9b",
+      "target": "cap:iam",
+      "type": "Association"
+    },
+    {
+      "id": "rel:doorbell-receiver-ha-mqtt",
+      "source": "ss:doorbell-receiver,5862dd9d-b6a2-482b-96de-b312507ded9b",
+      "target": "svc:home-assistant-mqtt,23572189-9185-4a6d-a073-2b2820578e11",
+      "type": "Association"
+    },
+    {
+      "id": "rel:calendar-support-calendar-support-calendar-support-app-spec",
+      "source": "app:calendar-support-calendar-support-calendar-support-app,1f50848c-b619-5de8-bcd4-216cb13c94d5",
+      "target": "app:calendar-support,f719ff37-e984-46d8-9723-1b5a5c58eebc",
+      "type": "Specialization"
+    },
+    {
+      "id": "rel:iot-iotsupport-iotsupport-app-spec",
+      "source": "app:iot-iotsupport-iotsupport-app,2e054770-e6d2-50cc-a8c9-45c70fea3b90",
+      "target": "app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7",
+      "type": "Specialization"
+    },
+    {
+      "id": "rel:iot-iotsupport-rotation-cronjob-iotsupport-setup-spec",
+      "source": "app:iot-iotsupport-rotation-cronjob-iotsupport-setup,9d006c8e-f303-59cd-b867-a507096d1c1a",
+      "target": "app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7",
+      "type": "Specialization"
+    },
+    {
+      "id": "rel:iot-iotsupport-setup-iotsupport-setup-spec",
+      "source": "app:iot-iotsupport-setup-iotsupport-setup,c68de0f6-43c2-5d65-bdbd-b7e362219685",
+      "target": "app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7",
+      "type": "Specialization"
+    },
+    {
+      "id": "rel:keycloak-dev-keycloak-keycloak-realizes-iam",
+      "source": "ss:keycloak-dev-keycloak-keycloak,b7b6b6a4-ac52-54de-abbc-7160bf398bdd",
+      "target": "cap:iam",
+      "type": "Realization"
+    },
+    {
+      "id": "rel:keycloak-dev-keycloak-keycloak-spec",
+      "source": "ss:keycloak-dev-keycloak-keycloak,b7b6b6a4-ac52-54de-abbc-7160bf398bdd",
+      "target": "ss:keycloak,9409aeb9-c50a-59db-a7dc-450b47ee90d8",
+      "type": "Specialization"
+    },
+    {
+      "id": "rel:keycloak-prd-keycloak-keycloak-realizes-iam",
+      "source": "ss:keycloak-prd-keycloak-keycloak,2bce489f-1256-58ba-85d9-64d7866388c4",
+      "target": "cap:iam",
+      "type": "Realization"
+    },
+    {
+      "id": "rel:keycloak-prd-keycloak-keycloak-serves-calendar-support-calendar-support-calendar-support-app-iam",
+      "source": "ss:keycloak-prd-keycloak-keycloak,2bce489f-1256-58ba-85d9-64d7866388c4",
+      "target": "app:calendar-support-calendar-support-calendar-support-app,1f50848c-b619-5de8-bcd4-216cb13c94d5",
+      "type": "Serving"
+    },
+    {
+      "id": "rel:keycloak-prd-keycloak-keycloak-serves-iot-iotsupport-iotsupport-app-iam",
+      "source": "ss:keycloak-prd-keycloak-keycloak,2bce489f-1256-58ba-85d9-64d7866388c4",
+      "target": "app:iot-iotsupport-iotsupport-app,2e054770-e6d2-50cc-a8c9-45c70fea3b90",
+      "type": "Serving"
+    },
+    {
+      "id": "rel:keycloak-prd-keycloak-keycloak-serves-iot-iotsupport-rotation-cronjob-iotsupport-setup-iam",
+      "source": "ss:keycloak-prd-keycloak-keycloak,2bce489f-1256-58ba-85d9-64d7866388c4",
+      "target": "app:iot-iotsupport-rotation-cronjob-iotsupport-setup,9d006c8e-f303-59cd-b867-a507096d1c1a",
+      "type": "Serving"
+    },
+    {
+      "id": "rel:keycloak-prd-keycloak-keycloak-serves-iot-iotsupport-setup-iotsupport-setup-iam",
+      "source": "ss:keycloak-prd-keycloak-keycloak,2bce489f-1256-58ba-85d9-64d7866388c4",
+      "target": "app:iot-iotsupport-setup-iotsupport-setup,c68de0f6-43c2-5d65-bdbd-b7e362219685",
+      "type": "Serving"
+    },
+    {
+      "id": "rel:keycloak-prd-keycloak-keycloak-spec",
+      "source": "ss:keycloak-prd-keycloak-keycloak,2bce489f-1256-58ba-85d9-64d7866388c4",
+      "target": "ss:keycloak,9409aeb9-c50a-59db-a7dc-450b47ee90d8",
+      "type": "Specialization"
+    },
+    {
+      "id": "rel:mosquitto-mosquitto-mosquitto-realizes-pub-sub-broker",
+      "source": "ss:mosquitto-mosquitto-mosquitto,607459b5-b30f-5210-824e-8f643bedc265",
+      "target": "cap:pub-sub-broker",
+      "type": "Realization"
+    },
+    {
+      "id": "rel:mosquitto-mosquitto-mosquitto-serves-iot-iotsupport-iotsupport-app-pub-sub-broker",
+      "source": "ss:mosquitto-mosquitto-mosquitto,607459b5-b30f-5210-824e-8f643bedc265",
+      "target": "app:iot-iotsupport-iotsupport-app,2e054770-e6d2-50cc-a8c9-45c70fea3b90",
+      "type": "Serving"
+    },
+    {
+      "id": "rel:mosquitto-mosquitto-mosquitto-serves-iot-iotsupport-rotation-cronjob-iotsupport-setup-pub-sub-broker",
+      "source": "ss:mosquitto-mosquitto-mosquitto,607459b5-b30f-5210-824e-8f643bedc265",
+      "target": "app:iot-iotsupport-rotation-cronjob-iotsupport-setup,9d006c8e-f303-59cd-b867-a507096d1c1a",
+      "type": "Serving"
+    },
+    {
+      "id": "rel:mosquitto-mosquitto-mosquitto-serves-iot-iotsupport-setup-iotsupport-setup-pub-sub-broker",
+      "source": "ss:mosquitto-mosquitto-mosquitto,607459b5-b30f-5210-824e-8f643bedc265",
+      "target": "app:iot-iotsupport-setup-iotsupport-setup,c68de0f6-43c2-5d65-bdbd-b7e362219685",
+      "type": "Serving"
+    },
+    {
+      "id": "rel:mosquitto-mosquitto-mosquitto-spec",
+      "source": "ss:mosquitto-mosquitto-mosquitto,607459b5-b30f-5210-824e-8f643bedc265",
+      "target": "ss:mosquitto,9a6db5ed-3ea0-5448-b44c-fdd820046ac8",
+      "type": "Specialization"
+    },
+    {
+      "id": "rel:intercom-consumes-iotsupport",
+      "source": "ss:intercom,c943f60c-e495-4355-af9a-bef67c46f0df",
+      "target": "svc:iotsupport-api,b7c5b5ba-36eb-47b8-bf7e-5c50fa1a3656",
+      "type": "Association"
+    },
+    {
+      "id": "rel:intercom-consumes-pub-sub",
+      "source": "ss:intercom,c943f60c-e495-4355-af9a-bef67c46f0df",
+      "target": "cap:pub-sub-broker",
+      "type": "Association"
+    },
+    {
+      "id": "rel:intercom-consumes-iam",
+      "source": "ss:intercom,c943f60c-e495-4355-af9a-bef67c46f0df",
+      "target": "cap:iam",
+      "type": "Association"
+    },
+    {
+      "id": "rel:intercom-consumes-intercom-relay",
+      "source": "ss:intercom,c943f60c-e495-4355-af9a-bef67c46f0df",
+      "target": "svc:intercom,5914e568-7f39-461a-91fe-9981d5275fe1",
+      "type": "Association"
+    },
+    {
+      "id": "rel:intercom-ha-mqtt",
+      "source": "ss:intercom,c943f60c-e495-4355-af9a-bef67c46f0df",
+      "target": "svc:home-assistant-mqtt,23572189-9185-4a6d-a073-2b2820578e11",
+      "type": "Association"
+    },
+    {
+      "id": "rel:intercom-server-realizes-intercom",
+      "source": "app:intercom-server,c313fb20-b8df-4f6c-be1b-23af65e26705",
+      "target": "svc:intercom,5914e568-7f39-461a-91fe-9981d5275fe1",
+      "type": "Realization"
+    },
+    {
+      "id": "rel:intercom-server-consumes-pub-sub",
+      "source": "app:intercom-server,c313fb20-b8df-4f6c-be1b-23af65e26705",
+      "target": "cap:pub-sub-broker",
+      "type": "Association",
+      "boundBy": "env:MQTT_HOST"
+    },
+    {
+      "id": "rel:iotsupport-realizes-api",
+      "source": "app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7",
+      "target": "svc:iotsupport-api,b7c5b5ba-36eb-47b8-bf7e-5c50fa1a3656",
+      "type": "Realization"
+    },
+    {
+      "id": "rel:iotsupport-consumes-iam",
+      "source": "app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7",
+      "target": "cap:iam",
+      "type": "Association",
+      "boundBy": "env:OIDC_ISSUER_URL"
+    },
+    {
+      "id": "rel:iotsupport-consumes-pub-sub-broker",
+      "source": "app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7",
+      "target": "cap:pub-sub-broker",
+      "type": "Association",
+      "boundBy": "env:MQTT_URL"
+    },
+    {
+      "id": "rel:23e3d2f9-50cc-576b-ad86-f2efd925d6dd",
+      "source": "ss:home-assistant,4c3075c2-2a67-4788-851a-ff9f49cc7b09",
+      "target": "svc:home-assistant-mqtt,23572189-9185-4a6d-a073-2b2820578e11",
+      "type": "Realization",
+      "derived": true
+    },
+    {
+      "id": "rel:d0a39c58-d839-52bf-9f46-3a84c9570f74",
+      "source": "ss:keycloak,9409aeb9-c50a-59db-a7dc-450b47ee90d8",
+      "target": "cap:iam",
+      "type": "Realization",
+      "derived": true
+    },
+    {
+      "id": "rel:9086d515-25c0-5474-b541-a9ed4e957425",
+      "source": "ss:keycloak,9409aeb9-c50a-59db-a7dc-450b47ee90d8",
+      "target": "app:calendar-support,f719ff37-e984-46d8-9723-1b5a5c58eebc",
+      "type": "Serving",
+      "derived": true
+    },
+    {
+      "id": "rel:cb783cd7-18b5-5885-b256-02117c82b43e",
+      "source": "ss:keycloak,9409aeb9-c50a-59db-a7dc-450b47ee90d8",
+      "target": "app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7",
+      "type": "Serving",
+      "derived": true
+    },
+    {
+      "id": "rel:03d7a488-6cc5-54d3-b1ef-8aadf20b4c72",
+      "source": "ss:mosquitto,9a6db5ed-3ea0-5448-b44c-fdd820046ac8",
+      "target": "cap:pub-sub-broker",
+      "type": "Realization",
+      "derived": true
+    },
+    {
+      "id": "rel:040ac100-3bbb-5f7a-b0a1-0012319e7b75",
+      "source": "ss:mosquitto,9a6db5ed-3ea0-5448-b44c-fdd820046ac8",
+      "target": "app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7",
+      "type": "Serving",
+      "derived": true
+    }
+  ]
+}

@@ -1297,3 +1297,88 @@ class TestDeviceServiceActiveFlag:
                 device = device_service.create_device(device_model_id=model.id, config="{}")
 
                 assert device.active is True
+
+
+class TestDeviceServiceFleetProjection:
+    """Tests for DeviceService.get_fleet_projection."""
+
+    @staticmethod
+    def _create_device(
+        container: ServiceContainer, model_id: int, config: str
+    ) -> object:
+        """Create a device with Keycloak mocked out."""
+        keycloak_service = container.keycloak_admin_service()
+        with patch.object(
+            keycloak_service,
+            "create_client",
+            return_value=MagicMock(client_id="test", secret="test-secret"),
+        ), patch.object(
+            keycloak_service,
+            "update_client_metadata",
+        ):
+            return container.device_service().create_device(
+                device_model_id=model_id, config=config
+            )
+
+    def test_fleet_projection_includes_inactive(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Both active and inactive devices appear (no 'active' filter)."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model_a = model_service.create_device_model(code="proj_a", name="Proj A")
+            model_a.firmware_version = "1.4.2"
+            model_b = model_service.create_device_model(code="proj_b", name="Proj B")
+
+            dev_active = self._create_device(
+                container, model_a.id, '{"deviceName": "Hallway clock"}'
+            )
+            dev_inactive = self._create_device(container, model_b.id, "{}")
+
+            device_service = container.device_service()
+            # Flip one device inactive - must NOT affect projection membership.
+            dev_inactive.active = False  # type: ignore[attr-defined]
+            container.db_session().flush()
+
+            projection = device_service.get_fleet_projection()
+
+            keys = {d["key"] for d in projection["devices"]}
+            assert dev_active.key in keys  # type: ignore[attr-defined]
+            assert dev_inactive.key in keys  # type: ignore[attr-defined]
+            assert len(projection["devices"]) == 2
+
+            by_key = {d["key"]: d for d in projection["devices"]}
+            active_row = by_key[dev_active.key]  # type: ignore[attr-defined]
+            assert active_row["model_code"] == "proj_a"
+            assert active_row["firmware_version"] == "1.4.2"
+            assert active_row["device_name"] == "Hallway clock"
+            assert active_row["created_at"] is not None
+
+    def test_fleet_projection_fleet_config(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """fleet.mqtt_url = device_mqtt_url; oidc_issuer_url = oidc_token_url; no baseurl."""
+        with app.app_context():
+            config = container.app_config()
+            projection = container.device_service().get_fleet_projection()
+
+            assert projection["fleet"]["mqtt_url"] == config.device_mqtt_url
+            assert projection["fleet"]["oidc_issuer_url"] == config.oidc_token_url
+            assert "baseurl" not in projection["fleet"]
+
+    def test_fleet_projection_null_firmware(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """A device on a model without firmware lists firmware_version=None."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="proj_nofw", name="No FW")
+
+            device = self._create_device(container, model.id, "{}")
+
+            projection = container.device_service().get_fleet_projection()
+            row = next(
+                d for d in projection["devices"]
+                if d["key"] == device.key  # type: ignore[attr-defined]
+            )
+            assert row["firmware_version"] is None

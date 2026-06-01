@@ -3,6 +3,7 @@
 import json
 import zipfile
 from io import BytesIO
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from flask import Flask
@@ -262,6 +263,85 @@ class TestPipelineFirmwareVersion:
         assert response.status_code == 404
         data = response.get_json()
         assert "nonexistent" in data["error"]
+
+
+class TestPipelineFleetProjection:
+    """Tests for GET /api/pipeline/fleet-projection."""
+
+    def test_fleet_projection_success(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Pipeline client gets a schema-valid projection body (200)."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="projapi", name="Proj API")
+            model.firmware_version = "9.9.9"
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(keycloak_service, "update_client_metadata"):
+                container.device_service().create_device(
+                    device_model_id=model.id, config='{"deviceName": "Dev One"}'
+                )
+            container.db_session().commit()
+
+        response = client.get("/api/pipeline/fleet-projection")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "devices" in data
+        assert "fleet" in data
+        assert len(data["devices"]) == 1
+        device = data["devices"][0]
+        assert device["model_code"] == "projapi"
+        assert device["firmware_version"] == "9.9.9"
+        assert device["device_name"] == "Dev One"
+        assert device["created_at"] is not None
+        assert "mqtt_url" in data["fleet"]
+        assert "oidc_issuer_url" in data["fleet"]
+
+    def test_fleet_projection_empty(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Empty fleet returns 200 with an empty device list (no 404)."""
+        response = client.get("/api/pipeline/fleet-projection")
+        assert response.status_code == 200
+        assert response.get_json()["devices"] == []
+
+    def test_fleet_projection_no_token_unauthorized(
+        self, oidc_client: FlaskClient
+    ) -> None:
+        """No bearer token -> 401 when OIDC is enabled."""
+        response = oidc_client.get("/api/pipeline/fleet-projection")
+        assert response.status_code == 401
+
+    def test_fleet_projection_wrong_role_forbidden(
+        self, oidc_client: FlaskClient, generate_test_jwt: Any
+    ) -> None:
+        """Token without 'pipeline' role -> 403."""
+        token = generate_test_jwt(roles=["viewer"])
+        response = oidc_client.get(
+            "/api/pipeline/fleet-projection",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 403
+
+    def test_fleet_projection_pipeline_role_allowed(
+        self, oidc_client: FlaskClient, generate_test_jwt: Any
+    ) -> None:
+        """Token with 'pipeline' role -> 200 + schema-valid body."""
+        token = generate_test_jwt(roles=["pipeline"])
+        response = oidc_client.get(
+            "/api/pipeline/fleet-projection",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "devices" in data
+        assert "fleet" in data
 
 
 class TestPipelineUploadScript:

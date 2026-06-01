@@ -1,6 +1,9 @@
 // Architecture producer pipeline for the federated Architecture-as-Code model.
-// Source of truth: the hand-authored docs/architecture/*.yaml in this repo.
-// The agent needs outbound HTTPS to architecture.webathome.org for validation.
+// This repo is a GENERATED producer: docs/architecture/architecture.yaml is the
+// hand-authored logical artifact, and docs/architecture/deployed-architecture.yaml
+// is generated here from the production device fleet (it is NOT committed).
+// The agent needs outbound HTTPS to architecture.webathome.org (dataset +
+// validation) and to the production IoT Support API (fleet projection).
 
 library('JenkinsPipelineUtils') _
 
@@ -12,11 +15,30 @@ podTemplate(inheritFrom: 'jenkins-agent', containers: [
             checkout scm
         }
 
+        stage('Generate') {
+            // Project the production fleet into deployed-architecture.yaml.
+            // The generator fetches the published dataset and calls the
+            // production /api/pipeline/fleet-projection with client credentials.
+            container('python') {
+                withCredentials([
+                    string(credentialsId: 'iotsupport-api-url', variable: 'IOTSUPPORT_API_URL'),
+                    string(credentialsId: 'iotsupport-token-url', variable: 'IOTSUPPORT_TOKEN_URL'),
+                    string(credentialsId: 'iotsupport-pipeline-client-id', variable: 'IOTSUPPORT_CLIENT_ID'),
+                    string(credentialsId: 'iotsupport-pipeline-client-secret', variable: 'IOTSUPPORT_CLIENT_SECRET'),
+                ]) {
+                    sh 'pip install --quiet requests==2.32.5 pyyaml==6.0.3'
+                    sh './tools/gen-architecture.py'
+                }
+            }
+        }
+
         stage('Architecture') {
             container('python') {
-                sh './scripts/arch-validate.py docs/architecture/*.yaml'
+                // Validate only the architecture artifacts; firmware-products.yaml
+                // is an annotation file (generator input), not an artifact.
+                sh './scripts/arch-validate.py docs/architecture/architecture.yaml docs/architecture/deployed-architecture.yaml'
             }
-            archiveArtifacts artifacts: 'docs/architecture/*.yaml', fingerprint: true
+            archiveArtifacts artifacts: 'docs/architecture/architecture.yaml,docs/architecture/deployed-architecture.yaml', fingerprint: true
         }
     }
 }
