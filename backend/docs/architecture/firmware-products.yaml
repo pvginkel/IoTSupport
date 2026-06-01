@@ -21,4 +21,4 @@ products:
   intercom:                      c943f60c-e495-4355-af9a-bef67c46f0df
   paper_clock:                   1304162f-51fc-4279-9aff-7942d7d800e7
   somfy_remote:                  3e684732-6621-4297-926f-a4d9f82c538e
-  underfloor_heating_controller: 682de51a-d76e-4507-9eed-627725247303
+  ufh_controller:                682de51a-d76e-4507-9eed-627725247303
