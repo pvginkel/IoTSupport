@@ -1,4 +1,4 @@
-library('JenkinsPipelineUtils') _
+library identifier: 'JenkinsPipelineUtils', changelog: false
 
 properties([
     parameters([
