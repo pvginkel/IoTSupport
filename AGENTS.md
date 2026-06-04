@@ -17,9 +17,10 @@ app/
 ## Sandbox Environment
 
 - Backend and frontend worktrees are bind-mounted into `/work` inside the container.
-- Each repository’s `.git` directory is mapped read-only, so staging or committing must happen outside the sandbox.
+- Each repository’s `.git` directory is writable from inside the sandbox, so staging and committing happen here directly.
+- Commit as you go along, in logical increments. This is a single-person shop: work directly on the main branch, no topic branches.
 - The container includes the standard project toolchain; request Dockerfile updates if more tooling is needed.
-- With Git safeguarded externally, no additional safety guardrails are enforced beyond the project’s own guidelines.
+- Git is writable from inside the sandbox; no additional safety guardrails are enforced beyond the project’s own guidelines, so commit deliberately.
 
 ## Deprecation and Backwards Compatibility
 
