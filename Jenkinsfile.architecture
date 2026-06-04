@@ -5,7 +5,7 @@
 // The agent needs outbound HTTPS to architecture.webathome.org (dataset +
 // validation) and to the production IoT Support API (fleet projection).
 
-library('JenkinsPipelineUtils') _
+library identifier: 'JenkinsPipelineUtils', changelog: false
 
 withVault([vaultSecrets: [
     [path: 'kv/jenkins/iotsupport-pipeline-oidc', engineVersion: 2, secretValues: [
