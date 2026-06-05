@@ -72,7 +72,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                 echo "Validation image: ${validationImage}"
 
                 // Stream the source in instead of baking it into an image.
-                // It extracts to /work/backend-src and /work/frontend-src.
+                // backend-src/frontend-src are renamed to /work/backend and /work/frontend.
                 sh "tar czf /tmp/context.tar.gz --exclude=.git --exclude=node_modules --exclude=.venv --exclude=test-results --exclude=.pnpm-store backend-src frontend-src scripts/validation-entrypoint.sh"
 
                 withVault([vaultSecrets: [
@@ -127,6 +127,8 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                                     while [ ! -f /work/staging/ready ]; do sleep 1; done
                                                     echo "Code received, extracting..."
                                                     tar xzf /work/staging/context.tar.gz -C /work
+                                                    mv /work/backend-src /work/backend
+                                                    mv /work/frontend-src /work/frontend
                                                     rm -rf /work/staging
                                                     bash /work/scripts/validation-entrypoint.sh
                                                     echo \$? > /work/results/exit-code

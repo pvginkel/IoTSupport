@@ -7,14 +7,14 @@ mkdir -p "$RESULTS_DIR"
 exit_code=0
 
 echo "=== Installing backend dependencies ==="
-cd /work/backend-src
+cd /work/backend
 poetry install --no-interaction
 
 echo "=== Running backend tests ==="
 poetry run pytest -v --tb=short --junitxml="$RESULTS_DIR/backend.xml" || exit_code=$?
 
 echo "=== Installing frontend dependencies ==="
-cd /work/frontend-src
+cd /work/frontend
 pnpm install --frozen-lockfile --config.confirmModulesPurge=false
 
 echo "=== Building frontend ==="
