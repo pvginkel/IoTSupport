@@ -60,20 +60,21 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
             }
         }
 
-        stage('Build validation image') {
-            container('kaniko') {
-                helmCharts.kaniko(
-                    "Dockerfile.validation",
-                    ".",
-                    [
-                        "registry:5000/iot-support-validation:${currentBuild.number}"
-                    ]
-                )
-            }
-        }
-
         stage('Run validation') {
             container('k8s') {
+                // Resolve the Playwright version from the lockfile to select
+                // the matching base image (browsers pre-baked).
+                def playwrightVersion = sh(
+                    script: "grep -m1 '^  playwright@' frontend-src/pnpm-lock.yaml | sed 's/.*@//;s/://'",
+                    returnStdout: true,
+                ).trim()
+                def validationImage = "registry:5000/modern-app-dev-playwright:playwright-${playwrightVersion}"
+                echo "Validation image: ${validationImage}"
+
+                // Stream the source in instead of baking it into an image.
+                // It extracts to /work/backend-src and /work/frontend-src.
+                sh "tar czf /tmp/context.tar.gz --exclude=.git --exclude=node_modules --exclude=.venv --exclude=test-results --exclude=.pnpm-store backend-src frontend-src scripts/validation-entrypoint.sh"
+
                 withVault([vaultSecrets: [
                     [path: 'kv/shared/ceph-rgw/s3', engineVersion: 2, secretValues: [
                         [envVar: 'S3_ACCESS_KEY_ID', vaultKey: 'access_key_id'],
@@ -89,103 +90,106 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                     ]],
                 ]]) {
                     try {
-                        kubectl.startJob("""
+                        kubectl.startJob("""\
                             apiVersion: batch/v1
                             kind: Job
                             metadata:
-                              name: ${jobName}
-                              namespace: ${k8sNamespace}
-                              labels:
-                                app.kubernetes.io/name: iot-support-validation
-                                app.kubernetes.io/managed-by: jenkins
-                                jenkins/build-number: "${BUILD_NUMBER}"
+                                name: ${jobName}
+                                namespace: ${k8sNamespace}
+                                labels:
+                                    app.kubernetes.io/name: iot-support-validation
+                                    app.kubernetes.io/managed-by: jenkins
+                                    jenkins/build-number: "${BUILD_NUMBER}"
                             spec:
-                              backoffLimit: 0
-                              activeDeadlineSeconds: 3600
-                              ttlSecondsAfterFinished: 3600
-                              template:
-                                spec:
-                                  restartPolicy: Never
-                                  tolerations:
-                                    - key: size
-                                      operator: Equal
-                                      value: large
-                                      effect: PreferNoSchedule
-                                  containers:
-                                    - name: validation
-                                      image: registry:5000/iot-support-validation:${currentBuild.number}
-                                      imagePullPolicy: Always
-                                      resources:
-                                        requests:
-                                          cpu: "1"
-                                          memory: 3584Mi
-                                      env:
-                                        - name: S3_ENDPOINT_URL
-                                          value: "${S3_ENDPOINT_URL}"
-                                        - name: S3_ACCESS_KEY_ID
-                                          value: "${S3_ACCESS_KEY_ID}"
-                                        - name: S3_SECRET_ACCESS_KEY
-                                          value: "${S3_SECRET_ACCESS_KEY}"
-                                        - name: S3_BUCKET_NAME
-                                          value: "iot-support-validation"
-                                        - name: KEYCLOAK_BASE_URL
-                                          value: "${KEYCLOAK_TEST_BASE_URL}"
-                                        - name: KEYCLOAK_REALM
-                                          value: "${KEYCLOAK_TEST_REALM}"
-                                        - name: KEYCLOAK_ADMIN_CLIENT_ID
-                                          value: "${KEYCLOAK_ADMIN_CLIENT_ID}"
-                                        - name: KEYCLOAK_ADMIN_CLIENT_SECRET
-                                          value: "${KEYCLOAK_ADMIN_CLIENT_SECRET}"
-                                        - name: OIDC_TOKEN_URL
-                                          value: "${KEYCLOAK_TEST_OIDC_TOKEN_URL}"
-                                        - name: ELASTICSEARCH_URL
-                                          value: "${ELASTICSEARCH_CLUSTER_URL}"
-                                        - name: ELASTICSEARCH_USERNAME
-                                          value: "${ELASTICSEARCH_USERNAME}"
-                                        - name: ELASTICSEARCH_PASSWORD
-                                          value: "${ELASTICSEARCH_PASSWORD}"
+                                backoffLimit: 0
+                                activeDeadlineSeconds: 3600
+                                ttlSecondsAfterFinished: 3600
+                                template:
+                                    spec:
+                                        restartPolicy: Never
+                                        tolerations:
+                                            - key: size
+                                              operator: Equal
+                                              value: large
+                                              effect: PreferNoSchedule
+                                        containers:
+                                            - name: validation
+                                              image: ${validationImage}
+                                              imagePullPolicy: Always
+                                              securityContext:
+                                                  runAsUser: 1000
+                                                  runAsGroup: 1000
+                                              command: ["sh", "-c"]
+                                              args:
+                                                  - |
+                                                    mkdir -p /work/staging /work/results
+                                                    echo "Waiting for code upload..."
+                                                    while [ ! -f /work/staging/ready ]; do sleep 1; done
+                                                    echo "Code received, extracting..."
+                                                    tar xzf /work/staging/context.tar.gz -C /work
+                                                    rm -rf /work/staging
+                                                    bash /work/scripts/validation-entrypoint.sh
+                                                    echo \$? > /work/results/exit-code
+                                                    sleep infinity
+                                              resources:
+                                                  requests:
+                                                      cpu: "1"
+                                                      memory: 3584Mi
+                                              env:
+                                                  - name: S3_ENDPOINT_URL
+                                                    value: "${S3_ENDPOINT_URL}"
+                                                  - name: S3_ACCESS_KEY_ID
+                                                    value: "${S3_ACCESS_KEY_ID}"
+                                                  - name: S3_SECRET_ACCESS_KEY
+                                                    value: "${S3_SECRET_ACCESS_KEY}"
+                                                  - name: S3_BUCKET_NAME
+                                                    value: "iot-support-validation"
+                                                  - name: KEYCLOAK_BASE_URL
+                                                    value: "${KEYCLOAK_TEST_BASE_URL}"
+                                                  - name: KEYCLOAK_REALM
+                                                    value: "${KEYCLOAK_TEST_REALM}"
+                                                  - name: KEYCLOAK_ADMIN_CLIENT_ID
+                                                    value: "${KEYCLOAK_ADMIN_CLIENT_ID}"
+                                                  - name: KEYCLOAK_ADMIN_CLIENT_SECRET
+                                                    value: "${KEYCLOAK_ADMIN_CLIENT_SECRET}"
+                                                  - name: OIDC_TOKEN_URL
+                                                    value: "${KEYCLOAK_TEST_OIDC_TOKEN_URL}"
+                                                  - name: ELASTICSEARCH_URL
+                                                    value: "${ELASTICSEARCH_CLUSTER_URL}"
+                                                  - name: ELASTICSEARCH_USERNAME
+                                                    value: "${ELASTICSEARCH_USERNAME}"
+                                                  - name: ELASTICSEARCH_PASSWORD
+                                                    value: "${ELASTICSEARCH_PASSWORD}"
                         """.stripIndent())
 
-                        kubectl.waitForJobContainer(jobName, 'validation', k8sNamespace)
-
                         def podName = kubectl.getJobPodName(jobName, k8sNamespace)
+                        kubectl.waitForContainer(podName, 'validation', k8sNamespace)
+                        sh "kubectl cp -n ${k8sNamespace} -c validation /tmp/context.tar.gz ${podName}:/work/staging/context.tar.gz"
+                        sh "kubectl exec -n ${k8sNamespace} -c validation ${podName} -- touch /work/staging/ready"
+
+                        // The container stays alive (sleep infinity) after running,
+                        // so we wait for the exit-code file and then copy results
+                        // out while it's still running.
+                        kubectl.waitForFile(podName, 'validation', k8sNamespace, '/work/results/exit-code')
+
                         kubectl.savePodLogs(podName, 'validation', k8sNamespace, 'validation-raw.log')
+                        utils.cleanLog('validation-raw.log', 'validation.log')
 
-                        sh '''
-                            set -euo pipefail
+                        sh 'mkdir -p test-results'
+                        sh "kubectl cp -n ${k8sNamespace} -c validation ${podName}:/work/results/. test-results/"
 
-                            mkdir -p test-results
+                        def exitCode = fileExists('test-results/exit-code') ? readFile('test-results/exit-code').trim() : ''
 
-                            awk '
-                                /^===JUNIT:.*===$/ {
-                                    fname = $0
-                                    sub(/^===JUNIT:/, "", fname)
-                                    sub(/===$/, "", fname)
-                                    content = ""
-                                    capture = 1
-                                    next
-                                }
-                                /^===JUNIT_END===$/ {
-                                    print content | "base64 -d > test-results/" fname
-                                    close("base64 -d > test-results/" fname)
-                                    capture = 0
-                                    next
-                                }
-                                capture { content = content (content ? "\\n" : "") $0 }
-                                !capture { print }
-                            ' validation-raw.log > validation-stripped.log
-                        '''
-                        utils.cleanLog('validation-stripped.log', 'validation.log')
+                        sh 'rm -f validation-raw.log /tmp/context.tar.gz test-results/exit-code'
                         archiveArtifacts artifacts: 'validation.log', allowEmptyArchive: true
                         junit testResults: 'test-results/*.xml', allowEmptyResults: true
 
-                        def exitCode = kubectl.getContainerExitCode(podName, 'validation', k8sNamespace)
                         def failReason = kubectl.getJobFailReason(jobName, k8sNamespace)
 
-                        currentBuild.description = "job=${jobName}, pod=${podName}, exit=${exitCode ?: 'n/a'}"
+                        currentBuild.description = "job=${jobName}, exit=${exitCode ?: 'n/a'}"
 
                         if (!exitCode) {
-                            error("No exit code found for pod ${podName}${failReason ? " (reason: ${failReason})" : ""}")
+                            error("No exit code found for job ${jobName}${failReason ? " (reason: ${failReason})" : ""}")
                         }
 
                         if (exitCode != '0') {
