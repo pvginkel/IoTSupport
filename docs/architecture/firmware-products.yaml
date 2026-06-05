@@ -18,7 +18,8 @@ products:
   doorbell_receiver:             5862dd9d-b6a2-482b-96de-b312507ded9b
   gesture_device:                a002a971-868f-4723-80b9-7740349ebcf9
   infra_statistics_display:      3199b06f-ae1a-4df0-af38-96229376c00e
-  intercom:                      c943f60c-e495-4355-af9a-bef67c46f0df
+  intercom_v1:                   c943f60c-e495-4355-af9a-bef67c46f0df
+  intercom_v2:                   bf17d137-676b-464a-ad5a-3460602766e6
   paper_clock:                   1304162f-51fc-4279-9aff-7942d7d800e7
   somfy_remote:                  3e684732-6621-4297-926f-a4d9f82c538e
   ufh_controller:                682de51a-d76e-4507-9eed-627725247303
