@@ -114,7 +114,7 @@ export default defineConfig({
         xfwd: true,
       },
     },
-    watch: process.env.VITE_TEST_MODE === 'true' ? { ignored: ['**'] } : undefined
+    watch: process.env.VITE_TEST_MODE === 'true' ? { ignored: ['**'] } : { ignored: ['**/.pnpm-store/**'] }
   },
   preview: {
     proxy: {
