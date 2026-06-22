@@ -80,10 +80,6 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                         [envVar: 'KEYCLOAK_ADMIN_CLIENT_ID', vaultKey: 'client_id'],
                         [envVar: 'KEYCLOAK_ADMIN_CLIENT_SECRET', vaultKey: 'client_secret'],
                     ]],
-                    [path: 'kv/jenkins/elastic-test', engineVersion: 2, secretValues: [
-                        [envVar: 'ELASTICSEARCH_USERNAME', vaultKey: 'username'],
-                        [envVar: 'ELASTICSEARCH_PASSWORD', vaultKey: 'password'],
-                    ]],
                 ]]) {
                     try {
                         kubectl.startJob("""\
@@ -153,11 +149,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                                   - name: OIDC_TOKEN_URL
                                                     value: "${KEYCLOAK_TEST_OIDC_TOKEN_URL}"
                                                   - name: ELASTICSEARCH_URL
-                                                    value: "${ELASTICSEARCH_CLUSTER_URL}"
-                                                  - name: ELASTICSEARCH_USERNAME
-                                                    value: "${ELASTICSEARCH_USERNAME}"
-                                                  - name: ELASTICSEARCH_PASSWORD
-                                                    value: "${ELASTICSEARCH_PASSWORD}"
+                                                    value: http://localhost:9200
                                             - name: minio
                                               image: minio/minio
                                               command: ["minio"]
@@ -167,6 +159,24 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                                     value: minioadmin
                                                   - name: MINIO_ROOT_PASSWORD
                                                     value: minioadmin
+                                            - name: opensearch
+                                              image: opensearchproject/opensearch:2
+                                              resources:
+                                                  requests:
+                                                      memory: 640Mi
+                                                  limits:
+                                                      memory: 640Mi
+                                              env:
+                                                  - name: discovery.type
+                                                    value: single-node
+                                                  - name: plugins.security.disabled
+                                                    value: "true"
+                                                  - name: DISABLE_INSTALL_DEMO_CONFIG
+                                                    value: "true"
+                                                  - name: bootstrap.memory_lock
+                                                    value: "false"
+                                                  - name: OPENSEARCH_JAVA_OPTS
+                                                    value: "-Xms192m -Xmx192m -XX:MaxDirectMemorySize=32m -Dnode.processors=1"
                         """.stripIndent())
 
                         def podName = kubectl.getJobPodName(jobName, k8sNamespace)
