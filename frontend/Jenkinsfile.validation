@@ -76,10 +76,6 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                 sh "tar czf /tmp/context.tar.gz --exclude=.git --exclude=node_modules --exclude=.venv --exclude=test-results --exclude=.pnpm-store backend-src frontend-src scripts/validation-entrypoint.sh"
 
                 withVault([vaultSecrets: [
-                    [path: 'kv/shared/ceph-rgw/s3', engineVersion: 2, secretValues: [
-                        [envVar: 'S3_ACCESS_KEY_ID', vaultKey: 'access_key_id'],
-                        [envVar: 'S3_SECRET_ACCESS_KEY', vaultKey: 'secret_access_key'],
-                    ]],
                     [path: 'kv/jenkins/keycloak-iotsupport-admin', engineVersion: 2, secretValues: [
                         [envVar: 'KEYCLOAK_ADMIN_CLIENT_ID', vaultKey: 'client_id'],
                         [envVar: 'KEYCLOAK_ADMIN_CLIENT_SECRET', vaultKey: 'client_secret'],
@@ -139,11 +135,11 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                                       memory: 3584Mi
                                               env:
                                                   - name: S3_ENDPOINT_URL
-                                                    value: "${S3_ENDPOINT_URL}"
+                                                    value: http://localhost:9000
                                                   - name: S3_ACCESS_KEY_ID
-                                                    value: "${S3_ACCESS_KEY_ID}"
+                                                    value: minioadmin
                                                   - name: S3_SECRET_ACCESS_KEY
-                                                    value: "${S3_SECRET_ACCESS_KEY}"
+                                                    value: minioadmin
                                                   - name: S3_BUCKET_NAME
                                                     value: "iot-support-validation"
                                                   - name: KEYCLOAK_BASE_URL
@@ -162,6 +158,15 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                                     value: "${ELASTICSEARCH_USERNAME}"
                                                   - name: ELASTICSEARCH_PASSWORD
                                                     value: "${ELASTICSEARCH_PASSWORD}"
+                                            - name: minio
+                                              image: minio/minio
+                                              command: ["minio"]
+                                              args: ["server", "/data"]
+                                              env:
+                                                  - name: MINIO_ROOT_USER
+                                                    value: minioadmin
+                                                  - name: MINIO_ROOT_PASSWORD
+                                                    value: minioadmin
                         """.stripIndent())
 
                         def podName = kubectl.getJobPodName(jobName, k8sNamespace)
