@@ -73,7 +73,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
 
                 // Stream the source in instead of baking it into an image.
                 // backend-src/frontend-src are renamed to /work/backend and /work/frontend.
-                sh "tar czf /tmp/context.tar.gz --exclude=.git --exclude=node_modules --exclude=.venv --exclude=test-results --exclude=.pnpm-store backend-src frontend-src scripts/validation-entrypoint.sh"
+                sh "tar czf /tmp/context.tar.gz --exclude=.git --exclude=node_modules --exclude=.venv --exclude=test-results --exclude=.pnpm-store backend-src frontend-src scripts/validation-entrypoint.sh scripts/wait-for-services.py"
 
                 withVault([vaultSecrets: [
                     [path: 'kv/jenkins/keycloak-iotsupport-admin', engineVersion: 2, secretValues: [

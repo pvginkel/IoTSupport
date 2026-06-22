@@ -10,6 +10,12 @@ echo "=== Installing backend dependencies ==="
 cd /work/backend
 poetry install --no-interaction
 
+# The MinIO/OpenSearch sidecars boot in parallel with this container, so gate the
+# test run on them (and provision the empty MinIO's bucket) before the backend's
+# storage preflight can race ahead of an unready service.
+echo "=== Waiting for sidecar services ==="
+poetry run python /work/scripts/wait-for-services.py
+
 echo "=== Running backend tests ==="
 poetry run pytest -v --tb=short --junitxml="$RESULTS_DIR/backend.xml" || exit_code=$?
 

@@ -5,6 +5,8 @@ node_modules
 .pnpm-store
 /browsers
 /.local
+/tmp
+__pycache__
 
 # Playwright artifacts
 /test-results/
