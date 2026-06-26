@@ -1,0 +1,5024 @@
+{
+  "components": {
+    "schemas": {
+      "ContentHtmlQuerySchema.7ccab41": {
+        "description": "Query parameters for deterministic HTML content fixtures.",
+        "properties": {
+          "title": {
+            "description": "Title to embed in the rendered HTML fixture",
+            "examples": [
+              "Playwright Fixture Page"
+            ],
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "ContentHtmlQuerySchema",
+        "type": "object"
+      },
+      "ContentImageQuerySchema.7ccab41": {
+        "description": "Query parameters for deterministic testing image content.",
+        "properties": {
+          "text": {
+            "description": "Text to render on the generated PNG image",
+            "examples": [
+              "Playwright Test Image"
+            ],
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ContentImageQuerySchema",
+        "type": "object"
+      },
+      "CoredumpDetailSchema.58985ac": {
+        "description": "Detail schema for a single coredump (includes parsed_output).",
+        "properties": {
+          "chip": {
+            "description": "Chip type (e.g., esp32s3)",
+            "title": "Chip",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "Record creation timestamp",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_id": {
+            "description": "Device ID",
+            "title": "Device Id",
+            "type": "integer"
+          },
+          "firmware_version": {
+            "description": "Firmware version at time of crash",
+            "title": "Firmware Version",
+            "type": "string"
+          },
+          "id": {
+            "description": "Coredump ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "parse_status": {
+            "description": "Parse status: PENDING, PARSED, or ERROR",
+            "title": "Parse Status",
+            "type": "string"
+          },
+          "parsed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When parsing completed",
+            "title": "Parsed At"
+          },
+          "parsed_output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Parsed crash analysis output",
+            "title": "Parsed Output"
+          },
+          "size": {
+            "description": "Size of the coredump binary in bytes",
+            "title": "Size",
+            "type": "integer"
+          },
+          "updated_at": {
+            "description": "Record last update timestamp",
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "uploaded_at": {
+            "description": "When the coredump was uploaded",
+            "format": "date-time",
+            "title": "Uploaded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "device_id",
+          "chip",
+          "firmware_version",
+          "size",
+          "parse_status",
+          "uploaded_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CoredumpDetailSchema",
+        "type": "object"
+      },
+      "CoredumpListResponseSchema.58985ac": {
+        "description": "Response schema for coredump list endpoint.",
+        "properties": {
+          "coredumps": {
+            "items": {
+              "$ref": "#/components/schemas/CoredumpListResponseSchema.58985ac.CoredumpSummarySchema"
+            },
+            "title": "Coredumps",
+            "type": "array"
+          },
+          "count": {
+            "description": "Total count of coredumps for this device",
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "coredumps",
+          "count"
+        ],
+        "title": "CoredumpListResponseSchema",
+        "type": "object"
+      },
+      "CoredumpListResponseSchema.58985ac.CoredumpSummarySchema": {
+        "description": "Summary schema for coredump list responses (excludes parsed_output).",
+        "properties": {
+          "chip": {
+            "description": "Chip type (e.g., esp32s3)",
+            "title": "Chip",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "Record creation timestamp",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_id": {
+            "description": "Device ID",
+            "title": "Device Id",
+            "type": "integer"
+          },
+          "firmware_version": {
+            "description": "Firmware version at time of crash",
+            "title": "Firmware Version",
+            "type": "string"
+          },
+          "id": {
+            "description": "Coredump ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "parse_status": {
+            "description": "Parse status: PENDING, PARSED, or ERROR",
+            "title": "Parse Status",
+            "type": "string"
+          },
+          "parsed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When parsing completed",
+            "title": "Parsed At"
+          },
+          "size": {
+            "description": "Size of the coredump binary in bytes",
+            "title": "Size",
+            "type": "integer"
+          },
+          "uploaded_at": {
+            "description": "When the coredump was uploaded",
+            "format": "date-time",
+            "title": "Uploaded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "device_id",
+          "chip",
+          "firmware_version",
+          "size",
+          "parse_status",
+          "uploaded_at",
+          "created_at"
+        ],
+        "title": "CoredumpSummarySchema",
+        "type": "object"
+      },
+      "DashboardResponseSchema.57872a8": {
+        "description": "Response schema for devices dashboard.",
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Count of devices in each category",
+            "examples": [
+              {
+                "critical": 1,
+                "healthy": 10,
+                "inactive": 0,
+                "warning": 2
+              }
+            ],
+            "title": "Counts",
+            "type": "object"
+          },
+          "critical": {
+            "description": "Devices in critical state (TIMEOUT, over critical threshold)",
+            "items": {
+              "$ref": "#/components/schemas/DashboardResponseSchema.57872a8.DashboardDeviceSchema"
+            },
+            "title": "Critical",
+            "type": "array"
+          },
+          "healthy": {
+            "description": "Devices in healthy state (OK, QUEUED, PENDING)",
+            "items": {
+              "$ref": "#/components/schemas/DashboardResponseSchema.57872a8.DashboardDeviceSchema"
+            },
+            "title": "Healthy",
+            "type": "array"
+          },
+          "inactive": {
+            "description": "Devices with active=False, excluded from rotation",
+            "items": {
+              "$ref": "#/components/schemas/DashboardResponseSchema.57872a8.DashboardDeviceSchema"
+            },
+            "title": "Inactive",
+            "type": "array"
+          },
+          "warning": {
+            "description": "Devices in warning state (TIMEOUT, under critical threshold)",
+            "items": {
+              "$ref": "#/components/schemas/DashboardResponseSchema.57872a8.DashboardDeviceSchema"
+            },
+            "title": "Warning",
+            "type": "array"
+          }
+        },
+        "required": [
+          "healthy",
+          "warning",
+          "critical",
+          "inactive",
+          "counts"
+        ],
+        "title": "DashboardResponseSchema",
+        "type": "object"
+      },
+      "DashboardResponseSchema.57872a8.DashboardDeviceSchema": {
+        "description": "Device summary for dashboard display.",
+        "properties": {
+          "active": {
+            "description": "Whether device participates in automatic fleet rotation",
+            "title": "Active",
+            "type": "boolean"
+          },
+          "days_since_rotation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Days since last completed rotation",
+            "title": "Days Since Rotation"
+          },
+          "device_model_code": {
+            "description": "Device model code",
+            "title": "Device Model Code",
+            "type": "string"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Device name from config",
+            "title": "Device Name"
+          },
+          "id": {
+            "description": "Device ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "key": {
+            "description": "Unique 8-character device key",
+            "title": "Key",
+            "type": "string"
+          },
+          "last_rotation_completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When last rotation completed",
+            "title": "Last Rotation Completed At"
+          },
+          "rotation_state": {
+            "description": "Current rotation state",
+            "title": "Rotation State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "device_model_code",
+          "active",
+          "rotation_state"
+        ],
+        "title": "DashboardDeviceSchema",
+        "type": "object"
+      },
+      "DeploymentTriggerRequestSchema.6b6ce9f": {
+        "description": "Request schema for triggering version deployment events in testing mode.",
+        "properties": {
+          "changelog": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional banner text accompanying the deployment notification",
+            "examples": [
+              "New filters, improved performance, and bug fixes."
+            ],
+            "title": "Changelog"
+          },
+          "request_id": {
+            "description": "Correlation identifier associated with an SSE subscriber",
+            "examples": [
+              "playwright-run-1234"
+            ],
+            "title": "Request Id",
+            "type": "string"
+          },
+          "version": {
+            "description": "Frontend version string to broadcast",
+            "examples": [
+              "2024.03.15+abc123"
+            ],
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "version"
+        ],
+        "title": "DeploymentTriggerRequestSchema",
+        "type": "object"
+      },
+      "DeploymentTriggerResponseSchema.6b6ce9f": {
+        "description": "Response schema for deployment trigger acknowledgements.",
+        "properties": {
+          "delivered": {
+            "description": "Whether the event was delivered immediately to an active subscriber",
+            "examples": [
+              true
+            ],
+            "title": "Delivered",
+            "type": "boolean"
+          },
+          "request_id": {
+            "description": "Echoed correlation identifier",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "status": {
+            "description": "Delivery status message",
+            "examples": [
+              "delivered"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "delivered",
+          "status"
+        ],
+        "title": "DeploymentTriggerResponseSchema",
+        "type": "object"
+      },
+      "DeviceCreateSchema.d48fbce": {
+        "description": "Request schema for creating a device.",
+        "properties": {
+          "config": {
+            "description": "Device configuration as JSON string",
+            "title": "Config",
+            "type": "string"
+          },
+          "device_model_id": {
+            "description": "ID of the device model this device belongs to",
+            "title": "Device Model Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "device_model_id",
+          "config"
+        ],
+        "title": "DeviceCreateSchema",
+        "type": "object"
+      },
+      "DeviceKeycloakStatusSchema.d48fbce": {
+        "description": "Schema for Keycloak client status response.",
+        "properties": {
+          "client_id": {
+            "description": "Expected Keycloak client ID",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "console_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Deep link to Keycloak admin console",
+            "title": "Console Url"
+          },
+          "exists": {
+            "description": "Whether client exists in Keycloak",
+            "title": "Exists",
+            "type": "boolean"
+          },
+          "keycloak_uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Keycloak internal UUID if exists",
+            "title": "Keycloak Uuid"
+          }
+        },
+        "required": [
+          "exists",
+          "client_id"
+        ],
+        "title": "DeviceKeycloakStatusSchema",
+        "type": "object"
+      },
+      "DeviceListResponseSchema.d48fbce": {
+        "description": "Response schema for device list.",
+        "properties": {
+          "count": {
+            "description": "Total count of devices",
+            "title": "Count",
+            "type": "integer"
+          },
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceListResponseSchema.d48fbce.DeviceSummarySchema"
+            },
+            "title": "Devices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "devices",
+          "count"
+        ],
+        "title": "DeviceListResponseSchema",
+        "type": "object"
+      },
+      "DeviceListResponseSchema.d48fbce.DeviceSummarySchema": {
+        "description": "Summary schema for device list responses.",
+        "properties": {
+          "active": {
+            "description": "Whether device participates in automatic fleet rotation",
+            "title": "Active",
+            "type": "boolean"
+          },
+          "device_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Device entity ID from config",
+            "title": "Device Entity Id"
+          },
+          "device_model_id": {
+            "description": "Device model ID",
+            "title": "Device Model Id",
+            "type": "integer"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Device name from config",
+            "title": "Device Name"
+          },
+          "enable_ota": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "OTA enabled flag from config",
+            "title": "Enable Ota"
+          },
+          "id": {
+            "description": "Device ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "key": {
+            "description": "Unique 8-character device key",
+            "title": "Key",
+            "type": "string"
+          },
+          "last_coredump_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Timestamp of the most recent coredump",
+            "title": "Last Coredump At"
+          },
+          "rotation_state": {
+            "description": "Current rotation state",
+            "title": "Rotation State",
+            "type": "string"
+          },
+          "secret_created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When current secret was created",
+            "title": "Secret Created At"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "device_model_id",
+          "active",
+          "rotation_state"
+        ],
+        "title": "DeviceSummarySchema",
+        "type": "object"
+      },
+      "DeviceLogSubscribeRequest.a423a82": {
+        "additionalProperties": false,
+        "description": "Request body for subscribing to a device's log stream.",
+        "properties": {
+          "device_id": {
+            "description": "Device ID to subscribe to",
+            "examples": [
+              42
+            ],
+            "title": "Device Id",
+            "type": "integer"
+          },
+          "request_id": {
+            "description": "SSE connection request ID",
+            "examples": [
+              "abc123"
+            ],
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "device_id"
+        ],
+        "title": "DeviceLogSubscribeRequest",
+        "type": "object"
+      },
+      "DeviceLogSubscribeResponse.a423a82": {
+        "additionalProperties": false,
+        "description": "Response body for a successful subscribe.",
+        "properties": {
+          "device_entity_id": {
+            "description": "Resolved device entity ID used for log matching",
+            "title": "Device Entity Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "subscribed",
+            "description": "Operation result",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_entity_id"
+        ],
+        "title": "DeviceLogSubscribeResponse",
+        "type": "object"
+      },
+      "DeviceLogUnsubscribeRequest.a423a82": {
+        "additionalProperties": false,
+        "description": "Request body for unsubscribing from a device's log stream.",
+        "properties": {
+          "device_id": {
+            "description": "Device ID to unsubscribe from",
+            "examples": [
+              42
+            ],
+            "title": "Device Id",
+            "type": "integer"
+          },
+          "request_id": {
+            "description": "SSE connection request ID",
+            "examples": [
+              "abc123"
+            ],
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "device_id"
+        ],
+        "title": "DeviceLogUnsubscribeRequest",
+        "type": "object"
+      },
+      "DeviceLogUnsubscribeResponse.a423a82": {
+        "additionalProperties": false,
+        "description": "Response body for a successful unsubscribe.",
+        "properties": {
+          "status": {
+            "default": "unsubscribed",
+            "description": "Operation result",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "DeviceLogUnsubscribeResponse",
+        "type": "object"
+      },
+      "DeviceLogsQuerySchema.e6f48c9": {
+        "description": "Query parameters for device logs request.",
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "End of time range (ISO datetime). Defaults to now. When provided without `start`, triggers backward scroll mode.",
+            "examples": [
+              "2026-02-01T15:00:00Z"
+            ],
+            "title": "End"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Wildcard search pattern for message field (Elasticsearch wildcard syntax).",
+            "examples": [
+              "error*",
+              "*timeout*"
+            ],
+            "title": "Query"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Start of time range (ISO datetime). Defaults to 1 hour ago. If omitted while `end` is set, returns up to 1000 entries ending at `end` in backward scroll mode.",
+            "examples": [
+              "2026-02-01T14:00:00Z"
+            ],
+            "title": "Start"
+          }
+        },
+        "title": "DeviceLogsQuerySchema",
+        "type": "object"
+      },
+      "DeviceLogsResponseSchema.e6f48c9": {
+        "description": "Response schema for device logs.",
+        "properties": {
+          "has_more": {
+            "description": "True if more results exist beyond the returned set (max 1000 per request)",
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "logs": {
+            "description": "List of log entries sorted by timestamp ascending",
+            "items": {
+              "$ref": "#/components/schemas/DeviceLogsResponseSchema.e6f48c9.LogEntrySchema"
+            },
+            "title": "Logs",
+            "type": "array"
+          },
+          "window_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Timestamp of last returned log entry (null if no logs)",
+            "examples": [
+              "2026-02-01T14:43:27.948Z"
+            ],
+            "title": "Window End"
+          },
+          "window_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Timestamp of first returned log entry (null if no logs)",
+            "examples": [
+              "2026-02-01T14:40:00.000Z"
+            ],
+            "title": "Window Start"
+          }
+        },
+        "required": [
+          "logs",
+          "has_more"
+        ],
+        "title": "DeviceLogsResponseSchema",
+        "type": "object"
+      },
+      "DeviceLogsResponseSchema.e6f48c9.LogEntrySchema": {
+        "description": "Schema for a single log entry.",
+        "properties": {
+          "message": {
+            "description": "Log message content",
+            "examples": [
+              "Device started successfully"
+            ],
+            "title": "Message",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "Log entry timestamp",
+            "examples": [
+              "2026-02-01T14:43:27.948Z"
+            ],
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timestamp",
+          "message"
+        ],
+        "title": "LogEntrySchema",
+        "type": "object"
+      },
+      "DeviceModelCreateSchema.349be3d": {
+        "description": "Request schema for creating a device model.",
+        "properties": {
+          "code": {
+            "description": "Unique model code (lowercase alphanumeric with underscores)",
+            "examples": [
+              "thermostat",
+              "motion_sensor"
+            ],
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "config_schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "JSON schema for validating device configurations (optional)",
+            "title": "Config Schema"
+          },
+          "name": {
+            "description": "Human-readable model name",
+            "examples": [
+              "Smart Thermostat",
+              "Motion Sensor"
+            ],
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "DeviceModelCreateSchema",
+        "type": "object"
+      },
+      "DeviceModelFirmwareResponseSchema.349be3d": {
+        "description": "Response schema for firmware upload.",
+        "properties": {
+          "code": {
+            "description": "Model code",
+            "title": "Code",
+            "type": "string"
+          },
+          "firmware_version": {
+            "description": "Extracted firmware version",
+            "title": "Firmware Version",
+            "type": "string"
+          },
+          "id": {
+            "description": "Device model ID",
+            "title": "Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "firmware_version"
+        ],
+        "title": "DeviceModelFirmwareResponseSchema",
+        "type": "object"
+      },
+      "DeviceModelListResponseSchema.349be3d": {
+        "description": "Response schema for device model list.",
+        "properties": {
+          "count": {
+            "description": "Total count of device models",
+            "title": "Count",
+            "type": "integer"
+          },
+          "device_models": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceModelListResponseSchema.349be3d.DeviceModelSummarySchema"
+            },
+            "title": "Device Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "device_models",
+          "count"
+        ],
+        "title": "DeviceModelListResponseSchema",
+        "type": "object"
+      },
+      "DeviceModelListResponseSchema.349be3d.DeviceModelSummarySchema": {
+        "description": "Summary schema for device model list responses.",
+        "properties": {
+          "code": {
+            "description": "Unique model code",
+            "title": "Code",
+            "type": "string"
+          },
+          "device_count": {
+            "description": "Number of devices using this model",
+            "title": "Device Count",
+            "type": "integer"
+          },
+          "firmware_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Firmware version if uploaded",
+            "title": "Firmware Version"
+          },
+          "has_config_schema": {
+            "description": "Whether model has a config schema",
+            "title": "Has Config Schema",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Device model ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Human-readable model name",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "has_config_schema",
+          "device_count"
+        ],
+        "title": "DeviceModelSummarySchema",
+        "type": "object"
+      },
+      "DeviceModelResponseSchema.349be3d": {
+        "description": "Response schema for device model details.",
+        "properties": {
+          "code": {
+            "description": "Unique model code",
+            "title": "Code",
+            "type": "string"
+          },
+          "config_schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "JSON schema for config validation",
+            "title": "Config Schema"
+          },
+          "created_at": {
+            "description": "Creation timestamp",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_count": {
+            "description": "Number of devices using this model",
+            "title": "Device Count",
+            "type": "integer"
+          },
+          "firmware_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Firmware version if uploaded",
+            "title": "Firmware Version"
+          },
+          "has_config_schema": {
+            "description": "Whether model has a config schema",
+            "title": "Has Config Schema",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Device model ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Human-readable model name",
+            "title": "Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "Last update timestamp",
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "has_config_schema",
+          "device_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DeviceModelResponseSchema",
+        "type": "object"
+      },
+      "DeviceModelUpdateSchema.349be3d": {
+        "description": "Request schema for updating a device model.",
+        "properties": {
+          "config_schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "JSON schema for validating device configurations",
+            "title": "Config Schema"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Human-readable model name",
+            "title": "Name"
+          }
+        },
+        "title": "DeviceModelUpdateSchema",
+        "type": "object"
+      },
+      "DeviceResponseSchema.d48fbce": {
+        "description": "Response schema for device details.",
+        "properties": {
+          "active": {
+            "description": "Whether device participates in automatic fleet rotation",
+            "title": "Active",
+            "type": "boolean"
+          },
+          "client_id": {
+            "description": "Keycloak client ID",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "config": {
+            "description": "Device configuration as JSON string",
+            "title": "Config",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "Creation timestamp",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "device_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Device entity ID from config",
+            "title": "Device Entity Id"
+          },
+          "device_model": {
+            "$ref": "#/components/schemas/DeviceResponseSchema.d48fbce.DeviceModelInfoSchema",
+            "description": "Device model details"
+          },
+          "device_model_id": {
+            "description": "Device model ID",
+            "title": "Device Model Id",
+            "type": "integer"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Device name from config",
+            "title": "Device Name"
+          },
+          "enable_ota": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "OTA enabled flag from config",
+            "title": "Enable Ota"
+          },
+          "id": {
+            "description": "Device ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "key": {
+            "description": "Unique 8-character device key",
+            "title": "Key",
+            "type": "string"
+          },
+          "last_rotation_attempt_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When last rotation was attempted",
+            "title": "Last Rotation Attempt At"
+          },
+          "last_rotation_completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When last rotation completed",
+            "title": "Last Rotation Completed At"
+          },
+          "rotation_state": {
+            "description": "Current rotation state",
+            "title": "Rotation State",
+            "type": "string"
+          },
+          "secret_created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "When current secret was created",
+            "title": "Secret Created At"
+          },
+          "updated_at": {
+            "description": "Last update timestamp",
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "device_model_id",
+          "device_model",
+          "active",
+          "config",
+          "rotation_state",
+          "client_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DeviceResponseSchema",
+        "type": "object"
+      },
+      "DeviceResponseSchema.d48fbce.DeviceModelInfoSchema": {
+        "description": "Embedded device model info in device responses.",
+        "properties": {
+          "code": {
+            "description": "Device model code",
+            "title": "Code",
+            "type": "string"
+          },
+          "firmware_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Firmware version if uploaded",
+            "title": "Firmware Version"
+          },
+          "id": {
+            "description": "Device model ID",
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Device model name",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name"
+        ],
+        "title": "DeviceModelInfoSchema",
+        "type": "object"
+      },
+      "DeviceRotateResponseSchema.d48fbce": {
+        "description": "Response schema for device rotation trigger.",
+        "properties": {
+          "status": {
+            "description": "Rotation status: 'queued' or 'already_pending'",
+            "examples": [
+              "queued",
+              "already_pending"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "DeviceRotateResponseSchema",
+        "type": "object"
+      },
+      "DeviceUpdateSchema.d48fbce": {
+        "description": "Request schema for updating a device.",
+        "properties": {
+          "active": {
+            "description": "Whether device participates in automatic fleet rotation",
+            "title": "Active",
+            "type": "boolean"
+          },
+          "config": {
+            "description": "Device configuration as JSON string",
+            "title": "Config",
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "active"
+        ],
+        "title": "DeviceUpdateSchema",
+        "type": "object"
+      },
+      "ErrorResponseSchema.8c5cd6b": {
+        "description": "Standard error response.",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Error code",
+            "title": "Code"
+          },
+          "correlationId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Request correlation ID",
+            "title": "Correlationid"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Additional error details",
+            "title": "Details"
+          },
+          "error": {
+            "description": "Error message",
+            "title": "Error",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponseSchema",
+        "type": "object"
+      },
+      "FirmwareVersionResponseSchema.107d2c5": {
+        "description": "Response schema for firmware version check.",
+        "properties": {
+          "code": {
+            "description": "Device model code",
+            "examples": [
+              "tempsensor"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "firmware_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current firmware version, or null if no firmware uploaded",
+            "examples": [
+              "1.2.3"
+            ],
+            "title": "Firmware Version"
+          }
+        },
+        "required": [
+          "code",
+          "firmware_version"
+        ],
+        "title": "FirmwareVersionResponseSchema",
+        "type": "object"
+      },
+      "ForceErrorQuerySchema.e510e64": {
+        "description": "Query parameters for force-error endpoint.",
+        "properties": {
+          "status": {
+            "description": "HTTP status code to return on next /api/auth/self request",
+            "title": "Status",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ForceErrorQuerySchema",
+        "type": "object"
+      },
+      "HealthResponse.d817ae2": {
+        "description": "Health check response.",
+        "properties": {
+          "ready": {
+            "description": "Whether the service is ready to handle requests",
+            "examples": [
+              true,
+              false
+            ],
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "status": {
+            "description": "Health status message",
+            "examples": [
+              "ready",
+              "alive",
+              "shutting down"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "ready"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "LogInjectRequestSchema.2e62f0a": {
+        "description": "Request body for POST /api/testing/devices/logs/inject.",
+        "properties": {
+          "device_entity_id": {
+            "description": "Device entity ID to target (matches the SSE subscription key)",
+            "examples": [
+              "sensor.living_room"
+            ],
+            "minLength": 1,
+            "title": "Device Entity Id",
+            "type": "string"
+          },
+          "logs": {
+            "description": "Log entries to forward into the SSE pipeline",
+            "items": {
+              "$ref": "#/components/schemas/LogInjectRequestSchema.2e62f0a.LogEntrySchema"
+            },
+            "minItems": 1,
+            "title": "Logs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "device_entity_id",
+          "logs"
+        ],
+        "title": "LogInjectRequestSchema",
+        "type": "object"
+      },
+      "LogInjectRequestSchema.2e62f0a.LogEntrySchema": {
+        "additionalProperties": true,
+        "description": "A single log entry to inject into the SSE pipeline.",
+        "properties": {
+          "message": {
+            "description": "Log line content",
+            "examples": [
+              "Temperature reading: 22.5C"
+            ],
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "LogEntrySchema",
+        "type": "object"
+      },
+      "LogInjectResponseSchema.2e62f0a": {
+        "description": "Response for POST /api/testing/devices/logs/inject.",
+        "properties": {
+          "forwarded": {
+            "description": "Number of log entries passed to DeviceLogStreamService.forward_logs()",
+            "title": "Forwarded",
+            "type": "integer"
+          },
+          "status": {
+            "description": "Always 'accepted' on success",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "forwarded"
+        ],
+        "title": "LogInjectResponseSchema",
+        "type": "object"
+      },
+      "LvglImageQuerySchema.bf1914b": {
+        "additionalProperties": false,
+        "description": "Query parameters for LVGL image proxy endpoint.",
+        "properties": {
+          "headers": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Comma-separated list of header names to forward from the request",
+            "examples": [
+              "Authorization,X-API-Key"
+            ],
+            "title": "Headers"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Target height for resizing (downscale only, maintains aspect ratio)",
+            "examples": [
+              240
+            ],
+            "title": "Height"
+          },
+          "url": {
+            "description": "URL of the image to fetch and convert",
+            "examples": [
+              "https://example.com/image.png"
+            ],
+            "format": "uri",
+            "maxLength": 2083,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Target width for resizing (downscale only, maintains aspect ratio)",
+            "examples": [
+              240
+            ],
+            "title": "Width"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "LvglImageQuerySchema",
+        "type": "object"
+      },
+      "NudgeResponseSchema.2e62f0a": {
+        "description": "Response for POST /api/testing/rotation/nudge.",
+        "properties": {
+          "status": {
+            "description": "Always 'accepted' on success",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "NudgeResponseSchema",
+        "type": "object"
+      },
+      "NvsProvisioningQuerySchema.d48fbce": {
+        "description": "Query parameters for NVS provisioning request.",
+        "properties": {
+          "partition_size": {
+            "description": "NVS partition size in bytes. Must match the partition table on the device. Must be at least 12KB (0x3000) and a multiple of 4KB (0x1000). Common values: 0x4000 (16KB), 0x5000 (20KB), 0x6000 (24KB).",
+            "examples": [
+              16384,
+              20480,
+              24576
+            ],
+            "minimum": 12288,
+            "title": "Partition Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "partition_size"
+        ],
+        "title": "NvsProvisioningQuerySchema",
+        "type": "object"
+      },
+      "NvsProvisioningResponseSchema.d48fbce": {
+        "description": "Response schema for NVS provisioning package.\n\nReturns the device provisioning data as an NVS binary blob\nthat can be flashed directly to ESP32 devices.",
+        "properties": {
+          "data": {
+            "description": "Base64-encoded NVS binary blob of the specified size",
+            "title": "Data",
+            "type": "string"
+          },
+          "size": {
+            "description": "Size of the NVS partition in bytes",
+            "examples": [
+              16384,
+              20480,
+              24576
+            ],
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "size",
+          "data"
+        ],
+        "title": "NvsProvisioningResponseSchema",
+        "type": "object"
+      },
+      "RotationStatusSchema.57872a8": {
+        "description": "Response schema for rotation status.",
+        "properties": {
+          "counts_by_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Count of devices in each rotation state (includes both active and inactive devices)",
+            "examples": [
+              {
+                "OK": 10,
+                "PENDING": 1,
+                "QUEUED": 2,
+                "TIMEOUT": 0
+              }
+            ],
+            "title": "Counts By State",
+            "type": "object"
+          },
+          "inactive": {
+            "description": "Count of devices with active=False (orthogonal to rotation state)",
+            "title": "Inactive",
+            "type": "integer"
+          },
+          "last_rotation_completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Timestamp of most recent rotation completion across all devices",
+            "title": "Last Rotation Completed At"
+          },
+          "next_scheduled_rotation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Next scheduled rotation time based on CRON expression",
+            "title": "Next Scheduled Rotation"
+          },
+          "pending_device_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "ID of device currently being rotated (PENDING state)",
+            "title": "Pending Device Id"
+          }
+        },
+        "required": [
+          "counts_by_state",
+          "inactive"
+        ],
+        "title": "RotationStatusSchema",
+        "type": "object"
+      },
+      "RotationTriggerResponseSchema.57872a8": {
+        "description": "Response schema for manual rotation trigger.",
+        "properties": {
+          "queued_count": {
+            "description": "Number of devices queued for rotation",
+            "title": "Queued Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "queued_count"
+        ],
+        "title": "RotationTriggerResponseSchema",
+        "type": "object"
+      },
+      "SeedLogsRequestSchema.02b061b": {
+        "description": "Request schema for seeding device logs in memory.",
+        "properties": {
+          "count": {
+            "description": "Number of log entries to generate",
+            "examples": [
+              1500
+            ],
+            "maximum": 15000,
+            "minimum": 1,
+            "title": "Count",
+            "type": "integer"
+          },
+          "device_entity_id": {
+            "description": "Device entity ID to seed logs for",
+            "examples": [
+              "sensor.living_room"
+            ],
+            "title": "Device Entity Id",
+            "type": "string"
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Timestamp of the last entry (defaults to now)",
+            "examples": [
+              "2026-02-01T15:00:00Z"
+            ],
+            "title": "End Time"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Timestamp of the first entry (defaults to end_time - 1h)",
+            "examples": [
+              "2026-02-01T14:00:00Z"
+            ],
+            "title": "Start Time"
+          }
+        },
+        "required": [
+          "device_entity_id",
+          "count"
+        ],
+        "title": "SeedLogsRequestSchema",
+        "type": "object"
+      },
+      "SeedLogsResponseSchema.02b061b": {
+        "description": "Response schema for the seed logs endpoint.",
+        "properties": {
+          "seeded": {
+            "description": "Number of log entries seeded",
+            "title": "Seeded",
+            "type": "integer"
+          },
+          "window_end": {
+            "description": "Timestamp of last seeded entry",
+            "format": "date-time",
+            "title": "Window End",
+            "type": "string"
+          },
+          "window_start": {
+            "description": "Timestamp of first seeded entry",
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seeded",
+          "window_start",
+          "window_end"
+        ],
+        "title": "SeedLogsResponseSchema",
+        "type": "object"
+      },
+      "SubscriptionsQuerySchema.2e62f0a": {
+        "description": "Query parameters for GET /api/testing/devices/logs/subscriptions.",
+        "properties": {
+          "device_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filter to subscriptions for this device entity ID. Omit to return all.",
+            "examples": [
+              "sensor.living_room"
+            ],
+            "title": "Device Entity Id"
+          }
+        },
+        "title": "SubscriptionsQuerySchema",
+        "type": "object"
+      },
+      "SubscriptionsResponseSchema.2e62f0a": {
+        "description": "Response for GET /api/testing/devices/logs/subscriptions.",
+        "properties": {
+          "subscriptions": {
+            "description": "Active SSE subscriptions, empty when none exist",
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionsResponseSchema.2e62f0a.SubscriptionEntrySchema"
+            },
+            "title": "Subscriptions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "subscriptions"
+        ],
+        "title": "SubscriptionsResponseSchema",
+        "type": "object"
+      },
+      "SubscriptionsResponseSchema.2e62f0a.SubscriptionEntrySchema": {
+        "description": "A single device subscription entry.",
+        "properties": {
+          "device_entity_id": {
+            "description": "Device entity ID with active subscriptions",
+            "title": "Device Entity Id",
+            "type": "string"
+          },
+          "request_ids": {
+            "description": "SSE connection request IDs subscribed to this device",
+            "items": {
+              "type": "string"
+            },
+            "title": "Request Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "device_entity_id",
+          "request_ids"
+        ],
+        "title": "SubscriptionEntrySchema",
+        "type": "object"
+      },
+      "TaskEventRequestSchema.6b6ce9f": {
+        "description": "Request schema for sending fake task events in testing mode.",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional event-specific data payload",
+            "examples": [
+              {
+                "text": "Processing...",
+                "value": 0.5
+              }
+            ],
+            "title": "Data"
+          },
+          "event_type": {
+            "description": "Type of task event to send",
+            "enum": [
+              "task_started",
+              "progress_update",
+              "task_completed",
+              "task_failed"
+            ],
+            "examples": [
+              "progress_update"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "request_id": {
+            "description": "Request ID of the SSE connection to send the event to",
+            "examples": [
+              "playwright-run-1234"
+            ],
+            "title": "Request Id",
+            "type": "string"
+          },
+          "task_id": {
+            "description": "Task identifier for the event",
+            "examples": [
+              "task-xyz-456"
+            ],
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "task_id",
+          "event_type"
+        ],
+        "title": "TaskEventRequestSchema",
+        "type": "object"
+      },
+      "TaskEventResponseSchema.6b6ce9f": {
+        "description": "Response schema for task event send acknowledgement.",
+        "properties": {
+          "delivered": {
+            "description": "Whether the event was delivered successfully",
+            "examples": [
+              true
+            ],
+            "title": "Delivered",
+            "type": "boolean"
+          },
+          "event_type": {
+            "description": "Echoed event type",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "request_id": {
+            "description": "Echoed request ID",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "task_id": {
+            "description": "Echoed task ID",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "task_id",
+          "event_type",
+          "delivered"
+        ],
+        "title": "TaskEventResponseSchema",
+        "type": "object"
+      },
+      "TaskStartRequestSchema.6b6ce9f": {
+        "description": "Request schema for starting a test task.",
+        "properties": {
+          "params": {
+            "additionalProperties": true,
+            "description": "Task parameters (steps, delay, error_message)",
+            "examples": [
+              {
+                "delay": 0.1,
+                "steps": 3
+              }
+            ],
+            "title": "Params",
+            "type": "object"
+          },
+          "task_type": {
+            "default": "demo_task",
+            "description": "Type of test task to start",
+            "enum": [
+              "demo_task",
+              "failing_task"
+            ],
+            "examples": [
+              "demo_task"
+            ],
+            "title": "Task Type",
+            "type": "string"
+          }
+        },
+        "title": "TaskStartRequestSchema",
+        "type": "object"
+      },
+      "TaskStartResponseSchema.6b6ce9f": {
+        "description": "Response schema for test task start.",
+        "properties": {
+          "status": {
+            "default": "started",
+            "description": "Task status",
+            "examples": [
+              "started"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "description": "Unique task identifier",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "title": "TaskStartResponseSchema",
+        "type": "object"
+      },
+      "TestCoredumpCreateSchema.355d24f": {
+        "description": "Request schema for creating a test coredump record.",
+        "properties": {
+          "chip": {
+            "default": "esp32s3",
+            "description": "Chip type",
+            "title": "Chip",
+            "type": "string"
+          },
+          "device_id": {
+            "description": "Device ID to associate the coredump with",
+            "title": "Device Id",
+            "type": "integer"
+          },
+          "firmware_version": {
+            "default": "0.0.0-test",
+            "description": "Firmware version at time of crash",
+            "title": "Firmware Version",
+            "type": "string"
+          },
+          "parse_status": {
+            "default": "PARSED",
+            "description": "Parse status: PENDING, PARSED, or ERROR",
+            "title": "Parse Status",
+            "type": "string"
+          },
+          "parsed_output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Parsed crash analysis output",
+            "title": "Parsed Output"
+          },
+          "size": {
+            "default": 262144,
+            "description": "Size of the coredump binary in bytes",
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "device_id"
+        ],
+        "title": "TestCoredumpCreateSchema",
+        "type": "object"
+      },
+      "TestErrorResponseSchema.6b6ce9f": {
+        "description": "Error response schema for testing endpoints.",
+        "properties": {
+          "error": {
+            "description": "Error message",
+            "title": "Error",
+            "type": "string"
+          },
+          "status": {
+            "description": "Error status code",
+            "examples": [
+              "not_found"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "status"
+        ],
+        "title": "TestErrorResponseSchema",
+        "type": "object"
+      },
+      "TestSessionCreateSchema.e510e64": {
+        "description": "Request schema for creating a test authentication session.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "User email address",
+            "title": "Email"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "User display name",
+            "title": "Name"
+          },
+          "roles": {
+            "description": "User roles",
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "subject": {
+            "description": "User subject identifier (sub claim)",
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject"
+        ],
+        "title": "TestSessionCreateSchema",
+        "type": "object"
+      },
+      "TestSessionResponseSchema.e510e64": {
+        "description": "Response schema for test session creation.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "User email address",
+            "title": "Email"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "User display name",
+            "title": "Name"
+          },
+          "roles": {
+            "description": "User roles",
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "subject": {
+            "description": "User subject identifier",
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "roles"
+        ],
+        "title": "TestSessionResponseSchema",
+        "type": "object"
+      },
+      "UserInfoResponseSchema.a535b8c": {
+        "description": "Response schema for current user information.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "User email address",
+            "title": "Email"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "User display name",
+            "title": "Name"
+          },
+          "roles": {
+            "description": "User roles",
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "subject": {
+            "description": "User subject (sub claim from JWT)",
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "email",
+          "name",
+          "roles"
+        ],
+        "title": "UserInfoResponseSchema",
+        "type": "object"
+      },
+      "ValidationError.6a07bef": {
+        "description": "Model of a validation error response.",
+        "items": {
+          "$ref": "#/components/schemas/ValidationError.6a07bef.ValidationErrorElement"
+        },
+        "title": "ValidationError",
+        "type": "array"
+      },
+      "ValidationError.6a07bef.ValidationErrorElement": {
+        "description": "Model of a validation error response element.",
+        "properties": {
+          "ctx": {
+            "title": "Error context",
+            "type": "object"
+          },
+          "loc": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing field name",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Error message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationErrorElement",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "bearerFormat": "JWT",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Flask backend for managing ESP32 IoT device configurations",
+    "title": "iot-support API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/auth/callback": {
+      "get": {
+        "description": "Exchanges authorization code for tokens and sets access token cookie.\n\nQuery Parameters:     code: Authorization code from OIDC provider     state: CSRF token from OIDC provider\n\nReturns:     302: Redirect to original redirect URL with access token cookie set     400: Invalid or missing callback parameters     401: Token exchange failed",
+        "operationId": "get__api_auth_callback",
+        "parameters": [],
+        "responses": {},
+        "summary": "Handle OIDC callback after user authorization.",
+        "tags": []
+      }
+    },
+    "/api/auth/login": {
+      "get": {
+        "description": "Generates authorization URL and redirects to OIDC provider. PKCE state is encrypted into the OAuth state parameter.\n\nQuery Parameters:     redirect: URL to redirect to after successful login (required)\n\nReturns:     302: Redirect to OIDC provider authorization endpoint     400: Missing or invalid redirect parameter",
+        "operationId": "get__api_auth_login",
+        "parameters": [],
+        "responses": {},
+        "summary": "Initiate OIDC login flow with PKCE.",
+        "tags": []
+      }
+    },
+    "/api/auth/logout": {
+      "get": {
+        "description": "Clears access token cookie and redirects to OIDC provider's logout endpoint to terminate the session at the IdP level.\n\nQuery Parameters:     redirect: URL to redirect to after logout (default: /)\n\nReturns:     302: Redirect to OIDC logout endpoint (or direct redirect if OIDC disabled)",
+        "operationId": "get__api_auth_logout",
+        "parameters": [],
+        "responses": {},
+        "summary": "Log out current user.",
+        "tags": []
+      }
+    },
+    "/api/auth/self": {
+      "get": {
+        "description": "This endpoint is @public because it handles authentication explicitly: in testing mode it checks test sessions and forced errors; otherwise it validates tokens or returns a default local-user when OIDC is off.\n\nReturns:     200: User information from validated token or test session     401: No valid token provided or token invalid     403: User authenticated but has no recognized hierarchical role",
+        "operationId": "get__api_auth_self",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserInfoResponseSchema.a535b8c"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Get current authenticated user information.",
+        "tags": []
+      }
+    },
+    "/api/cas/{hash_value}": {
+      "get": {
+        "description": "This endpoint is stateless - no database access. All metadata comes from URL params.\n\nQuery params:     content_type: MIME type (optional, defaults to application/octet-stream)     disposition: inline|attachment (optional, defaults to inline if filename set)     filename: filename for Content-Disposition header (optional)     thumbnail: pixel size for square thumbnail (mutually exclusive with content_type)\n\nReturns:     Binary content with Cache-Control: immutable header",
+        "operationId": "get__api_cas_{hash_value}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "hash_value",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Serve content from CAS storage with immutable caching.",
+        "tags": []
+      }
+    },
+    "/api/device-logs/subscribe": {
+      "post": {
+        "description": "Resolves device_id to device_entity_id, verifies identity, then registers the subscription. Idempotent for the same (request_id, device_id) pair.",
+        "operationId": "post__api_device-logs_subscribe",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceLogSubscribeRequest.a423a82"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceLogSubscribeResponse.a423a82"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Subscribe an SSE connection to a device's log stream.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/device-logs/unsubscribe": {
+      "post": {
+        "description": "Verifies identity before removing the subscription.",
+        "operationId": "post__api_device-logs_unsubscribe",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceLogUnsubscribeRequest.a423a82"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceLogUnsubscribeResponse.a423a82"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Unsubscribe an SSE connection from a device's log stream.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/device-models": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_device-models",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceModelListResponseSchema.349be3d"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "List all device models.",
+        "tags": []
+      },
+      "post": {
+        "description": "",
+        "operationId": "post__api_device-models",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceModelCreateSchema.349be3d"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceModelResponseSchema.349be3d"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Create a new device model.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/device-models/{model_id}": {
+      "delete": {
+        "description": "",
+        "operationId": "delete__api_device-models_{model_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete a device model.",
+        "tags": [],
+        "x-required-role": "editor"
+      },
+      "get": {
+        "description": "",
+        "operationId": "get__api_device-models_{model_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceModelResponseSchema.349be3d"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Get a device model by ID.",
+        "tags": []
+      },
+      "put": {
+        "description": "",
+        "operationId": "put__api_device-models_{model_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceModelUpdateSchema.349be3d"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceModelResponseSchema.349be3d"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Update a device model.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/device-models/{model_id}/firmware": {
+      "get": {
+        "description": "Returns raw binary firmware with appropriate content type.",
+        "operationId": "get__api_device-models_{model_id}_firmware",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Download firmware binary for a device model.",
+        "tags": []
+      },
+      "post": {
+        "description": "Expects raw binary content in request body or multipart file upload. The firmware must be a valid ESP32 binary with AppInfo header.",
+        "operationId": "post__api_device-models_{model_id}_firmware",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceModelFirmwareResponseSchema.349be3d"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Upload firmware binary for a device model.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/devices": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_devices",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceListResponseSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "List all devices with optional filtering.",
+        "tags": []
+      },
+      "post": {
+        "description": "",
+        "operationId": "post__api_devices",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceCreateSchema.d48fbce"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceResponseSchema.d48fbce"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Create a new device with Keycloak client.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/devices/{device_id}": {
+      "delete": {
+        "description": "",
+        "operationId": "delete__api_devices_{device_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete a device and its Keycloak client.",
+        "tags": [],
+        "x-required-role": "editor"
+      },
+      "get": {
+        "description": "",
+        "operationId": "get__api_devices_{device_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceResponseSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Get a device by ID.",
+        "tags": []
+      },
+      "put": {
+        "description": "",
+        "operationId": "put__api_devices_{device_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceUpdateSchema.d48fbce"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceResponseSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Update a device's configuration.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/devices/{device_id}/coredumps": {
+      "delete": {
+        "description": "",
+        "operationId": "delete__api_devices_{device_id}_coredumps",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete all coredumps for a device.",
+        "tags": [],
+        "x-required-role": "editor"
+      },
+      "get": {
+        "description": "",
+        "operationId": "get__api_devices_{device_id}_coredumps",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoredumpListResponseSchema.58985ac"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "List all coredumps for a device.",
+        "tags": []
+      }
+    },
+    "/api/devices/{device_id}/coredumps/{coredump_id}": {
+      "delete": {
+        "description": "",
+        "operationId": "delete__api_devices_{device_id}_coredumps_{coredump_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "",
+            "in": "path",
+            "name": "coredump_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete a single coredump.",
+        "tags": [],
+        "x-required-role": "editor"
+      },
+      "get": {
+        "description": "",
+        "operationId": "get__api_devices_{device_id}_coredumps_{coredump_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "",
+            "in": "path",
+            "name": "coredump_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoredumpDetailSchema.58985ac"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Get coredump detail including parsed output.",
+        "tags": []
+      }
+    },
+    "/api/devices/{device_id}/coredumps/{coredump_id}/download": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_devices_{device_id}_coredumps_{coredump_id}_download",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "",
+            "in": "path",
+            "name": "coredump_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Download raw coredump .dmp binary from S3.",
+        "tags": []
+      }
+    },
+    "/api/devices/{device_id}/keycloak-status": {
+      "get": {
+        "description": "Returns whether the Keycloak client exists and provides a deep link to the Keycloak admin console. Does not return an error if the client is missing - instead returns exists=false.",
+        "operationId": "get__api_devices_{device_id}_keycloak-status",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceKeycloakStatusSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Get Keycloak client status for a device.",
+        "tags": []
+      }
+    },
+    "/api/devices/{device_id}/keycloak-sync": {
+      "post": {
+        "description": "Idempotent operation - if the client already exists, returns current status without making changes.",
+        "operationId": "post__api_devices_{device_id}_keycloak-sync",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceKeycloakStatusSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Create Keycloak client for a device if missing.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/devices/{device_id}/logs": {
+      "get": {
+        "description": "Returns log entries filtered by the device's entity_id. If the device has no entity_id configured, returns an empty logs array.\n\nQuery parameters: - start: Beginning of time range (defaults to 1 hour ago) - end: End of time range (defaults to now) - query: Wildcard search pattern for message field",
+        "operationId": "get__api_devices_{device_id}_logs",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Start of time range (ISO datetime). Defaults to 1 hour ago. If omitted while `end` is set, returns up to 1000 entries ending at `end` in backward scroll mode.",
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Start of time range (ISO datetime). Defaults to 1 hour ago. If omitted while `end` is set, returns up to 1000 entries ending at `end` in backward scroll mode.",
+              "examples": [
+                "2026-02-01T14:00:00Z"
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "description": "End of time range (ISO datetime). Defaults to now. When provided without `start`, triggers backward scroll mode.",
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "End of time range (ISO datetime). Defaults to now. When provided without `start`, triggers backward scroll mode.",
+              "examples": [
+                "2026-02-01T15:00:00Z"
+              ],
+              "title": "End"
+            }
+          },
+          {
+            "description": "Wildcard search pattern for message field (Elasticsearch wildcard syntax).",
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Wildcard search pattern for message field (Elasticsearch wildcard syntax).",
+              "examples": [
+                "error*",
+                "*timeout*"
+              ],
+              "title": "Query"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceLogsResponseSchema.e6f48c9"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get logs for a device from Elasticsearch.",
+        "tags": []
+      }
+    },
+    "/api/devices/{device_id}/provisioning": {
+      "get": {
+        "description": "Returns JSON containing an NVS binary blob that can be flashed directly to ESP32 devices using esptool-js or similar tools.\n\nThe partition_size query parameter must match the NVS partition size in the device's partition table.",
+        "operationId": "get__api_devices_{device_id}_provisioning",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "NVS partition size in bytes. Must match the partition table on the device. Must be at least 12KB (0x3000) and a multiple of 4KB (0x1000). Common values: 0x4000 (16KB), 0x5000 (20KB), 0x6000 (24KB).",
+            "in": "query",
+            "name": "partition_size",
+            "required": true,
+            "schema": {
+              "description": "NVS partition size in bytes. Must match the partition table on the device. Must be at least 12KB (0x3000) and a multiple of 4KB (0x1000). Common values: 0x4000 (16KB), 0x5000 (20KB), 0x6000 (24KB).",
+              "examples": [
+                16384,
+                20480,
+                24576
+              ],
+              "minimum": 12288,
+              "title": "Partition Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NvsProvisioningResponseSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Get NVS provisioning package for a device.",
+        "tags": []
+      }
+    },
+    "/api/devices/{device_id}/rotate": {
+      "post": {
+        "description": "Queues the device for credential rotation and immediately starts the rotation process. If already pending, returns the current status without changing state.",
+        "operationId": "post__api_devices_{device_id}_rotate",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRotateResponseSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Trigger rotation for a single device.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/images/lvgl": {
+      "get": {
+        "description": "Query Parameters:     url: URL of the image to fetch     headers: Comma-separated list of header names to forward     width: Target width for resizing (optional, downscale only)     height: Target height for resizing (optional, downscale only)\n\nReturns:     Binary LVGL image data with Cache-Control: no-store header",
+        "operationId": "get__api_images_lvgl",
+        "parameters": [
+          {
+            "description": "URL of the image to fetch and convert",
+            "in": "query",
+            "name": "url",
+            "required": true,
+            "schema": {
+              "description": "URL of the image to fetch and convert",
+              "examples": [
+                "https://example.com/image.png"
+              ],
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "title": "Url",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated list of header names to forward from the request",
+            "in": "query",
+            "name": "headers",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Comma-separated list of header names to forward from the request",
+              "examples": [
+                "Authorization,X-API-Key"
+              ],
+              "title": "Headers"
+            }
+          },
+          {
+            "description": "Target width for resizing (downscale only, maintains aspect ratio)",
+            "in": "query",
+            "name": "width",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Target width for resizing (downscale only, maintains aspect ratio)",
+              "examples": [
+                240
+              ],
+              "title": "Width"
+            }
+          },
+          {
+            "description": "Target height for resizing (downscale only, maintains aspect ratio)",
+            "in": "query",
+            "name": "height",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Target height for resizing (downscale only, maintains aspect ratio)",
+              "examples": [
+                240
+              ],
+              "title": "Height"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Fetch and convert an image to LVGL binary format.",
+        "tags": []
+      }
+    },
+    "/api/iot/config": {
+      "get": {
+        "description": "This endpoint is called by ESP32 devices to fetch their configuration. If the device is in PENDING rotation state and the token was issued after the rotation attempt, the rotation is marked as complete and the next queued device is triggered.\n\nReturns raw JSON content without wrapping.",
+        "operationId": "get__api_iot_config",
+        "parameters": [],
+        "responses": {},
+        "summary": "Get raw JSON configuration for the device.",
+        "tags": []
+      }
+    },
+    "/api/iot/coredump": {
+      "post": {
+        "description": "Accepts raw binary body containing the ESP32 coredump data. Requires chip and firmware_version query parameters.\n\nThe coredump is stored in S3 under coredumps/{device_key}/{id}.dmp with a DB record tracking metadata and parse status. Background parsing is triggered if the sidecar is configured.",
+        "operationId": "post__api_iot_coredump",
+        "parameters": [],
+        "responses": {},
+        "summary": "Upload a coredump from a device.",
+        "tags": []
+      }
+    },
+    "/api/iot/firmware": {
+      "get": {
+        "description": "Returns raw binary firmware with appropriate content type.",
+        "operationId": "get__api_iot_firmware",
+        "parameters": [],
+        "responses": {},
+        "summary": "Download firmware binary for the device's model.",
+        "tags": []
+      }
+    },
+    "/api/iot/firmware-version": {
+      "get": {
+        "description": "This lightweight endpoint allows devices to check if new firmware is available without downloading the binary. Devices can poll this periodically and only download firmware when the version changes.\n\nReturns JSON with the firmware version string.",
+        "operationId": "get__api_iot_firmware-version",
+        "parameters": [],
+        "responses": {},
+        "summary": "Get the current firmware version for the device's model.",
+        "tags": []
+      }
+    },
+    "/api/iot/provisioning": {
+      "get": {
+        "description": "This endpoint is called by devices during the rotation process. It regenerates the client secret in Keycloak and returns the new provisioning package.\n\nThis is different from admin provisioning download - it generates a NEW secret rather than returning the current one.",
+        "operationId": "get__api_iot_provisioning",
+        "parameters": [],
+        "responses": {},
+        "summary": "Get new provisioning data during rotation.",
+        "tags": []
+      }
+    },
+    "/api/pipeline/models/{code}/firmware": {
+      "post": {
+        "description": "Expects raw binary content in request body or multipart file upload. The firmware must be a valid ESP32 binary with AppInfo header.\n\nArgs:     code: Device model code (e.g., 'tempsensor')",
+        "operationId": "post__api_pipeline_models_{code}_firmware",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceModelFirmwareResponseSchema.349be3d"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Upload firmware binary for a device model by code.",
+        "tags": [],
+        "x-required-role": "pipeline"
+      }
+    },
+    "/api/pipeline/models/{code}/firmware-version": {
+      "get": {
+        "description": "Useful for CI/CD pipelines to check if firmware needs to be uploaded.\n\nArgs:     code: Device model code (e.g., 'tempsensor')",
+        "operationId": "get__api_pipeline_models_{code}_firmware-version",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FirmwareVersionResponseSchema.107d2c5"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get the current firmware version for a device model.",
+        "tags": [],
+        "x-required-role": "pipeline"
+      }
+    },
+    "/api/pipeline/upload.ps1": {
+      "get": {
+        "description": "The script is customized with the backend URL (inferred from request) and token endpoint (from server config). Users only need to provide CLIENT_ID and CLIENT_SECRET environment variables.\n\nUsage:     irm https://iotsupport/api/pipeline/upload.ps1 | iex; Upload-Firmware <model_code> <firmware.bin>\n\nEnvironment variables required by the script:     IOTSUPPORT_CLIENT_ID - OAuth2 client ID with pipeline role     IOTSUPPORT_CLIENT_SECRET - OAuth2 client secret",
+        "operationId": "get__api_pipeline_upload.ps1",
+        "parameters": [],
+        "responses": {},
+        "summary": "Serve a PowerShell script for uploading firmware from Windows CI/CD pipelines.",
+        "tags": []
+      }
+    },
+    "/api/pipeline/upload.sh": {
+      "get": {
+        "description": "The script is customized with the backend URL (inferred from request) and token endpoint (from server config). Users only need to provide CLIENT_ID and CLIENT_SECRET environment variables.\n\nUsage:     curl -fsSL https://iotsupport/api/pipeline/upload.sh | sh -s -- <model_code> <firmware.bin>\n\nEnvironment variables required by the script:     IOTSUPPORT_CLIENT_ID - OAuth2 client ID with pipeline role     IOTSUPPORT_CLIENT_SECRET - OAuth2 client secret",
+        "operationId": "get__api_pipeline_upload.sh",
+        "parameters": [],
+        "responses": {},
+        "summary": "Serve a shell script for uploading firmware from CI/CD pipelines.",
+        "tags": []
+      }
+    },
+    "/api/rotation/dashboard": {
+      "get": {
+        "description": "Returns devices categorized as: - healthy: OK, QUEUED, or PENDING states - warning: TIMEOUT state, under critical threshold - critical: TIMEOUT state, at or over critical threshold",
+        "operationId": "get__api_rotation_dashboard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponseSchema.57872a8"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Get device dashboard grouped by health status.",
+        "tags": []
+      }
+    },
+    "/api/rotation/status": {
+      "get": {
+        "description": "Returns counts by state, currently pending device, and last completion time.",
+        "operationId": "get__api_rotation_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RotationStatusSchema.57872a8"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Get current rotation status across all devices.",
+        "tags": []
+      }
+    },
+    "/api/rotation/trigger": {
+      "post": {
+        "description": "Queues all devices with OK state for rotation and immediately starts rotating the first device. Chain rotation handles the rest. Broadcasts a rotation-updated SSE event so dashboards refresh.",
+        "operationId": "post__api_rotation_trigger",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RotationTriggerResponseSchema.57872a8"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema.8c5cd6b"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Manually trigger fleet-wide rotation.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/sse/callback": {
+      "post": {
+        "description": "This endpoint receives callbacks from the SSE Gateway when clients connect or disconnect. It extracts the request_id from the callback URL and calls SSEConnectionManager, which then notifies observers.\n\nReturns:     200 on success     401 if authentication fails (production only)     400 if payload invalid or request_id missing",
+        "operationId": "post__api_sse_callback",
+        "parameters": [],
+        "responses": {},
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Handle SSE Gateway connect/disconnect callbacks.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/tasks/{task_id}": {
+      "delete": {
+        "description": "",
+        "operationId": "delete__api_tasks_{task_id}",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Remove a completed task from registry.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/tasks/{task_id}/cancel": {
+      "post": {
+        "description": "",
+        "operationId": "post__api_tasks_{task_id}_cancel",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Cancel a running task.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/tasks/{task_id}/status": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_tasks_{task_id}_status",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Get current status of a task.",
+        "tags": []
+      }
+    },
+    "/api/testing/auth/clear": {
+      "post": {
+        "description": "Returns:     204: Session cleared successfully with cookie invalidated",
+        "operationId": "post__api_testing_auth_clear",
+        "parameters": [],
+        "responses": {},
+        "summary": "Clear the current test session for test isolation.",
+        "tags": []
+      }
+    },
+    "/api/testing/auth/force-error": {
+      "post": {
+        "description": "This is a single-shot error - subsequent requests resume normal behavior.\n\nQuery Parameters:     status: HTTP status code to return (e.g., 500, 503)\n\nReturns:     204: Error configured successfully",
+        "operationId": "post__api_testing_auth_force-error",
+        "parameters": [
+          {
+            "description": "HTTP status code to return on next /api/auth/self request",
+            "in": "query",
+            "name": "status",
+            "required": true,
+            "schema": {
+              "description": "HTTP status code to return on next /api/auth/self request",
+              "title": "Status",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Configure /api/auth/self to return an error on the next request.",
+        "tags": []
+      }
+    },
+    "/api/testing/auth/session": {
+      "post": {
+        "description": "Sets the same session cookie that the real OIDC callback would set, allowing Playwright tests to authenticate without a running IdP.\n\nReturns:     201: Session created successfully with session cookie set",
+        "operationId": "post__api_testing_auth_session",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestSessionCreateSchema.e510e64"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestSessionResponseSchema.e510e64"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Create an authenticated test session, bypassing the real OIDC flow.",
+        "tags": []
+      }
+    },
+    "/api/testing/content/html": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_testing_content_html",
+        "parameters": [
+          {
+            "description": "Title to embed in the rendered HTML fixture",
+            "in": "query",
+            "name": "title",
+            "required": true,
+            "schema": {
+              "description": "Title to embed in the rendered HTML fixture",
+              "examples": [
+                "Playwright Fixture Page"
+              ],
+              "title": "Title",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Return deterministic HTML content without deployment banner.",
+        "tags": []
+      }
+    },
+    "/api/testing/content/html-with-banner": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_testing_content_html-with-banner",
+        "parameters": [
+          {
+            "description": "Title to embed in the rendered HTML fixture",
+            "in": "query",
+            "name": "title",
+            "required": true,
+            "schema": {
+              "description": "Title to embed in the rendered HTML fixture",
+              "examples": [
+                "Playwright Fixture Page"
+              ],
+              "title": "Title",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Return deterministic HTML content that includes a deployment banner wrapper.",
+        "tags": []
+      }
+    },
+    "/api/testing/content/image": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_testing_content_image",
+        "parameters": [
+          {
+            "description": "Text to render on the generated PNG image",
+            "in": "query",
+            "name": "text",
+            "required": true,
+            "schema": {
+              "description": "Text to render on the generated PNG image",
+              "examples": [
+                "Playwright Test Image"
+              ],
+              "title": "Text",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "Return a deterministic PNG image for Playwright fixtures.",
+        "tags": []
+      }
+    },
+    "/api/testing/content/pdf": {
+      "get": {
+        "description": "",
+        "operationId": "get__api_testing_content_pdf",
+        "parameters": [],
+        "responses": {},
+        "summary": "Return the bundled deterministic PDF asset.",
+        "tags": []
+      }
+    },
+    "/api/testing/coredumps": {
+      "post": {
+        "description": "Seeds a CoreDump row directly in the database without filesystem I/O or sidecar parsing. Used by Playwright tests to set up coredump UI scenarios.",
+        "operationId": "post__api_testing_coredumps",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestCoredumpCreateSchema.355d24f"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoredumpDetailSchema.58985ac"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Create a coredump database record for testing.",
+        "tags": []
+      }
+    },
+    "/api/testing/deployments/version": {
+      "post": {
+        "description": "",
+        "operationId": "post__api_testing_deployments_version",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeploymentTriggerRequestSchema.6b6ce9f"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentTriggerResponseSchema.6b6ce9f"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Trigger a version event for integration testing.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/testing/devices/logs/inject": {
+      "post": {
+        "description": "Constructs documents matching the shape of real MQTT-sourced log events and forwards them to DeviceLogStreamService.forward_logs(). If no SSE client is subscribed to the target device, logs are silently dropped.",
+        "operationId": "post__api_testing_devices_logs_inject",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogInjectRequestSchema.2e62f0a"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogInjectResponseSchema.2e62f0a"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Inject log entries into the SSE device-log pipeline.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/testing/devices/logs/seed": {
+      "post": {
+        "description": "The seeded data is served by ElasticsearchService.query_logs() without hitting Elasticsearch, enabling Playwright tests for backfill and download.",
+        "operationId": "post__api_testing_devices_logs_seed",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeedLogsRequestSchema.02b061b"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeedLogsResponseSchema.02b061b"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Seed deterministic log entries in memory for a device.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/testing/devices/logs/subscriptions": {
+      "get": {
+        "description": "Used by Playwright tests to poll-wait until a subscription is active before injecting logs.",
+        "operationId": "get__api_testing_devices_logs_subscriptions",
+        "parameters": [
+          {
+            "description": "Filter to subscriptions for this device entity ID. Omit to return all.",
+            "in": "query",
+            "name": "device_entity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Filter to subscriptions for this device entity ID. Omit to return all.",
+              "examples": [
+                "sensor.living_room"
+              ],
+              "title": "Device Entity Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionsResponseSchema.2e62f0a"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Return active SSE device-log subscriptions.",
+        "tags": []
+      }
+    },
+    "/api/testing/keycloak-cleanup": {
+      "post": {
+        "description": "This endpoint is used by Playwright tests to clean up Keycloak clients created during test runs. The pattern is matched against client IDs.\n\nRequest Body:     pattern: Regular expression to match against client IDs (required, non-empty)\n\nReturns:     200: Cleanup completed with count and list of deleted client IDs",
+        "operationId": "post__api_testing_keycloak-cleanup",
+        "parameters": [],
+        "responses": {},
+        "summary": "Delete Keycloak clients matching a regex pattern.",
+        "tags": []
+      }
+    },
+    "/api/testing/logs/stream": {
+      "get": {
+        "description": "Streams logs from all loggers at INFO level and above. Each log entry is formatted as structured JSON with correlation ID when available.\n\nEvent Types:     - log: Application log entries     - connection_open: Sent when client connects     - heartbeat: Sent every 30 seconds for keepalive     - connection_close: Sent when server shuts down",
+        "operationId": "get__api_testing_logs_stream",
+        "parameters": [],
+        "responses": {},
+        "summary": "SSE endpoint for streaming backend application logs in real-time.",
+        "tags": []
+      }
+    },
+    "/api/testing/rotation/nudge": {
+      "post": {
+        "description": "No rotation state is changed; this purely triggers the SSE-to-dashboard refresh path for Playwright testing.",
+        "operationId": "post__api_testing_rotation_nudge",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NudgeResponseSchema.2e62f0a"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Broadcast a rotation-updated SSE event to all connected clients.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/testing/sse/task-event": {
+      "post": {
+        "description": "Allows integration tests to simulate task events without running actual background tasks. The event is sent directly to the SSE connection identified by request_id.",
+        "operationId": "post__api_testing_sse_task-event",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskEventRequestSchema.6b6ce9f"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskEventResponseSchema.6b6ce9f"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestErrorResponseSchema.6b6ce9f"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Send a fake task event to a specific SSE connection for testing.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/testing/tasks/start": {
+      "post": {
+        "description": "",
+        "operationId": "post__api_testing_tasks_start",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskStartRequestSchema.6b6ce9f"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStartResponseSchema.6b6ce9f"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Start a demo or failing task for integration testing.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/health/drain": {
+      "get": {
+        "description": "Requires bearer token authentication against DRAIN_AUTH_KEY config setting. Calls shutdown() on the lifecycle coordinator and returns health status.",
+        "operationId": "get__health_drain",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse.d817ae2"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse.d817ae2"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "Drain endpoint for manual graceful shutdown initiation.",
+        "tags": []
+      }
+    },
+    "/health/healthz": {
+      "get": {
+        "description": "Always returns 200 to indicate the application is alive. This keeps the pod running even during graceful shutdown.",
+        "operationId": "get__health_healthz",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse.d817ae2"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          }
+        },
+        "summary": "Liveness probe endpoint for Kubernetes.",
+        "tags": []
+      }
+    },
+    "/health/readyz": {
+      "get": {
+        "description": "Returns 503 when the application is shutting down, or any registered readiness check fails. This signals Kubernetes to remove the pod from service endpoints.",
+        "operationId": "get__health_readyz",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse.d817ae2"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse.d817ae2"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Readiness probe endpoint for Kubernetes.",
+        "tags": []
+      }
+    },
+    "/internal/rotation-nudge": {
+      "post": {
+        "description": "Called by the CronJob rotation_job after processing rotation changes in a separate process. The CronJob has no SSE connections, so it delegates the broadcast to the web process via this endpoint.\n\nReturns 200 regardless of whether any clients received the broadcast.",
+        "operationId": "post__internal_rotation-nudge",
+        "parameters": [],
+        "responses": {},
+        "summary": "Trigger a rotation-updated SSE broadcast.",
+        "tags": []
+      }
+    },
+    "/metrics": {
+      "get": {
+        "description": "Returns:     Response with metrics data in Prometheus exposition format",
+        "operationId": "get__metrics",
+        "parameters": [],
+        "responses": {},
+        "summary": "Return metrics in Prometheus text format.",
+        "tags": []
+      }
+    }
+  },
+  "security": [],
+  "tags": [],
+  "x-auth-roles": {
+    "admin": null,
+    "read": null,
+    "write": "editor"
+  }
+}

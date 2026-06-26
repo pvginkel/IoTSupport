@@ -1,0 +1,233 @@
+library identifier: 'JenkinsPipelineUtils', changelog: false
+
+properties([
+    parameters([
+        string(name: 'BACKEND_BUILD', defaultValue: ''),
+        string(name: 'FRONTEND_BUILD', defaultValue: ''),
+        string(name: 'TRIGGERED_BY')
+    ])
+])
+
+podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
+    containerTemplates.k8s('k8s')
+]) {
+    node(POD_LABEL) {
+        def backendMeta
+        def frontendMeta
+        def jobName = "iot-support-validation-${BUILD_NUMBER}"
+        def k8sNamespace = kubectl.currentNamespace()
+
+        stage('Clone repo') {
+            checkout scm
+        }
+
+        stage('Resolve image pair') {
+            copyArtifacts(
+                projectName: 'IoTSupport',
+                selector: params.BACKEND_BUILD ? specific(params.BACKEND_BUILD) : lastSuccessful(),
+                filter: 'backend-build.json',
+                target: 'backend-meta',
+                flatten: true
+            )
+
+            copyArtifacts(
+                projectName: 'IoTSupportUI',
+                selector: params.FRONTEND_BUILD ? specific(params.FRONTEND_BUILD) : lastSuccessful(),
+                filter: 'frontend-build.json',
+                target: 'frontend-meta',
+                flatten: true
+            )
+
+            backendMeta = readJSON file: 'backend-meta/backend-build.json'
+            frontendMeta = readJSON file: 'frontend-meta/frontend-build.json'
+
+            echo "Testing backend=${backendMeta.tag} (${backendMeta.gitRev})"
+            echo "Testing frontend=${frontendMeta.tag} (${frontendMeta.gitRev})"
+        }
+
+        stage('Clone source repos') {
+            dir('backend-src') {
+                git branch: 'main',
+                    credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
+                    url: 'https://github.com/pvginkel/IoTSupport.git'
+                sh "git checkout ${backendMeta.gitRev}"
+            }
+            dir('frontend-src') {
+                git branch: 'main',
+                    credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
+                    url: 'https://github.com/pvginkel/IoTSupportUI.git'
+                sh "git checkout ${frontendMeta.gitRev}"
+            }
+        }
+
+        stage('Run validation') {
+            container('k8s') {
+                // Resolve the Playwright version from the lockfile to select
+                // the matching base image (browsers pre-baked).
+                def playwrightVersion = sh(
+                    script: "grep -m1 '^  playwright@' frontend-src/pnpm-lock.yaml | sed 's/.*@//;s/://'",
+                    returnStdout: true,
+                ).trim()
+                def validationImage = "registry:5000/modern-app-dev-playwright:playwright-${playwrightVersion}"
+                echo "Validation image: ${validationImage}"
+
+                // Stream the source in instead of baking it into an image.
+                // backend-src/frontend-src are renamed to /work/backend and /work/frontend.
+                sh "tar czf /tmp/context.tar.gz --exclude=.git --exclude=node_modules --exclude=.venv --exclude=test-results --exclude=.pnpm-store backend-src frontend-src scripts/validation-entrypoint.sh scripts/wait-for-services.py"
+
+                withVault([vaultSecrets: [
+                    [path: 'kv/jenkins/keycloak-iotsupport-admin', engineVersion: 2, secretValues: [
+                        [envVar: 'KEYCLOAK_ADMIN_CLIENT_ID', vaultKey: 'client_id'],
+                        [envVar: 'KEYCLOAK_ADMIN_CLIENT_SECRET', vaultKey: 'client_secret'],
+                    ]],
+                ]]) {
+                    try {
+                        kubectl.startJob("""\
+                            apiVersion: batch/v1
+                            kind: Job
+                            metadata:
+                                name: ${jobName}
+                                namespace: ${k8sNamespace}
+                                labels:
+                                    app.kubernetes.io/name: iot-support-validation
+                                    app.kubernetes.io/managed-by: jenkins
+                                    jenkins/build-number: "${BUILD_NUMBER}"
+                            spec:
+                                backoffLimit: 0
+                                activeDeadlineSeconds: 3600
+                                ttlSecondsAfterFinished: 3600
+                                template:
+                                    spec:
+                                        restartPolicy: Never
+                                        tolerations:
+                                            - key: size
+                                              operator: Equal
+                                              value: large
+                                              effect: PreferNoSchedule
+                                        containers:
+                                            - name: validation
+                                              image: ${validationImage}
+                                              imagePullPolicy: Always
+                                              securityContext:
+                                                  runAsUser: 1000
+                                                  runAsGroup: 1000
+                                              command: ["sh", "-c"]
+                                              args:
+                                                  - |
+                                                    mkdir -p /work/staging /work/results
+                                                    echo "Waiting for code upload..."
+                                                    while [ ! -f /work/staging/ready ]; do sleep 1; done
+                                                    echo "Code received, extracting..."
+                                                    tar xzf /work/staging/context.tar.gz -C /work
+                                                    mv /work/backend-src /work/backend
+                                                    mv /work/frontend-src /work/frontend
+                                                    rm -rf /work/staging
+                                                    bash /work/scripts/validation-entrypoint.sh
+                                                    echo \$? > /work/results/exit-code
+                                                    sleep infinity
+                                              resources:
+                                                  requests:
+                                                      cpu: "1"
+                                                      memory: 3584Mi
+                                              env:
+                                                  - name: S3_ENDPOINT_URL
+                                                    value: http://localhost:9000
+                                                  - name: S3_ACCESS_KEY_ID
+                                                    value: minioadmin
+                                                  - name: S3_SECRET_ACCESS_KEY
+                                                    value: minioadmin
+                                                  - name: S3_BUCKET_NAME
+                                                    value: "iot-support-validation"
+                                                  - name: KEYCLOAK_BASE_URL
+                                                    value: "${KEYCLOAK_TEST_BASE_URL}"
+                                                  - name: KEYCLOAK_REALM
+                                                    value: "${KEYCLOAK_TEST_REALM}"
+                                                  - name: KEYCLOAK_ADMIN_CLIENT_ID
+                                                    value: "${KEYCLOAK_ADMIN_CLIENT_ID}"
+                                                  - name: KEYCLOAK_ADMIN_CLIENT_SECRET
+                                                    value: "${KEYCLOAK_ADMIN_CLIENT_SECRET}"
+                                                  - name: OIDC_TOKEN_URL
+                                                    value: "${KEYCLOAK_TEST_OIDC_TOKEN_URL}"
+                                                  - name: ELASTICSEARCH_URL
+                                                    value: http://localhost:9200
+                                            - name: minio
+                                              image: minio/minio
+                                              command: ["minio"]
+                                              args: ["server", "/data"]
+                                              env:
+                                                  - name: MINIO_ROOT_USER
+                                                    value: minioadmin
+                                                  - name: MINIO_ROOT_PASSWORD
+                                                    value: minioadmin
+                                            - name: opensearch
+                                              image: opensearchproject/opensearch:2
+                                              resources:
+                                                  requests:
+                                                      memory: 640Mi
+                                                  limits:
+                                                      memory: 640Mi
+                                              env:
+                                                  - name: discovery.type
+                                                    value: single-node
+                                                  - name: plugins.security.disabled
+                                                    value: "true"
+                                                  - name: DISABLE_INSTALL_DEMO_CONFIG
+                                                    value: "true"
+                                                  - name: bootstrap.memory_lock
+                                                    value: "false"
+                                                  - name: OPENSEARCH_JAVA_OPTS
+                                                    value: "-Xms192m -Xmx192m -XX:MaxDirectMemorySize=32m -Dnode.processors=1"
+                        """.stripIndent())
+
+                        def podName = kubectl.getJobPodName(jobName, k8sNamespace)
+                        kubectl.waitForContainer(podName, 'validation', k8sNamespace)
+                        sh "kubectl cp -n ${k8sNamespace} -c validation /tmp/context.tar.gz ${podName}:/work/staging/context.tar.gz"
+                        sh "kubectl exec -n ${k8sNamespace} -c validation ${podName} -- touch /work/staging/ready"
+
+                        // The container stays alive (sleep infinity) after running,
+                        // so we wait for the exit-code file and then copy results
+                        // out while it's still running.
+                        kubectl.waitForFile(podName, 'validation', k8sNamespace, '/work/results/exit-code')
+
+                        kubectl.savePodLogs(podName, 'validation', k8sNamespace, 'validation-raw.log')
+                        utils.cleanLog('validation-raw.log', 'validation.log')
+
+                        sh 'mkdir -p test-results'
+                        sh "kubectl cp -n ${k8sNamespace} -c validation ${podName}:/work/results/. test-results/"
+
+                        def exitCode = fileExists('test-results/exit-code') ? readFile('test-results/exit-code').trim() : ''
+
+                        sh 'rm -f validation-raw.log /tmp/context.tar.gz test-results/exit-code'
+                        archiveArtifacts artifacts: 'validation.log', allowEmptyArchive: true
+                        junit testResults: 'test-results/*.xml', allowEmptyResults: true
+
+                        def failReason = kubectl.getJobFailReason(jobName, k8sNamespace)
+
+                        currentBuild.description = "job=${jobName}, exit=${exitCode ?: 'n/a'}"
+
+                        if (!exitCode) {
+                            error("No exit code found for job ${jobName}${failReason ? " (reason: ${failReason})" : ""}")
+                        }
+
+                        if (exitCode != '0') {
+                            error("Validation failed with exit code ${exitCode}")
+                        }
+                    } finally {
+                        kubectl.deleteJob(jobName, k8sNamespace)
+                    }
+                }
+            }
+        }
+
+        stage('Promote build') {
+            container('k8s') {
+                sh "crane tag --insecure registry:5000/iotsupport-app${backendMeta.tag} latest"
+                sh "crane tag --insecure registry:5000/iotsupport-ui${frontendMeta.tag} latest"
+            }
+        }
+
+        stage('Deploy Helm charts') {
+            cicd.helmDeploy()
+        }
+    }
+}
