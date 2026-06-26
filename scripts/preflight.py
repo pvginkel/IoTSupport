@@ -14,10 +14,10 @@ The flow — build, then test collection, then test-harness readiness — is
 the load-bearing part. The project-specific pieces all live in `main()`:
 
 - The build step delegates to `build-all.py` (customize its `STEPS`).
-- The test-collection and harness-readiness checks (`run_init_d` calls)
-  assume a Poetry/pytest backend with a one-shot `prepare` command that
-  warms the test harness. Replace them with whatever confirms your test
-  harness can collect and run tests.
+- The readiness check runs `pytest --co` in the backend: collection imports
+  conftest, the app factory, and the DI container, so it catches import/wiring
+  drift. The IoTSupport backend bootstraps its test DB from pytest fixtures,
+  so there is no one-shot `prepare` command to warm.
 """
 
 from __future__ import annotations
@@ -94,25 +94,17 @@ def main() -> int:
         sys.stdout.write(buf.getvalue())
         return rc
 
-    # --- Customize: test-harness readiness checks for your toolchain. ---
+    # Backend test-harness readiness: collection imports conftest + the app
+    # factory + DI container, so it catches import/wiring drift up front. The
+    # IoTSupport backend bootstraps its (SQLite) test DB from pytest fixtures —
+    # there is no one-shot `cli prepare` command to warm, so collection is the
+    # readiness check.
     rc = run_init_d(
         buf,
         "backend",
         "pytest --co",
         ["poetry", "run", "pytest", "--co", "-q"],
         REPO_ROOT / "backend",
-    )
-    if rc != 0:
-        sys.stdout.write(buf.getvalue())
-        return rc
-
-    rc = run_init_d(
-        buf,
-        "backend",
-        "cli prepare",
-        ["poetry", "run", "cli", "prepare"],
-        REPO_ROOT / "backend",
-        timeout=10,
     )
     if rc != 0:
         sys.stdout.write(buf.getvalue())

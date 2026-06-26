@@ -15,15 +15,15 @@ that's what we poll.
 ## Customize for your project
 
 The defaults below assume:
-- A `backend/` subproject with `poetry run cli prepare` (one-shot setup)
-  and `poetry run dev` (long-running server) commands.
+- A `backend/` subproject started with `poetry run dev` (long-running server).
+  The IoTSupport backend bootstraps its DB itself, so there is no separate
+  one-shot prepare step (point DATABASE_URL at a reachable dev DB first).
 - The OpenAPI spec lives at `/api/docs/openapi.json`.
 - A `frontend/` subproject with a `pnpm generate:api` script in its
   `package.json`.
 
-If your stack differs, edit the constants and the `run_prepare` /
-`start_backend` helpers. The flow (prepare → start backend → wait →
-generate → stop) is the load-bearing part — keep it.
+If your stack differs, edit the constants and the `start_backend` helper.
+The flow (start backend → wait → generate → stop) is the load-bearing part.
 
 Usage:
     scripts/regenerate-openapi.py --frontend
@@ -100,14 +100,6 @@ def stop_backend(dev_proc: subprocess.Popen[bytes]) -> None:
         dev_proc.wait(timeout=5)
 
 
-def run_prepare() -> int:
-    result = subprocess.run(
-        ["poetry", "run", "cli", "prepare"],
-        cwd=BACKEND_DIR,
-    )
-    return result.returncode
-
-
 def start_backend(port: int, log_path: Path) -> subprocess.Popen[bytes]:
     env = {**os.environ, "PORT": str(port)}
     log_file = open(log_path, "wb")
@@ -156,11 +148,6 @@ def main() -> int:
 
     LOG_DIR.mkdir(exist_ok=True)
     backend_log = LOG_DIR / "regenerate-openapi-backend.log"
-
-    rc = run_prepare()
-    if rc != 0:
-        print("cli prepare failed", file=sys.stderr)
-        return rc
 
     port = pick_free_port()
     print(f"Starting backend on port {port} (log: {backend_log})", flush=True)
