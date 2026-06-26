@@ -1,0 +1,5 @@
+{
+  "name": "iot-support-monorepo",
+  "private": true,
+  "packageManager": "pnpm@10.28.1"
+}

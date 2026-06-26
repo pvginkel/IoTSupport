@@ -1,0 +1,7 @@
+# One-command dev startup via honcho: `poetry run honcho -f Procfile.dev start`.
+# The backend runs in debug mode (Werkzeug auto-reload). The frontend dev server
+# proxies API calls to the backend on :3101 (override with BACKEND_URL) and SSE to
+# :3102. Start the SSE gateway separately (backend/scripts/dev-sse-gateway.sh) when
+# you need SSE-backed features locally.
+backend:  cd backend && PORT=3101 poetry run dev
+frontend: cd frontend && pnpm dev
