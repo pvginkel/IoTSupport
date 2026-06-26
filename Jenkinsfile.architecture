@@ -1,10 +1,11 @@
 // Architecture producer pipeline for the federated Architecture-as-Code model.
-// Backend producer (lives under backend/ in the monorepo). This repo is a
-// GENERATED producer: backend/docs/architecture/architecture.yaml is the
-// hand-authored logical artifact, and backend/docs/architecture/deployed-architecture.yaml
-// is generated here from the production device fleet (it is NOT committed).
-// The agent needs outbound HTTPS to architecture.webathome.org (dataset +
-// validation) and to the production IoT Support API (fleet projection).
+// One job covering both producers in the monorepo:
+//   - backend/  — GENERATED producer: backend/docs/architecture/architecture.yaml is the
+//     hand-authored logical artifact; backend/docs/architecture/deployed-architecture.yaml is
+//     generated here from the production device fleet (it is NOT committed). Needs outbound
+//     HTTPS to architecture.webathome.org (dataset + validation) and to the production IoT
+//     Support API (fleet projection, via the Vault OIDC client credentials below).
+//   - frontend/ — hand-authored producer: frontend/docs/architecture/*.yaml (validation only).
 
 library identifier: 'JenkinsPipelineUtils', changelog: false
 
@@ -22,7 +23,7 @@ withVault([vaultSecrets: [
                 checkout scm
             }
 
-            stage('Generate') {
+            stage('Generate backend architecture') {
                 // Project the production fleet into deployed-architecture.yaml.
                 // The generator fetches the published dataset and calls the
                 // production /api/pipeline/fleet-projection with client credentials.
@@ -39,7 +40,7 @@ withVault([vaultSecrets: [
                 }
             }
 
-            stage('Architecture') {
+            stage('Validate backend architecture') {
                 dir('backend') {
                     container('python') {
                         // Validate only the architecture artifacts; firmware-products.yaml
@@ -48,6 +49,15 @@ withVault([vaultSecrets: [
                     }
                 }
                 archiveArtifacts artifacts: 'backend/docs/architecture/architecture.yaml,backend/docs/architecture/deployed-architecture.yaml', fingerprint: true
+            }
+
+            stage('Validate frontend architecture') {
+                dir('frontend') {
+                    container('python') {
+                        sh './scripts/arch-validate.py docs/architecture/*.yaml'
+                    }
+                }
+                archiveArtifacts artifacts: 'frontend/docs/architecture/*.yaml', fingerprint: true
             }
         }
     }
