@@ -14,8 +14,9 @@ so the kernel unconditionally kills every descendant when honcho exits.
 Note: the backend requires its Poetry venv to be on Python 3.13 (run
 scripts/build-all.py or scripts/preflight.py once to pin it via
 `poetry env use python3.13`). The SSE gateway (frontend proxy target :3102)
-runs from the sibling SSEGateway repo (../../SSEGateway); clone it next to this
-repo or the `gateway` service will fail (the other services keep running).
+runs the `ssegateway` frontend devDependency, so it needs `pnpm install` to have
+run in frontend/ (scripts/build-all.py does this); the other services keep
+running if it hasn't.
 """
 
 import os
