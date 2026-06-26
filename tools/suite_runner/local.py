@@ -9,8 +9,8 @@ Flow (mirrors the original entrypoint):
      (delegated to the backend's wait-for-services.py — boto3 lives in the
      backend venv; gated on S3_ENDPOINT_URL so local dev can skip it)
   3. run backend pytest
-  4. install npm deps (pnpm workspace), build the frontend, install the
-     Playwright browser, run Playwright
+  4. install the frontend's npm deps (standalone pnpm project), build the
+     frontend, install the Playwright browser, run Playwright
 
 Output modes:
   simple  — progress indicators, captured output, test_results.md (default)
@@ -20,11 +20,17 @@ Output modes:
 import argparse
 import os
 import shlex
+import shutil
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from . import ALL_SUITES, REPO_ROOT, RESULTS_FILE
+
+# The backend requires Python 3.13 (e.g. queue.ShutDown). Pin its Poetry venv to
+# python3.13 when that interpreter is on PATH; in CI the base image's default
+# python is already 3.13 (the binary may be absent by that name), so we skip it.
+HAS_PYTHON313 = shutil.which("python3.13") is not None
 from .display import (
     is_full_mode,
     progress_end,
@@ -138,7 +144,15 @@ def run_tests(args):
     backend_installed = False
     col = progress_start("Installing backend dependencies")
     if backend.is_dir():
-        ok, detail = _install_cmd(["poetry", "install", "--no-interaction"], cwd=backend, timeout=300)
+        cmds = []
+        if HAS_PYTHON313:
+            cmds.append(["poetry", "env", "use", "python3.13"])
+        cmds.append(["poetry", "install", "--no-interaction"])
+        ok, detail = True, ""
+        for cmd in cmds:
+            ok, detail = _install_cmd(cmd, cwd=backend, timeout=300)
+            if not ok:
+                break
         progress_end(ok, col)
         results.append(("backend install", ok, detail, None))
         backend_installed = ok
@@ -182,14 +196,15 @@ def run_tests(args):
 
     # --- Frontend ---
     if "frontend" in args.suites:
-        # pnpm install at the workspace root installs frontend + sidecar deps.
+        # The frontend is a standalone pnpm project (its own lockfile), not a
+        # workspace member — install it in its own directory.
         col = progress_start("Installing npm dependencies")
         pnpm_install = ["pnpm", "install", "--frozen-lockfile", "--config.confirmModulesPurge=false"]
-        ok, detail = _install_cmd(pnpm_install, cwd=REPO_ROOT, timeout=300)
+        ok, detail = _install_cmd(pnpm_install, cwd=frontend, timeout=300)
         if not ok:
             ok, detail = _install_cmd(
                 ["pnpm", "install", "--config.confirmModulesPurge=false"],
-                cwd=REPO_ROOT, timeout=300,
+                cwd=frontend, timeout=300,
             )
         progress_end(ok, col)
         results.append(("frontend install", ok, detail, None))

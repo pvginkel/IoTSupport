@@ -63,9 +63,8 @@ Read all documents in the slice directory. Determine which agents need to run ba
 
 Run `python3 /home/pvginkel/source/IoTSupport/scripts/preflight.py` from the repo root before dispatching any dev agent. It bundles the checks that must pass before any agent starts:
 
-- **Full repo build** (`scripts/build-all.py`) — root `poetry install`, root `pnpm install` (frozen lockfile), `backend` `poetry install`, and `frontend` `pnpm build`. Catches dependency drift and broken builds across both subprojects.
-- **Backend test collection** (`poetry run pytest --co`) — confirms the backend test harness can collect tests without import or environment errors.
-- **Backend test-harness readiness** (`poetry run cli prepare`) — warms the test-harness fixtures so the suite can actually run.
+- **Full repo build** (`scripts/build-all.py`) — root `poetry install`, `backend` `poetry install`, `frontend` `pnpm install` (frozen lockfile, standalone — the frontend is not a pnpm workspace member), and `frontend` `pnpm build`. Catches dependency drift and broken builds across both subprojects.
+- **Backend test collection** (`poetry run pytest --co`) — confirms the backend test harness can collect tests without import or environment errors (the IoTSupport backend bootstraps its test DB from fixtures, so there is no separate `cli prepare` step).
 
 The script is silent on success; on failure it dumps the buffered output of every check plus the failing step's details.
 

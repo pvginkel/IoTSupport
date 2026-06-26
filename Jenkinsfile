@@ -16,10 +16,10 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
 
         stage('Run validation') {
             container('k8s') {
-                // Resolve the Playwright version from the (workspace-root) lockfile
-                // to select the matching base image (browsers pre-baked).
+                // Resolve the Playwright version from the frontend lockfile to
+                // select the matching base image (browsers pre-baked).
                 def playwrightVersion = sh(
-                    script: "grep -m1 '^  playwright@' pnpm-lock.yaml | sed 's/.*@//;s/://'",
+                    script: "grep -m1 '^  playwright@' frontend/pnpm-lock.yaml | sed 's/.*@//;s/://'",
                     returnStdout: true,
                 ).trim()
                 def validationImage = "registry:5000/modern-app-dev-playwright:playwright-${playwrightVersion}"
@@ -228,7 +228,7 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
             writeFile file: 'frontend/git-rev', text: gitRev
 
             container('kaniko') {
-                helmCharts.kaniko("frontend/Dockerfile", ".", [
+                helmCharts.kaniko("frontend/Dockerfile", "frontend", [
                     "registry:5000/iotsupport-ui:${currentBuild.number}",
                     "registry:5000/iotsupport-ui:latest"
                 ])
