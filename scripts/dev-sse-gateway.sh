@@ -2,10 +2,8 @@
 # Start the SSE gateway sidecar for local development (honcho `gateway` service).
 #
 # The gateway is the external sibling repo SSEGateway (../../SSEGateway, resolved
-# relative to backend/); see backend/.vscode/tasks.json "SSE Gateway". Unlike that
-# task's backend/scripts/dev-sse-gateway.sh wrapper — which has an interactive
-# keypress-restart loop for VS Code — this execs the gateway directly so it runs
-# cleanly under honcho's piped stdin.
+# relative to backend/). Runs it directly in the foreground so it behaves cleanly
+# under honcho's piped stdin.
 set -euo pipefail
 
 export SSE_GATEWAY_ROOT="${SSE_GATEWAY_ROOT:-../../SSEGateway}"
