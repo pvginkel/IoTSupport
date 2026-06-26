@@ -1,5 +1,6 @@
 // Architecture producer pipeline for the federated Architecture-as-Code model.
-// Source of truth: the hand-authored docs/architecture/*.yaml in this repo.
+// Frontend producer (lives under frontend/ in the monorepo).
+// Source of truth: the hand-authored frontend/docs/architecture/*.yaml in this repo.
 // The agent needs outbound HTTPS to architecture.webathome.org for validation.
 
 library identifier: 'JenkinsPipelineUtils', changelog: false
@@ -13,10 +14,12 @@ podTemplate(inheritFrom: 'jenkins-agent', containers: [
         }
 
         stage('Architecture') {
-            container('python') {
-                sh './scripts/arch-validate.py docs/architecture/*.yaml'
+            dir('frontend') {
+                container('python') {
+                    sh './scripts/arch-validate.py docs/architecture/*.yaml'
+                }
             }
-            archiveArtifacts artifacts: 'docs/architecture/*.yaml', fingerprint: true
+            archiveArtifacts artifacts: 'frontend/docs/architecture/*.yaml', fingerprint: true
         }
     }
 }

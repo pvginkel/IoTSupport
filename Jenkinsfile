@@ -1,79 +1,32 @@
-library identifier: 'JenkinsPipelineUtils', changelog: false
+import org.jenkinsci.plugins.pipeline.modeldefinition.Utils
 
-properties([
-    parameters([
-        string(name: 'BACKEND_BUILD', defaultValue: ''),
-        string(name: 'FRONTEND_BUILD', defaultValue: ''),
-        string(name: 'TRIGGERED_BY')
-    ])
-])
+library identifier: 'JenkinsPipelineUtils', changelog: false
 
 podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
     containerTemplates.k8s('k8s')
 ]) {
     node(POD_LABEL) {
-        def backendMeta
-        def frontendMeta
-        def jobName = "iot-support-validation-${BUILD_NUMBER}"
+        def gitRev
         def k8sNamespace = kubectl.currentNamespace()
 
-        stage('Clone repo') {
-            checkout scm
-        }
-
-        stage('Resolve image pair') {
-            copyArtifacts(
-                projectName: 'IoTSupport',
-                selector: params.BACKEND_BUILD ? specific(params.BACKEND_BUILD) : lastSuccessful(),
-                filter: 'backend-build.json',
-                target: 'backend-meta',
-                flatten: true
-            )
-
-            copyArtifacts(
-                projectName: 'IoTSupportUI',
-                selector: params.FRONTEND_BUILD ? specific(params.FRONTEND_BUILD) : lastSuccessful(),
-                filter: 'frontend-build.json',
-                target: 'frontend-meta',
-                flatten: true
-            )
-
-            backendMeta = readJSON file: 'backend-meta/backend-build.json'
-            frontendMeta = readJSON file: 'frontend-meta/frontend-build.json'
-
-            echo "Testing backend=${backendMeta.tag} (${backendMeta.gitRev})"
-            echo "Testing frontend=${frontendMeta.tag} (${frontendMeta.gitRev})"
-        }
-
-        stage('Clone source repos') {
-            dir('backend-src') {
-                git branch: 'main',
-                    credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
-                    url: 'https://github.com/pvginkel/IoTSupport.git'
-                sh "git checkout ${backendMeta.gitRev}"
-            }
-            dir('frontend-src') {
-                git branch: 'main',
-                    credentialsId: '5f6fbd66-b41c-405f-b107-85ba6fd97f10',
-                    url: 'https://github.com/pvginkel/IoTSupportUI.git'
-                sh "git checkout ${frontendMeta.gitRev}"
-            }
+        stage('Cloning repo') {
+            def scmVars = checkout scm
+            gitRev = scmVars.GIT_COMMIT
         }
 
         stage('Run validation') {
             container('k8s') {
-                // Resolve the Playwright version from the lockfile to select
-                // the matching base image (browsers pre-baked).
+                // Resolve the Playwright version from the (workspace-root) lockfile
+                // to select the matching base image (browsers pre-baked).
                 def playwrightVersion = sh(
-                    script: "grep -m1 '^  playwright@' frontend-src/pnpm-lock.yaml | sed 's/.*@//;s/://'",
+                    script: "grep -m1 '^  playwright@' pnpm-lock.yaml | sed 's/.*@//;s/://'",
                     returnStdout: true,
                 ).trim()
                 def validationImage = "registry:5000/modern-app-dev-playwright:playwright-${playwrightVersion}"
                 echo "Validation image: ${validationImage}"
 
-                // Stream the source in instead of baking it into an image.
-                // backend-src/frontend-src are renamed to /work/backend and /work/frontend.
-                sh "tar czf /tmp/context.tar.gz --exclude=.git --exclude=node_modules --exclude=.venv --exclude=test-results --exclude=.pnpm-store backend-src frontend-src scripts/validation-entrypoint.sh scripts/wait-for-services.py"
+                // Stream the whole monorepo working tree in instead of baking an image.
+                sh "tar czf /tmp/context.tar.gz --exclude=.git --exclude=node_modules --exclude=.venv --exclude=test-results --exclude=.pnpm-store ."
 
                 withVault([vaultSecrets: [
                     [path: 'kv/jenkins/keycloak-iotsupport-admin', engineVersion: 2, secretValues: [
@@ -81,6 +34,9 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                         [envVar: 'KEYCLOAK_ADMIN_CLIENT_SECRET', vaultKey: 'client_secret'],
                     ]],
                 ]]) {
+                    def suites = ['backend', 'frontend']
+                    def jobName = "iot-support-validation-${BUILD_NUMBER}"
+
                     try {
                         kubectl.startJob("""\
                             apiVersion: batch/v1
@@ -119,10 +75,9 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                                     while [ ! -f /work/staging/ready ]; do sleep 1; done
                                                     echo "Code received, extracting..."
                                                     tar xzf /work/staging/context.tar.gz -C /work
-                                                    mv /work/backend-src /work/backend
-                                                    mv /work/frontend-src /work/frontend
                                                     rm -rf /work/staging
-                                                    bash /work/scripts/validation-entrypoint.sh
+                                                    cd /work && poetry install --no-interaction --without dev
+                                                    poetry run run-suite --output-mode full --junitxml-dir /work/results --retries 2
                                                     echo \$? > /work/results/exit-code
                                                     sleep infinity
                                               resources:
@@ -197,20 +152,61 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
 
                         def exitCode = fileExists('test-results/exit-code') ? readFile('test-results/exit-code').trim() : ''
 
-                        sh 'rm -f validation-raw.log /tmp/context.tar.gz test-results/exit-code'
-                        archiveArtifacts artifacts: 'validation.log', allowEmptyArchive: true
-                        junit testResults: 'test-results/*.xml', allowEmptyResults: true
+                        // Generate a summary from the SUITE_RESULT markers in the log.
+                        // run-suite emits one marker per JUnit XML; the file stem is the
+                        // suite name (backend, frontend). Group by suite via prefix match.
+                        def log = readFile('validation.log')
+                        def resultLines = log.split('\n').findAll { it.startsWith('===SUITE_RESULT:') }
+                        def summaryLines = []
+                        def totalP = 0, totalF = 0, totalS = 0
 
-                        def failReason = kubectl.getJobFailReason(jobName, k8sNamespace)
-
-                        currentBuild.description = "job=${jobName}, exit=${exitCode ?: 'n/a'}"
-
-                        if (!exitCode) {
-                            error("No exit code found for job ${jobName}${failReason ? " (reason: ${failReason})" : ""}")
+                        suites.each { suite ->
+                            def suiteLines = resultLines.findAll { line ->
+                                def name = line.replace('===SUITE_RESULT:', '').split(':')[0]
+                                name == suite || name.startsWith("${suite}-")
+                            }
+                            if (suiteLines) {
+                                def p = 0, f = 0, s = 0
+                                suiteLines.each { line ->
+                                    def parts = line.replace('===SUITE_RESULT:', '').replace('===', '').split(':')
+                                    p += parts[1] as int; f += parts[2] as int; s += parts[3] as int
+                                }
+                                totalP += p; totalF += f; totalS += s
+                                summaryLines << String.format('  %-12s %3d passed  %3d failed  %3d skipped', suite, p, f, s)
+                            } else {
+                                summaryLines << String.format('  %-12s status unknown (no test results produced)', suite)
+                            }
                         }
 
-                        if (exitCode != '0') {
-                            error("Validation failed with exit code ${exitCode}")
+                        def summary = [
+                            '',
+                            '============================================',
+                            '  TEST SUMMARY',
+                            '============================================',
+                            *summaryLines,
+                            '--------------------------------------------',
+                            String.format('  %-12s %3d passed  %3d failed  %3d skipped', 'TOTAL', totalP, totalF, totalS),
+                            '============================================',
+                        ].join('\n')
+                        writeFile file: 'validation-summary.log', text: summary + '\n'
+
+                        // Clean up intermediate files.
+                        sh 'rm -f validation-raw.log /tmp/context.tar.gz test-results/exit-code'
+
+                        archiveArtifacts artifacts: 'validation*.log, test-results/*.xml', allowEmptyArchive: true
+                        junit testResults: 'test-results/*.xml', allowEmptyResults: true
+
+                        currentBuild.description = "exit=${exitCode ?: 'n/a'}, ${totalP} passed, ${totalF} failed, ${totalS} skipped"
+
+                        if (!exitCode) {
+                            def failReason = kubectl.getJobFailReason(jobName, k8sNamespace)
+                            def msg = "Validation failed: no exit code recorded"
+                            if (failReason) {
+                                msg += " (job: ${failReason})"
+                            }
+                            error(msg)
+                        } else if (exitCode != '0') {
+                            error("Validation failed: exit code ${exitCode}")
                         }
                     } finally {
                         kubectl.deleteJob(jobName, k8sNamespace)
@@ -219,10 +215,23 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
             }
         }
 
-        stage('Promote build') {
-            container('k8s') {
-                sh "crane tag --insecure registry:5000/iotsupport-app${backendMeta.tag} latest"
-                sh "crane tag --insecure registry:5000/iotsupport-ui${frontendMeta.tag} latest"
+        stage('Building iot-support') {
+            container('kaniko') {
+                helmCharts.kaniko("backend/Dockerfile", "backend", [
+                    "registry:5000/iotsupport-app:${currentBuild.number}",
+                    "registry:5000/iotsupport-app:latest"
+                ])
+            }
+        }
+
+        stage('Building iot-support-frontend') {
+            writeFile file: 'frontend/git-rev', text: gitRev
+
+            container('kaniko') {
+                helmCharts.kaniko("frontend/Dockerfile", ".", [
+                    "registry:5000/iotsupport-ui:${currentBuild.number}",
+                    "registry:5000/iotsupport-ui:latest"
+                ])
             }
         }
 

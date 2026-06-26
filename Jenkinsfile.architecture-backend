@@ -1,0 +1,54 @@
+// Architecture producer pipeline for the federated Architecture-as-Code model.
+// Backend producer (lives under backend/ in the monorepo). This repo is a
+// GENERATED producer: backend/docs/architecture/architecture.yaml is the
+// hand-authored logical artifact, and backend/docs/architecture/deployed-architecture.yaml
+// is generated here from the production device fleet (it is NOT committed).
+// The agent needs outbound HTTPS to architecture.webathome.org (dataset +
+// validation) and to the production IoT Support API (fleet projection).
+
+library identifier: 'JenkinsPipelineUtils', changelog: false
+
+withVault([vaultSecrets: [
+    [path: 'kv/jenkins/iotsupport-pipeline-oidc', engineVersion: 2, secretValues: [
+        [envVar: 'IOTSUPPORT_CLIENT_ID', vaultKey: 'client_id'],
+        [envVar: 'IOTSUPPORT_CLIENT_SECRET', vaultKey: 'client_secret'],
+    ]],
+]]) {
+    podTemplate(inheritFrom: 'jenkins-agent', containers: [
+        containerTemplates.python('python')
+    ]) {
+        node(POD_LABEL) {
+            stage('Cloning repo') {
+                checkout scm
+            }
+
+            stage('Generate') {
+                // Project the production fleet into deployed-architecture.yaml.
+                // The generator fetches the published dataset and calls the
+                // production /api/pipeline/fleet-projection with client credentials.
+                dir('backend') {
+                    container('python') {
+                        sh 'pip install --quiet -r ./tools/requirements.txt'
+                        sh '''
+                            IOTSUPPORT_API_URL=https://iot.ginbov.nl \\
+                            IOTSUPPORT_TOKEN_URL=$KEYCLOAK_OIDC_TOKEN_URL \\
+                            ./tools/gen-architecture.py \\
+                                --dataset-url https://architecture.webathome.org/data/v0.1/architecture.json
+                        '''
+                    }
+                }
+            }
+
+            stage('Architecture') {
+                dir('backend') {
+                    container('python') {
+                        // Validate only the architecture artifacts; firmware-products.yaml
+                        // is an annotation file (generator input), not an artifact.
+                        sh './scripts/arch-validate.py docs/architecture/architecture.yaml docs/architecture/deployed-architecture.yaml'
+                    }
+                }
+                archiveArtifacts artifacts: 'backend/docs/architecture/architecture.yaml,backend/docs/architecture/deployed-architecture.yaml', fingerprint: true
+            }
+        }
+    }
+}

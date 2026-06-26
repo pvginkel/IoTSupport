@@ -1,34 +1,39 @@
-# Multi-stage build for React frontend with NGINX deployment
+# Multi-stage build for the React frontend with NGINX deployment.
+# Built from the monorepo root context (the frontend is a pnpm workspace member,
+# so the install needs the root pnpm-workspace.yaml + pnpm-lock.yaml).
 FROM node:lts-slim AS build
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install pnpm (pin to the workspace's packageManager version)
+RUN corepack enable && corepack prepare pnpm@10.28.1 --activate
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files for dependency caching
-COPY package.json pnpm-lock.yaml ./
+# Copy workspace config and member manifests for dependency caching
+# (workspace-aware install from the root).
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY frontend/package.json frontend/
+COPY tools/code_health/cognitive/package.json tools/code_health/cognitive/
 
-# Install dependencies
+# Install dependencies (workspace-aware)
 RUN pnpm install --frozen-lockfile
 
 # Copy source code, configuration files, and cached OpenAPI schema
 COPY . .
 
-# Build the application (uses cached schema)
-RUN pnpm build
+# Build the frontend (uses the cached OpenAPI schema)
+RUN cd frontend && pnpm build
 
 # Production stage with NGINX
 FROM nginx:alpine AS production
 
 # Copy custom NGINX configuration and proxy snippet
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY frontend/nginx.conf /etc/nginx/nginx.conf
 RUN mkdir -p /etc/nginx/snippets
-COPY snippets/proxy.conf /etc/nginx/snippets/proxy.conf
+COPY frontend/snippets/proxy.conf /etc/nginx/snippets/proxy.conf
 
 # Copy built static assets from build stage
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /app/frontend/dist /usr/share/nginx/html
 
 # Expose port 3100
 EXPOSE 3100
