@@ -6,4 +6,4 @@
 # resolved relative to backend/); see backend/.vscode/tasks.json "SSE Gateway".
 backend:  cd backend && PORT=3101 poetry run dev
 frontend: cd frontend && pnpm dev
-gateway:  cd backend && ../../SSEGateway/scripts/run-gateway.sh --callback-url http://localhost:3101/api/sse/callback --port 3102
+gateway:  scripts/dev-sse-gateway.sh
