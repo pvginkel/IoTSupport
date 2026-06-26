@@ -2,7 +2,8 @@
 # per-service logs under logs/). Lower-level: `poetry run honcho -f Procfile.dev start`.
 # The backend runs in debug mode (Werkzeug auto-reload). The frontend dev server
 # proxies API calls to the backend on :3101 (override with BACKEND_URL) and SSE to
-# :3102. Start the SSE gateway separately (backend/scripts/dev-sse-gateway.sh) when
-# you need SSE-backed features locally.
+# the gateway on :3102. The gateway is the sibling SSEGateway repo (../../SSEGateway,
+# resolved relative to backend/); see backend/.vscode/tasks.json "SSE Gateway".
 backend:  cd backend && PORT=3101 poetry run dev
 frontend: cd frontend && pnpm dev
+gateway:  cd backend && ../../SSEGateway/scripts/run-gateway.sh --callback-url http://localhost:3101/api/sse/callback --port 3102
