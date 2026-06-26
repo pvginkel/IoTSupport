@@ -9,8 +9,5 @@
     {
       "path": "frontend",
     },
-    {
-      "path": "../AIWorkflow",
-    },
   ],
 }
