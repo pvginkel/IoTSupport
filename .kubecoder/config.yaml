@@ -1,0 +1,36 @@
+cwd: IoTSupport
+
+repos:
+  - url: https://github.com/pvginkel/IoTSupportSpecs
+    path: IoTSupportSpecs
+    shared: true
+
+capabilities:
+  github: rw
+
+services:
+  - postgres
+  - minio
+  - opensearch
+
+# One merged sidecar rather than `python` + `frontend`: the Playwright harness
+# boots the Flask backend per worker (tests/support/process/servers.ts), so a
+# single command needs both toolsets in the same container.
+tools:
+  - use: modern-app
+  - use: kaniko
+
+ports:
+  - name: frontend
+    port: 3100
+    type: http
+    sslOffload: true
+  - name: backend
+    port: 3101
+    type: http
+  - name: sse-gateway
+    port: 3102
+    type: http
+
+setup:
+  - kc project setup

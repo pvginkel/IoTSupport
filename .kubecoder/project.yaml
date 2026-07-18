@@ -1,0 +1,32 @@
+projects:
+  root:
+    description: >-
+      IoTSupport monorepo — orchestration tooling (suite runner, code-health),
+      the shared Procfile.dev dev stack, and CI.
+    jenkins: IoTSupport/IoTSupport
+    setup: cexec modern-app poetry install --no-interaction
+
+  backend:
+    description: >-
+      Flask REST API — device/model CRUD, firmware storage, Keycloak M2M auth,
+      MQTT rotation notifications, Prometheus metrics.
+    setup:
+      - cexec modern-app poetry install --no-interaction
+      - cexec modern-app poetry run python scripts/init-dev-database.py
+      - cexec modern-app poetry run cli upgrade-db
+    test: cexec modern-app poetry run pytest
+    lint:
+      - cexec modern-app poetry run ruff check .
+      - cexec modern-app poetry run mypy .
+      - cexec modern-app poetry run vulture app/ vulture_whitelist.py --min-confidence 80
+
+  frontend:
+    description: >-
+      React 19 + TanStack Router/Query SPA with a generated OpenAPI client;
+      Playwright E2E suite that boots the backend per worker.
+    setup:
+      - cexec modern-app pnpm install --frozen-lockfile --config.confirmModulesPurge=false
+      - cexec modern-app pnpm playwright install chromium
+    build: cexec modern-app pnpm build
+    test: cexec modern-app pnpm playwright test
+    lint: cexec modern-app pnpm check
