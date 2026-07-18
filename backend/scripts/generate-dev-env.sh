@@ -17,6 +17,14 @@ S3_ENDPOINT_URL=http://localhost:9000
 S3_ACCESS_KEY_ID=minioadmin
 S3_SECRET_ACCESS_KEY=minioadmin
 
+# The homelab dev Keycloak. Only the non-secret coordinates live here; the
+# IoTSupport-specific admin client id and secret arrive as environment
+# variables from the secret catalog (and env beats .env in pydantic-settings).
+# Creating a device creates a Keycloak client, so the Playwright suite needs
+# a real Keycloak — it is not optional.
+KEYCLOAK_BASE_URL=http://keycloak-dev
+KEYCLOAK_REALM=homelab-dev
+
 if [ -f "$BACKEND_DIR/.env" ]; then
     echo ".env already exists, leaving it alone"
 else
@@ -31,6 +39,10 @@ S3_BUCKET_NAME=iot-support-attachments
 # Device log viewer reads from the OpenSearch sidecar; defaults to unset,
 # which disables the feature.
 ELASTICSEARCH_URL=http://localhost:9200
+
+KEYCLOAK_BASE_URL=$KEYCLOAK_BASE_URL
+KEYCLOAK_REALM=$KEYCLOAK_REALM
+OIDC_TOKEN_URL=$KEYCLOAK_BASE_URL/realms/$KEYCLOAK_REALM/protocol/openid-connect/token
 EOF
     echo "Wrote .env"
 fi
