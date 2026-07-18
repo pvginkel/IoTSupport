@@ -4,6 +4,8 @@
 # proxies API calls to the backend on :3101 (override with BACKEND_URL) and SSE to
 # the gateway on :3102. The gateway is the `ssegateway` package (a frontend
 # devDependency, github:pvginkel/SSEGateway#stable) — no sibling checkout needed.
-backend:  cd backend && PORT=3101 poetry run dev
-frontend: cd frontend && pnpm dev
-gateway:  scripts/dev-sse-gateway.sh
+# Each service runs in the modern-app tool container; honcho itself runs in the
+# dev container.
+backend:  cd backend && cexec modern-app PORT=3101 poetry run dev
+frontend: cd frontend && cexec modern-app pnpm dev
+gateway:  cexec modern-app scripts/dev-sse-gateway.sh

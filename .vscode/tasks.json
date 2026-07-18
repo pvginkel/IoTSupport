@@ -4,10 +4,8 @@
     {
       "label": "Claude",
       "type": "shell",
-      "command": "claudebox",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
+      "command": "kc session --attach --cwd .",
+      "options": { "cwd": "${workspaceFolder}" },
       "icon": { "id": "sparkle" },
       "problemMatcher": [],
       "presentation": {
@@ -17,10 +15,7 @@
         "showReuseMessage": false,
         "close": true
       },
-      "runOptions": {
-        "reevaluateOnRerun": true,
-        "instanceLimit": 999
-      },
+      "runOptions": { "reevaluateOnRerun": true, "instanceLimit": 999 },
       "isBackground": true
     }
   ]

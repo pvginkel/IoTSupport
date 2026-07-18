@@ -1,8 +1,0 @@
-mkdir -p $(pwd)/tmp
-
-NAME=iot-support
-BACKEND_PORT=3101
-TESTING_BACKEND_PORT=$((BACKEND_PORT + 10))
-ARGS="
-    -p ${BACKEND_PORT}:${BACKEND_PORT}
-"
