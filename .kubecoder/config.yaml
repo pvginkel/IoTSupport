@@ -13,12 +13,27 @@ services:
   - minio
   - opensearch
 
+# Creating a device creates a Keycloak client, so the Playwright suite cannot run
+# without an admin client — 70 of its 130 tests fail with "Keycloak admin API not
+# configured". The non-secret coordinates (base URL, realm, token URL) are written
+# into backend/.env by backend/scripts/generate-dev-env.sh.
+secrets:
+  KEYCLOAK_ADMIN_CLIENT_ID: iotsupport-keycloak-admin-client-id
+  KEYCLOAK_ADMIN_CLIENT_SECRET: iotsupport-keycloak-admin-client-secret
+
 # One merged sidecar rather than `python` + `frontend`: the Playwright harness
 # boots the Flask backend per worker (tests/support/process/servers.ts), so a
 # single command needs both toolsets in the same container.
 tools:
   - use: modern-app
   - use: kaniko
+
+# The modern-app toolchain sets COREPACK_HOME=/home/ubuntu/.corepack and ships no
+# baked pnpm, so corepack downloads the version pinned in frontend/package.json on
+# first use. A toolchain cannot declare its own overlay yet, so the selecting repo
+# does it — without this, pnpm re-downloads on every pod start.
+homeOverlays:
+  - .corepack
 
 ports:
   - name: frontend
