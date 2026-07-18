@@ -5,11 +5,14 @@
 # docker build/push chain. Kaniko always pushes — there is no local image
 # store — and its sidecar only sees /work, hence the absolute paths.
 #
-# Usage: scripts/build-image.sh [tag]        (default tag: latest)
+# Usage: scripts/build-image.sh [tag]        (default tag: dev)
+#
+# Defaults to :dev, never :latest — Jenkins publishes :latest to this same
+# registry and the deployment tracks it, so a local build must not clobber it.
 
 set -e
 
-TAG="${1:-latest}"
+TAG="${1:-dev}"
 CONTEXT=/work/IoTSupport/backend
 
 exec cexec kaniko build.sh \

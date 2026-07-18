@@ -8,15 +8,17 @@ Usage:
 Reads the repo-root Procfile.dev. Per-service logs (ANSI-stripped) are written
 to logs/<service>.log. Ctrl-C stops everything cleanly.
 
-All child processes run inside a PID namespace (via unshare --user --pid --fork)
-so the kernel unconditionally kills every descendant when honcho exits.
+honcho runs inside the modern-app tool container: the dev container has neither
+poetry nor honcho, and all three services need that container anyway, so the
+Procfile lines run there natively without their own cexec. Terminating the
+cexec client stops the processes in the sidecar with it.
 
-Note: the backend requires its Poetry venv to be on Python 3.13 (run
-scripts/build-all.py or scripts/preflight.py once to pin it via
-`poetry env use python3.13`). The SSE gateway (frontend proxy target :3102)
-runs the `ssegateway` frontend devDependency, so it needs `pnpm install` to have
-run in frontend/ (scripts/build-all.py does this); the other services keep
-running if it hasn't.
+This wrapper still runs honcho under a PID namespace (unshare --user --pid
+--fork) so nothing local is left behind.
+
+Note: run `kc project setup` first — it installs the poetry and pnpm
+dependencies all three services need (the SSE gateway on :3102 runs the
+`ssegateway` frontend devDependency).
 """
 
 import os
@@ -83,6 +85,7 @@ def main() -> None:
     # Run honcho inside a PTY (for colors) and a PID namespace (for cleanup).
     status = pty.spawn(
         ["unshare", "--user", "--pid", "--fork",
+         "cexec", "modern-app",
          "poetry", "run", "honcho", "start", "-f", "Procfile.dev"] + sys.argv[1:],
         read,
     )
