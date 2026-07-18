@@ -10,8 +10,11 @@ BACKEND_DIR="$(dirname "$SCRIPT_DIR")"
 
 echo $BACKEND_DIR
 
-# Load shared variables
-. "$SCRIPT_DIR/args.sh"
+# Port the testing server falls back to when --port is not given. Playwright
+# always passes an explicit per-worker port; this only covers manual runs.
+# Mirrors DEFAULT_BACKEND_PORT in app/consts.py, offset to avoid colliding
+# with a dev server on 3101.
+TESTING_BACKEND_PORT=3111
 
 # Change to backend directory
 cd "$BACKEND_DIR" || {

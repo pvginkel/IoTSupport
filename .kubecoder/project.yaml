@@ -12,6 +12,7 @@ projects:
       MQTT rotation notifications, Prometheus metrics.
     setup:
       - cexec modern-app poetry install --no-interaction
+      - scripts/generate-dev-env.sh
       - cexec modern-app poetry run python scripts/init-dev-database.py
       - cexec modern-app poetry run cli upgrade-db
     test: cexec modern-app poetry run pytest
