@@ -51,8 +51,8 @@ Designers drafting plans and developers implementing Playwright work must re-rea
 
 - Setup & scripts: `docs/contribute/getting_started.md`
 - Environment variables & ports: `docs/contribute/environment.md`
-- Commands reference: `pnpm dev`, `pnpm check`, `pnpm generate:api`, `pnpm build`, `pnpm preview`
-- Playwright execution: `pnpm playwright test`, `pnpm playwright test --debug` (headless by default). Detailed policies live in `docs/contribute/testing/ci_and_execution.md`.
+- Commands reference: `cexec modern-app pnpm dev`, `... pnpm check`, `... pnpm generate:api`, `... pnpm build`, `... pnpm preview`. `kc project build frontend` / `kc project lint frontend` wrap the build and check.
+- Playwright execution: `cexec modern-app pnpm playwright test`, `... --debug` (headless by default), or `kc project test frontend`. Detailed policies live in `docs/contribute/testing/ci_and_execution.md`.
 
 ## Verification Before Handoff
 

@@ -14,13 +14,10 @@ app/
 └── utils/        # Shared utilities and error handling
 ```
 
-## Sandbox Environment
+## Version Control
 
-- Backend and frontend worktrees are bind-mounted into `/work` inside the container.
-- Each repository’s `.git` directory is writable from inside the sandbox, so staging and committing happen here directly.
 - Commit as you go along, in logical increments. This is a single-person shop: work directly on the main branch, no topic branches.
-- The container includes the standard project toolchain; request Dockerfile updates if more tooling is needed.
-- Git is writable from inside the sandbox; no additional safety guardrails are enforced beyond the project’s own guidelines, so commit deliberately.
+- Commit deliberately: no safety guardrails are enforced beyond the project's own guidelines.
 
 ## Deprecation and Backwards Compatibility
 
@@ -185,16 +182,19 @@ class TestPartService:
 ### Linting and Formatting
 Before committing, run all checks with a single command:
 ```bash
-poetry run check   # Runs ruff, mypy, vulture, and pytest
+cexec modern-app poetry run check   # Runs ruff, mypy, vulture, and pytest
 ```
 
 Or run individual tools:
 ```bash
-poetry run ruff check .                                           # Linting
-poetry run mypy .                                                 # Type checking
-poetry run vulture app/ vulture_whitelist.py --min-confidence 80  # Dead code detection
-poetry run pytest                                                 # Full test suite
+cexec modern-app poetry run ruff check .                                           # Linting
+cexec modern-app poetry run mypy .                                                 # Type checking
+cexec modern-app poetry run vulture app/ vulture_whitelist.py --min-confidence 80  # Dead code detection
+cexec modern-app poetry run pytest                                                 # Full test suite
 ```
+
+`kc project lint backend` runs the first three; `kc project test backend` runs
+the suite.
 
 ### Type Hints
 - Use type hints for all function parameters and return types

@@ -10,9 +10,18 @@ rotating device OAuth credentials.
 - **`backend/`** — Flask REST API: device/model CRUD, firmware storage, Keycloak M2M auth, MQTT rotation notifications, Prometheus metrics. Python/Poetry.
 - **`frontend/`** — React 19 + TanStack Router/Query SPA with a generated OpenAPI client. pnpm + Vite + Playwright.
 
+## Building and testing
+
+`kc project setup|build|test|lint [component]` drives the components declared in
+`.kubecoder/project.yaml` (`root`, `backend`, `frontend`). Everything runs in the
+`modern-app` tool container — the Playwright harness boots the Flask backend per
+worker, so both toolsets have to share one container. The full CI suite is
+`cexec modern-app poetry run run-suite`; Jenkins runs the same command with
+`--output-mode full`.
+
 A separate **specs repo** at `../IoTSupportSpecs` holds slice documentation and per-feature planning artifacts (briefs, plans, reviews). Slices live under `slices/` grouped by lifecycle state — pending at the top, `completed/` / `deferred/` / `cancelled/` subfolders for the rest; see its README for the convention.
 
-> **Note:** the specs repo is not created yet. Wire slice documents there once it exists.
+> **Note:** the specs repo exists but is not scaffolded yet — `/dev:onboard` sets up its structure.
 
 **Commit to the specs repo early and often.** The specs repo is a separate git repository. Every document you produce there should be committed as soon as it's written — not batched up at the end. `cd` to `../IoTSupportSpecs`, `git add` the file, and commit. Frequent small commits avoid conflicts and prevent work loss if a session crashes.
 
@@ -51,11 +60,15 @@ When the user asks to add something to the issue log before the board exists, ca
 
 ## Push notifications
 
-Use `python3 tools/ai_workflow/send_message.py --title "<title>" "<message>"` to send push notifications to the user's phone.
+Notifying the operator is built into the environment — ask for a push
+notification in plain words rather than calling a script.
 
 - During slice runs, notification rules are defined in `/run-slice`.
-- Outside of slice runs, send a notification when the task took or is expected to take **over 10 minutes**. Notify on completion or when blocked and needing user input.
-- When the user says "send me a message", "let me know", or "notify me", they mean a push notification via this script.
+- Outside of slice runs, notify when the task took or is expected to take
+  **over 10 minutes**. Notify on completion or when blocked and needing user
+  input.
+- When the user says "send me a message", "let me know", or "notify me", they
+  mean a push notification.
 
 ## Key documentation
 
