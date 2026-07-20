@@ -1,7 +1,10 @@
 {
   "files.exclude": {
-    "backend": true,
-    "frontend": true,
     "**/__pycache__": true
-  }
+  },
+  "editor.formatOnSave": false,
+  "[python]": {
+    "editor.formatOnSave": false
+  },
+  "python.REPL.enableREPLSmartSend": false,
 }
