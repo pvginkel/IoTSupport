@@ -1,48 +1,107 @@
 # KubeCoder onboarding — state & lessons learned
 
-Scratch file. Delete at close-out, **after** folding the "Lessons for the skill"
-section into `skills/onboard/SKILL.md` and `references/catalog.md` in
-KubeCoderConfig (the skill's standing requirement).
+Onboarding is **green and closed out** (see "Status"). The "Lessons for the
+skill" have been folded into `skills/onboard/SKILL.md` and
+`references/catalog.md` in KubeCoderConfig and pushed (this session's deltas in
+commit `de6f5f6`). This file is deliberately **kept, not deleted**: it is the
+handoff to the KubeCoder agent (the `cexec` doc below) and the running record for
+`/dev:onboard`.
+
+---
+
+## For the KubeCoder agent
+
+**Document `cexec`'s argument handling in `/etc/claude-code/CLAUDE.md`.** Its
+absence cost this session real time. `cexec <toolchain> <command…>` behaves like
+`ssh <host> <command…>`: it joins its trailing arguments into one string and runs
+that string through a shell in the sidecar, at the working directory the caller
+is in (it mirrors the dev-container cwd). So:
+
+- Pass a normal command line: `cexec modern-app poetry run pytest`,
+  `cexec frontend pnpm build`.
+- **Do not wrap it in `sh -c '…'`.** Exactly like `ssh host sh -c '…'`, the
+  wrapper collapses — the args are re-joined and re-parsed, so
+  `cexec modern-app sh -c 'ls /unknown'` runs a bare `ls` in the cwd (the `sh -c`
+  and `/unknown` get swallowed as the shell's `$0`).
+- Quoting is parsed **twice** (caller shell, then sidecar shell); arguments with
+  spaces or globs need quoting that survives both passes.
+- For another directory or a compound command, pass a single quoted string —
+  `cexec modern-app 'cd frontend && pnpm build'` — or change the caller's own cwd
+  first, since cexec mirrors it.
+
+Other platform follow-ups this migration surfaced (yours to action in KubeCoder /
+KubeCoderConfig):
+
+- Triage [#251](https://trello.com/c/uqcnyDoH) is **shipped** (Wave 2 [100]) —
+  close it.
+- [#250](https://trello.com/c/NuD8yceK) (cexec exposes pod secrets on the process
+  command line) is still open.
 
 ---
 
 ## Status
 
-`kc project setup | build | test` all pass. Totals match the last green Jenkins
-build (`IoTSupport/IoTSupport` #124, 826 passed): **696 backend pytest + 130
-Playwright = 826.**
+Both step-7 blockers from the prior session are cleared by the KubeCoder Wave 2
+deploy (headlines in `tmp/release-notes.md`), so former pending items 1–4 (seed
+OpenBao, deploy chart, rebuild image, sync) are all done — the environment is on
+the target image with real secrets:
 
-`kc project lint` is red on 3 pre-existing ruff errors — see "Known-red" below.
+- **Rebuilt toolchain image not picked up** → [100] toolchain images with
+  floating tags now pull `Always`. The pod runs the rebuilt `modern-app` image:
+  `COREPACK_HOME=/home/ubuntu/.corepack`, and `.corepack` is a live ZFS overlay
+  with cached pnpm.
+- **Restart failed because the secret did not exist** → [099] a missing catalog
+  secret now warns instead of failing pod start-up, and the Keycloak admin
+  secret is materialised as real env vars in the pod.
+- **[#251] "let toolchains declare their own homeOverlays"** shipped as [100].
+  The `frontend` and `modern-app` catalog toolchains now declare
+  `homeOverlays: [.corepack]` on their own entries (confirmed in the live
+  `kubecoder-controller-config`), and the controller merges built-in + repo +
+  per-toolchain overlays. Removed the now-redundant repo-level declaration from
+  `config.yaml` (commit 8b8ac85).
 
-### Pending, in order — do not reorder
+### Done
 
-1. **Seed OpenBao**, copying IoTSupport's Keycloak admin client from the Jenkins
-   entry into the catalog. Script:
-   `scratchpad/add-keycloak-catalog-secret.sh` (uses `kv patch`, so the catalog's
-   existing properties survive; prints no secret values).
-2. **Deploy the kubecoder chart** so ESO materialises the two new catalog keys
-   (`configs/prd/kubecoder/prd/values.yaml` already committed).
-3. **Rebuild the frontend toolchain image** (DockerImages `f91faba`) so
-   `COREPACK_HOME` moves under the home overlay. modern-app rebuilds with it.
-4. **Sync the IoTSupport environment.** Only now — `config.yaml` already
-   references the two catalog keys, and a `secrets:` entry pointing at a key that
-   does not exist yet may break pod start-up.
+1. **Green.** `kc project setup | build | test` all pass on the 5Gi pod — the
+   first green under the real ESO-materialised Keycloak secret path. Counts match
+   Jenkins #124: **696 backend pytest + 130 Playwright = 826**, `modern-app`
+   restarts=0.
+2. **modern-app right-sized 3Gi → 5Gi.** The full-stack E2E (backend + SSE +
+   frontend per Playwright worker, + chromium) plus backend pytest in one sidecar
+   peaked at **~3.3Gi** (3,486,273,536 B) and OOMKilled at 3Gi mid-suite — the
+   prior session's "green" was a truncated run. Bumped in HelmCharts
+   `charts/kubecoder/values.yaml` (commit `5fbe659`, pushed); operator deployed +
+   restarted; re-verified. 5Gi leaves ~1.8Gi headroom.
+3. **Skill fold-back pushed** to KubeCoderConfig (commit `de6f5f6`): overlays are
+   toolchain-declared (lesson 10), modern-app 5Gi (lesson 11), workspace tasks
+   incl. Build All + Procfile.dev-gated Dev Services (lesson 9), slice-099 secret
+   softening, catalog snapshot refreshed.
 
-Until step 3 lands, every pnpm command needs `COREPACK_HOME=$HOME/.corepack`
-prefixed. **Nothing in the repo works around this**, deliberately.
+### Remaining
 
-### Filed as triage cards
+1. `kc project lint` still red on the same 3 pre-existing ruff errors — see
+   "Known-red"; **not** onboarding-caused; left for `/dev:onboard`.
+2. **`/dev:onboard` (step 9)** not yet run — the full-tier AI-workflow handoff.
+   Needs the dev plugin installed. See "Left for /dev:onboard" below.
+3. **KubeCoder agent** to document `cexec` (see top) and make any further
+   KubeCoder / KubeCoderConfig changes.
+
+### Still open, filed as triage cards
 
 - [#250](https://trello.com/c/NuD8yceK) — cexec exposes every pod secret via the
-  process command line.
+  process command line. (Still open.)
 - [#251](https://trello.com/c/uqcnyDoH) — let toolchains declare their own
-  homeOverlays.
+  homeOverlays. **Shipped as Wave 2 [100]; close this card.**
 
 ---
 
 ## Lessons for the skill
 
 Ordered by how much time each would have saved.
+
+> **Folded into KubeCoderConfig and pushed** — lessons 1–8 were already folded
+> upstream; this session's 9–11 plus the Wave-2 corrections are in commit
+> `de6f5f6`. Kept here as the migration record; nothing here is pending.
 
 ### 1. "Do the tests need service X?" cannot be answered from the test code alone
 
@@ -168,28 +227,95 @@ Proposed skill change — in the close-out:
 > (report it, leave it). A red `lint` gate that predates the migration is a
 > finding for the operator or `/dev:onboard`, not a licence to edit product code.
 
+### 9. One workspace-level Claude task, not per-folder tasks.json
+
+Step 6 says to drop a `kc session` task into each internal sub-project's
+`.vscode/tasks.json`. That backfires once this repo is opened as a *sibling*
+folder inside another repo's workspace: every per-folder task surfaces, so you
+get duplicate "Claude" tasks. Put a single session task in the `.code-workspace`
+file's own `tasks:` block instead — workspace-scoped tasks appear only for their
+own workspace, so a repo loaded as a sibling contributes none. Shape now live in
+`IoTSupport.code-workspace`: one `Claude` task, `kc session --ui --attach`, cwd
+`/work`.
+
+Proposed skill change — replace step 6's per-folder `tasks.json` instruction:
+
+> Put one Claude task in the `*.code-workspace` `tasks:` block (cwd `/work`,
+> `kc session --ui --attach`), not a per-folder `.vscode/tasks.json`. Per-folder
+> tasks duplicate when the repo is opened as a sibling folder in another
+> workspace; a workspace-scoped task shows only for its own workspace. This
+> trades per-folder session scoping for exactly one Claude task per workspace.
+
+### 10. Do not manage toolchain home-overlays from the skill or config.yaml
+
+As of Wave 2 [100], catalog toolchains declare their own `homeOverlays:` and the
+controller merges built-in + repo + per-toolchain lists. The skill must no longer
+tell a repo to add a toolchain's cache dir (`.corepack`) to `homeOverlays:`; this
+migration's `config.yaml` entry for it is removed (commit 8b8ac85). Assume
+toolchains define their own overlays.
+
+Proposed skill change:
+
+> Step 2: delete the "add `.corepack` to `homeOverlays`" known-gap note. A repo's
+> `homeOverlays:` is only for paths *its own* work needs to persist — never a
+> toolchain's cache. This supersedes the frontend/modern-app overlay edits
+> drafted below (corrected inline there).
+
 ---
 
-## Environment facts (candidates for references/catalog.md)
+## references/catalog.md — exact edits needed
 
-- Pod containers share a network namespace — a port bound in a tool sidecar is
-  reachable on `localhost` from the dev container.
-- `cexec` propagates termination: killing the local client stops the sidecar
-  process (measured with a heartbeat file). Long-running processes can be managed
-  through it.
-- Env vars exported in the dev container **are** mirrored through cexec
-  (`COREPACK_HOME` verified); the denylist is narrower than it sounds.
-- The dev container has `python3`, `node`, `bao`, `kubectl` — but **no poetry,
-  no honcho, no gh** (`GH_TOKEN` is set, so use the REST API via curl).
-- `minio` sidecar credentials are `minioadmin`/`minioadmin`. Worth adding to the
-  catalog file — the code defaults in this repo (`admin`/`password`) did not
-  match, and that is a guaranteed first failure.
-- `postgres` accepts `postgres`/`postgres`; database creation is the repo's job
-  (the sidecar starts empty).
-- `opensearch` answers on 9200 and reports green with no setup.
-- Home overlays are separate ZFS datasets mounted over `/home/ubuntu/<dir>`; an
-  overlay **masks** anything the image baked at that path, so overlay-and-bake do
-  not compose.
+**The `frontend` entry is now factually wrong.** DockerImages `f91faba` removed
+the `corepack prepare pnpm@latest --activate` bake, so "corepack-pinned pnpm" no
+longer describes the image. Apply these edits when folding this back.
+
+### Toolchains — replace the `frontend` bullet
+
+Corrected for Wave 2 [100] — the toolchain declares the overlay itself now, the
+repo adds nothing:
+
+> - `frontend` — Node.js 24 with corepack (no pnpm version baked in), plus
+>   Playwright OS dependencies; neither pnpm nor the browser bundles are baked,
+>   both are fetched per project. `COREPACK_HOME=/home/ubuntu/.corepack`, so
+>   corepack installs whatever `packageManager` a repo pins. **The toolchain
+>   declares `homeOverlays: [.corepack]` on its own catalog entry** (the repo
+>   does not add it), and pulls `Always`. 3Gi memory for headless-browser
+>   headroom.
+
+### Toolchains — append to the `modern-app` bullet
+
+> Declares `homeOverlays: [.corepack]` itself, same as `frontend`; the selecting
+> repo adds nothing.
+
+### Services — replace the `postgres` and `minio` bullets
+
+> - `postgres` — PostgreSQL 18, dev-tuned (small buffers, few connections). Port
+>   5432 (tcp). Credentials `postgres`/`postgres`; starts with no application
+>   database, so creating it is the repo's `setup:` job.
+> - `minio` — MinIO, S3-compatible object store. Ports 9000 (API, http) and 9001
+>   (console, http). Root credentials **`minioadmin`/`minioadmin`** — check these
+>   against the app's defaults, a mismatch there is a guaranteed first failure.
+
+### Add a new section at the end
+
+> ## Environment facts
+>
+> Behaviour that is not in the manual and cost time to establish:
+>
+> - Pod containers **share a network namespace** — a port bound inside a tool
+>   sidecar is reachable on `localhost` from the dev container, and vice versa.
+> - `cexec` **propagates termination**: killing the local client stops the
+>   process in the sidecar, so long-running processes can be supervised through
+>   it (verified with a heartbeat file, not assumed).
+> - Env vars exported in the dev container **are** mirrored through `cexec` —
+>   the denylist is narrower than the help text suggests.
+> - The dev container has `python3`, `node`, `bao`, `kubectl` — but **no poetry,
+>   no honcho, no gh**. `GH_TOKEN` is set, so reach GitHub via the REST API with
+>   curl.
+> - Home overlays are separate ZFS datasets mounted over `/home/ubuntu/<dir>`.
+>   An overlay **masks** whatever the image baked at that path, so
+>   overlay-and-bake do not compose — a toolchain wanting persistent cached
+>   content must let the runtime populate it.
 
 ---
 
