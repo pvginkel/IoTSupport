@@ -30,6 +30,39 @@
           "instanceLimit": 999
         },
         "isBackground": true
+      },
+      {
+        "label": "Dev Services",
+        "type": "shell",
+        "command": "scripts/dev.py",
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "icon": { "id": "server-process" },
+        "problemMatcher": [],
+        "presentation": {
+          "panel": "dedicated",
+          "reveal": "always",
+          "focus": true,
+          "showReuseMessage": false
+        },
+        "isBackground": true
+      },
+      {
+        "label": "Build All",
+        "type": "shell",
+        "command": "kc project build",
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "icon": { "id": "build" },
+        "problemMatcher": [],
+        "presentation": {
+          "panel": "dedicated",
+          "reveal": "always",
+          "focus": true,
+          "showReuseMessage": false
+        }
       }
     ]
   }
