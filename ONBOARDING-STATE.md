@@ -39,6 +39,32 @@ KubeCoderConfig):
 
 ---
 
+## Suggestion for the onboard skill: lean on subagents to save context
+
+This run (and the one before it) filled the orchestrator's context to the point
+of forcing a fresh conversation. The skill would survive long migrations better
+if the context-heavy phases were delegated to subagents that return **distilled
+results**, keeping raw file dumps and suite logs out of the main thread:
+
+- **Step 1 inventory + CI archaeology** — a read-only subagent reads every
+  Jenkinsfile, Dockerfile, `.llmbox` compose, `*.code-workspace`, `.env*` and dev
+  script, and returns just the structured inventory (repo set, service sidecars,
+  toolchains, ports, env-var names, docker-build chains). The orchestrator never
+  holds the file bodies.
+- **Step 7 make-it-green** — the biggest sink. Delegate "run
+  `kc project setup|build|test`, and on red return the failing component +
+  root-cause + a fix proposal" to a subagent, so only the verdict lands in the
+  main context, not the 130-line Playwright log (times each iteration). Same for
+  kaniko build attempts and dev-runner smoke checks.
+- Keep in the orchestrator what needs continuity and judgement: the operator
+  interview, config authoring, the commits, and the green / not-green calls.
+
+Feasibility caveat: subagents can't run the operator interview or own the running
+commits, and one that hits a genuinely novel failure still has to escalate — so
+this is "delegate the reading and the log-churn", not "delegate the onboarding".
+
+---
+
 ## Status
 
 Both step-7 blockers from the prior session are cleared by the KubeCoder Wave 2
@@ -332,13 +358,13 @@ All ruff-autofixable. CI never caught them: `run-suite` runs pytest + Playwright
 only, so ruff was never a gate before `kc project lint` existed. Needs a slice,
 or `/dev:onboard` negotiating the `lint:` verb.
 
-## Not verified
+## Verified
 
-Real terminal Ctrl-C against `scripts/dev.py`. It ignores SIGINT by design and
-relies on the terminal delivering it to honcho through the PTY; a scripted signal
-is not equivalent, so this needs a human at a terminal. Services start, log
-correctly, and cexec termination propagation is proven — but the Ctrl-C path
-itself is untested.
+Real terminal Ctrl-C against `scripts/dev.py` — **verified by the operator**
+(2026-07-20): it stops the dev stack cleanly. It ignores SIGINT by design and
+relies on the terminal delivering it to honcho through the PTY, so a scripted
+signal was not equivalent and needed a human at a terminal; that check is now
+done.
 
 ## Left for /dev:onboard (step 9)
 

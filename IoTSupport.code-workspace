@@ -63,6 +63,38 @@
           "focus": true,
           "showReuseMessage": false
         }
+      },
+      {
+        "label": "Test All",
+        "type": "shell",
+        "command": "kc project test",
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "icon": { "id": "beaker" },
+        "problemMatcher": [],
+        "presentation": {
+          "panel": "dedicated",
+          "reveal": "always",
+          "focus": true,
+          "showReuseMessage": false
+        }
+      },
+      {
+        "label": "Lint All",
+        "type": "shell",
+        "command": "kc project lint",
+        "options": {
+          "cwd": "${workspaceFolder}"
+        },
+        "icon": { "id": "checklist" },
+        "problemMatcher": [],
+        "presentation": {
+          "panel": "dedicated",
+          "reveal": "always",
+          "focus": true,
+          "showReuseMessage": false
+        }
       }
     ]
   }
