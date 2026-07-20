@@ -28,13 +28,6 @@ tools:
   - use: modern-app
   - use: kaniko
 
-# The modern-app toolchain sets COREPACK_HOME=/home/ubuntu/.corepack and ships no
-# baked pnpm, so corepack downloads the version pinned in frontend/package.json on
-# first use. A toolchain cannot declare its own overlay yet, so the selecting repo
-# does it — without this, pnpm re-downloads on every pod start.
-homeOverlays:
-  - .corepack
-
 ports:
   - name: frontend
     port: 3100
