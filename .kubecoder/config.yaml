@@ -13,6 +13,8 @@ services:
   - minio
   - opensearch
 
+imageBuilder: true
+
 # Creating a device creates a Keycloak client, so the Playwright suite cannot run
 # without an admin client — 70 of its 130 tests fail with "Keycloak admin API not
 # configured". The non-secret coordinates (base URL, realm, token URL) are written
@@ -26,7 +28,6 @@ secrets:
 # single command needs both toolsets in the same container.
 tools:
   - use: modern-app
-  - use: kaniko
 
 ports:
   - name: frontend
