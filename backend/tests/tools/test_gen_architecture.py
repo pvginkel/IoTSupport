@@ -89,7 +89,13 @@ class TestProviderResolution:
         )
 
     def test_svc_iotsupport_api_workload_discriminator(self, dataset: Any) -> None:
-        """Three specializers -> the iotsupport main workload is selected."""
+        """Three specializers -> the iotsupport main app container is selected.
+
+        Two of the three share ``workload: iotsupport`` -- the app container and
+        the ``iotsupport-setup`` init container that runs DB migrations on the
+        same Deployment -- so dropping sibling workloads is not enough on its
+        own; the ``<stem>-app`` container pass has to break the remaining tie.
+        """
         provider = genarch.resolve_service_provider(dataset, "svc:iotsupport-api")
         assert provider is not None
         assert _hint(provider["id"]) == "app:iot-iotsupport-iotsupport-app"

@@ -196,16 +196,16 @@
       "producer": "helm-charts"
     },
     {
-      "id": "app:iot-iotsupport-setup-iotsupport-setup,c68de0f6-43c2-5d65-bdbd-b7e362219685",
-      "label": "iotsupport-setup/iotsupport-setup (prd)",
-      "summary": "ApplicationComponent container 'iotsupport-setup' of workload 'iotsupport-setup' in release 'iot'.",
+      "id": "app:iot-iotsupport-iotsupport-setup,c68de0f6-43c2-5d65-bdbd-b7e362219685",
+      "label": "iotsupport/iotsupport-setup (prd)",
+      "summary": "ApplicationComponent container 'iotsupport-setup' of workload 'iotsupport' in release 'iot'.",
       "introduced": "2026-01-31",
       "lifecycle": "active",
       "environment": "prd",
       "cluster": "prd",
       "stats": {
         "release": "iot",
-        "workload": "iotsupport-setup",
+        "workload": "iotsupport",
         "container": "iotsupport-setup",
         "image": "registry:5000/iotsupport-app:latest"
       },
@@ -415,8 +415,8 @@
       "type": "Specialization"
     },
     {
-      "id": "rel:iot-iotsupport-setup-iotsupport-setup-spec",
-      "source": "app:iot-iotsupport-setup-iotsupport-setup,c68de0f6-43c2-5d65-bdbd-b7e362219685",
+      "id": "rel:iot-iotsupport-iotsupport-setup-spec",
+      "source": "app:iot-iotsupport-iotsupport-setup,c68de0f6-43c2-5d65-bdbd-b7e362219685",
       "target": "app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7",
       "type": "Specialization"
     },
@@ -457,9 +457,9 @@
       "type": "Serving"
     },
     {
-      "id": "rel:keycloak-prd-keycloak-keycloak-serves-iot-iotsupport-setup-iotsupport-setup-iam",
+      "id": "rel:keycloak-prd-keycloak-keycloak-serves-iot-iotsupport-iotsupport-setup-iam",
       "source": "ss:keycloak-prd-keycloak-keycloak,2bce489f-1256-58ba-85d9-64d7866388c4",
-      "target": "app:iot-iotsupport-setup-iotsupport-setup,c68de0f6-43c2-5d65-bdbd-b7e362219685",
+      "target": "app:iot-iotsupport-iotsupport-setup,c68de0f6-43c2-5d65-bdbd-b7e362219685",
       "type": "Serving"
     },
     {
@@ -487,9 +487,9 @@
       "type": "Serving"
     },
     {
-      "id": "rel:mosquitto-mosquitto-mosquitto-serves-iot-iotsupport-setup-iotsupport-setup-pub-sub-broker",
+      "id": "rel:mosquitto-mosquitto-mosquitto-serves-iot-iotsupport-iotsupport-setup-pub-sub-broker",
       "source": "ss:mosquitto-mosquitto-mosquitto,607459b5-b30f-5210-824e-8f643bedc265",
-      "target": "app:iot-iotsupport-setup-iotsupport-setup,c68de0f6-43c2-5d65-bdbd-b7e362219685",
+      "target": "app:iot-iotsupport-iotsupport-setup,c68de0f6-43c2-5d65-bdbd-b7e362219685",
       "type": "Serving"
     },
     {

@@ -312,9 +312,19 @@ def _discriminate_workload(
 ) -> list[dict[str, Any]]:
     """Pick the main-workload specializer (exclude cronjob/setup instances).
 
-    The discriminator is stats.workload / stats.container equal to the bare
-    svc stem (e.g. svc:iotsupport-api -> workload/container "iotsupport"),
-    NOT environment (all are prd).
+    Narrows in two passes against the bare svc stem (svc:iotsupport-api ->
+    "iotsupport"), never on environment -- all candidates are already prd.
+
+      1. Drop sibling *workloads*: the rotation cronjob runs its own workload
+         (iotsupport-rotation-cronjob) and is not the API provider.
+      2. Drop sibling *containers*: an init container shares its Deployment's
+         workload name, so pass 1 cannot separate iotsupport-setup (DB
+         migrations, exits before the app starts) from iotsupport-app. Within
+         the surviving workload, prefer the `<stem>-app` container.
+
+    Pass 2 exists because the setup step moved from its own Job into an init
+    container on the app Deployment (HelmCharts 5151c14, 2026-06-15); before
+    that it carried a distinct workload and pass 1 alone was enough.
     """
     stem = svc_hint.split(":", 1)[-1]
     # svc:iotsupport-api -> "iotsupport"; svc:calendar-support -> "calendar-support".
@@ -322,9 +332,15 @@ def _discriminate_workload(
     matched = [
         s for s in specializers
         if (s.get("stats") or {}).get("workload") == target
-        or (s.get("stats") or {}).get("container") == f"{target}-app"
-    ]
-    return matched if matched else specializers
+    ] or specializers
+    if len(matched) > 1:
+        main = [
+            s for s in matched
+            if (s.get("stats") or {}).get("container") == f"{target}-app"
+        ]
+        if main:
+            matched = main
+    return matched
 
 
 # --------------------------------------------------------------------------- #
