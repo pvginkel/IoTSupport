@@ -1,9 +1,10 @@
 schemaVersion: "0.1"
-producer: iotsupport-ui
+producer: iotsupport-app
 
 # IoT Support UI — React SPA admin interface for the IoT Support backend.
-# Frontend only; the REST API it consumes is a separate producer (iotsupport-app),
-# and the SSE gateway it streams from is its own producer (ssegateway). This
+# One producer per repo: this monorepo's backend and UI are both `iotsupport-app`,
+# so the REST API this SPA consumes is declared by its sibling artifact under
+# backend/. The SSE gateway it streams from is its own producer (ssegateway). This
 # artifact models the logical, type-level surface: the SoftwareProduct identity,
 # the static web surface it serves to browsers, the browser-mediated serial
 # flashing interface it exposes, and the app's outbound runtime-dependency edges.
@@ -19,7 +20,7 @@ applicationComponents:
     introduced: 2026-01-09
     lifecycle: active
     stereotype: SoftwareProduct
-    sourceRepository: git:pvginkel/IoTSupportUI
+    sourceRepository: git:pvginkel/IoTSupport
     stats:
       image: registry:5000/iotsupport-ui
 

@@ -1,11 +1,12 @@
 // Architecture producer pipeline for the federated Architecture-as-Code model.
-// One job covering both producers in the monorepo:
-//   - backend/  — GENERATED producer: backend/docs/architecture/architecture.yaml is the
+// One job, one producer (`iotsupport-app`) covering the whole monorepo — every
+// artifact below declares it, so they all collect into the same producer directory:
+//   - backend/  — GENERATED: backend/docs/architecture/architecture.yaml is the
 //     hand-authored logical artifact; backend/docs/architecture/deployed-architecture.yaml is
 //     generated here from the production device fleet (it is NOT committed). Needs outbound
 //     HTTPS to architecture.webathome.org (dataset + validation) and to the production IoT
 //     Support API (fleet projection, via the Vault OIDC client credentials below).
-//   - frontend/ — hand-authored producer: frontend/docs/architecture/*.yaml (validation only).
+//   - frontend/ — hand-authored: frontend/docs/architecture/*.yaml (validation only).
 
 library identifier: 'JenkinsPipelineUtils', changelog: false
 
