@@ -8,11 +8,30 @@ repos:
 capabilities:
   github: rw
 
+# All three are verified in use, but not all three by the suites — check before
+# dropping one:
+#   postgres   — the dev stack's database. backend/scripts/init-dev-database.py
+#                creates it and `cli upgrade-db` migrates it, both in setup:, and
+#                /health/readyz reports database.connected. The suites do NOT use
+#                it: pytest and the Playwright harness both force SQLite.
+#   minio      — S3 for firmware and attachments. Hard dependency of the backend
+#                suite: tests/conftest_infrastructure.py probes S3_ENDPOINT_URL in
+#                pytest_configure and aborts the whole run if it is unreachable.
+#                Also a CI validation-pod sidecar.
+#   opensearch — the device log viewer's backing store, via ELASTICSEARCH_URL
+#                (backend/scripts/generate-dev-env.sh points it at localhost:9200).
+#                Used by the dev stack and declared as a CI validation-pod sidecar,
+#                but exercised by NEITHER suite: pytest mocks the HTTP client and
+#                the Playwright specs read an in-memory seeded path. It looks
+#                unused from the tests alone; it is not.
 services:
   - postgres
   - minio
   - opensearch
 
+# backend/Dockerfile and frontend/Dockerfile are CI's (helmCharts.kaniko), and
+# neither is wired into a build: verb. This is still needed so the two
+# scripts/build-image.sh wrappers can build them by hand in-env.
 imageBuilder: true
 
 # Creating a device creates a Keycloak client, so the Playwright suite cannot run
@@ -43,3 +62,21 @@ ports:
 
 setup:
   - kc project setup
+
+preamble:
+  instructions: |
+    Operational hazards specific to this environment:
+
+    - `kc project lint` is RED at HEAD, and was before onboarding. Three ruff
+      findings (app/__init__.py I001 + F811, scripts/arch-validate.py UP015) and
+      106 mypy findings, 82 of them in the vendored app/utils/lvgl/LVGLImage.py,
+      which ruff excludes per-file but mypy has no override for. A red lint here
+      is not evidence your change broke something — compare against HEAD first.
+    - `kc project lint` stops at the first failing statement, so ruff's failure
+      means mypy, vulture and the frontend check did not run at all. Run them
+      individually when you need to know their state.
+    - `kaniko` is a dev-container binary (`kaniko --context <dir> --destination
+      <ref>`), not a `cexec` target. There is no kaniko toolchain sidecar.
+    - `scripts/dev.py` ignores SIGINT and SIGTERM by design and relies on the
+      terminal delivering SIGINT through the pty. `kill` on it orphans the whole
+      process tree and leaves ports 3100-3102 held. Stop it with Ctrl-C.

@@ -1,8 +1,18 @@
 projects:
+  # The repo's own aggregate entry point, `run-suite` (tools/suite_runner), is
+  # deliberately NOT wired as root.test. It runs the backend pytest and frontend
+  # Playwright suites itself, which the two components below already declare, so
+  # wiring it here would make `kc project test` run every suite twice. It belongs
+  # to CI: Jenkins invokes `poetry run run-suite --output-mode full`, and the
+  # command for a by-hand full run is `cexec modern-app poetry run run-suite`.
   root:
     description: >-
       IoTSupport monorepo — orchestration tooling (suite runner, code-health),
       the shared Procfile.dev dev stack, and CI.
+    # Two Jenkins jobs build this repo. IoTSupport/IoTSupport is the main
+    # pipeline (validation Job, both image builds, Helm deploy); AaC/IoTSupport
+    # runs Jenkinsfile.architecture, which regenerates and validates the
+    # architecture artifacts. Only one name fits this key, so it is the main one.
     jenkins: IoTSupport/IoTSupport
     setup: cexec modern-app poetry install --no-interaction
 
@@ -15,7 +25,17 @@ projects:
       - scripts/generate-dev-env.sh
       - cexec modern-app poetry run python scripts/init-dev-database.py
       - cexec modern-app poetry run cli upgrade-db
+    # No build verb: the deployable artifact is backend/Dockerfile, which CI
+    # builds with helmCharts.kaniko("backend/Dockerfile", "backend", ...). It is
+    # not wired here on purpose — an image build in the default sweep would put
+    # minutes into every per-task gate. Build it by hand with
+    # scripts/build-image.sh (kaniko, pushes :dev, never the deployed :latest).
     test: cexec modern-app poetry run pytest
+    # Mirrors the repo's own scripts/check.py minus its pytest step, so this gate
+    # is the convention the repo already documents rather than a hand-rolled one.
+    # `poetry run ruff` deliberately reaches the lockfile's ruff, not the newer
+    # one in the modern-app image, so the gate does not shift when that image is
+    # rebuilt.
     lint:
       - cexec modern-app poetry run ruff check .
       - cexec modern-app poetry run mypy .
@@ -28,6 +48,7 @@ projects:
     setup:
       - cexec modern-app pnpm install --frozen-lockfile --config.confirmModulesPurge=false
       - cexec modern-app pnpm playwright install chromium
+    # `pnpm build` only — frontend/Dockerfile is CI's, same reasoning as backend.
     build: cexec modern-app pnpm build
     test: cexec modern-app pnpm playwright test
     lint: cexec modern-app pnpm check
