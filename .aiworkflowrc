@@ -1,0 +1,17 @@
+# What the dev pipeline reads about this project.
+# Schema: ${CLAUDE_PLUGIN_ROOT}/docs/project-contract.md
+
+spec_repo = "../IoTSupportSpecs"
+design_philosophy = "docs/change-discipline.md"
+
+[test_phase]
+strategy = "docs/slice-test-plan.md"
+
+[doc_phase]
+plan = "docs/slice-doc-plan.md"
+
+[push]
+enabled = true
+
+# No [devlock]: nothing contends over a dev instance — this repo has one
+# deployment, production, and the push that reaches it is what deploys it.
