@@ -71,14 +71,6 @@ Designers drafting plans and developers implementing Playwright work must re-rea
 - UI state reflects camelCase domain models produced by custom hooks.
 - Playwright specs are created or updated in the same change, rely on the documented instrumentation events (no `page.route`/`mockSSE`), and keep `testing/no-route-mocks` green.
 
-## Command Templates
-
-For structured tasks use the command templates under `docs/commands/`:
-- Create product brief: `@docs/commands/create_brief.md`
-- Plan feature: `@docs/commands/plan_feature.md`
-- Review plan: `@docs/commands/review_plan.md`
-- Perform code review: `@docs/commands/code_review.md`
-
 Refer back to this file only as a launchpad; the authoritative content lives in the linked docs.
 
 ## Tips and tricks

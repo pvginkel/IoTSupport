@@ -71,8 +71,6 @@ Write a prompt file for the UX design agent. The prompt should include:
 
 Dispatch the UX design work as a Claude Code subagent via the Task tool. Pass the prompt file (or its contents) as the subagent's instructions and have it write the design document directly to the deliverable path. The subagent reads the referenced files itself — the slice overview, acceptance criteria, the relevant `frontend` source, and the pattern library under `frontend/docs/contribute/ui/` — then produces an actionable, developer-facing UX design.
 
-The repo also ships `tools/ai_workflow/codex_exec.py`, which can drive an external Codex UX skill instead (the prompt's first line activates the skill, and the script writes the response to the deliverable path). It is available but **not** the default; dispatching a Claude Code subagent is the standard path.
-
 ### Step 4: Review the output
 
 Read the generated design document. Verify:

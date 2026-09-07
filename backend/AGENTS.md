@@ -473,17 +473,10 @@ def __init__(self, shutdown_coordinator: ShutdownCoordinatorProtocol, ...):
 - Use `TestShutdownCoordinator` for integration tests (simulates shutdown behavior)
 - Both available in `tests.testing_utils`
 
-## Command Templates
+## Domain Context
 
-The repository includes command templates for specific development workflows:
-
-- When writing a product brief: @docs/commands/create_brief.md
-- When planning a new feature: @docs/commands/plan_feature.md
-- When reviewing a plan: @docs/commands/review_plan.md
-- When doing code review: @docs/commands/code_review.md
-- When planning or implementing a new feature, reference the product brief at @docs/product_brief.md
-
-Use these files when the user asks you to perform the applicable action.
+When planning or implementing a feature, read the product brief at @docs/product_brief.md
+for the domain model it has to fit.
 
 ## Federated architecture model
 
