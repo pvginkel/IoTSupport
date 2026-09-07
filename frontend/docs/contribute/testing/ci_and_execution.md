@@ -4,31 +4,35 @@ This guide covers how Playwright runs locally and in CI, including managed servi
 
 ## Running Locally
 
+`kc project` verbs are run from the repository root (it reads the manifest of
+the directory it runs in); `cexec` mirrors your working directory, so the pnpm
+forms below are run from `frontend/`.
+
 ```bash
 # Install browser dependencies once
-pnpm exec playwright install
+kc project setup frontend
 
 # Default run (headless)
-pnpm playwright test
+kc project test frontend
 
 # Focus on a single file
-pnpm playwright test tests/e2e/types/types-workflow.spec.ts
+cexec modern-app pnpm playwright test tests/e2e/types/types-workflow.spec.ts
 
 # Focus on a single test
-pnpm playwright test -g 'workflow with multiple types'
+cexec modern-app pnpm playwright test -g 'workflow with multiple types'
 
 # Debug mode (headed inspector)
-pnpm playwright test --debug
+cexec modern-app pnpm playwright test --debug
 ```
 
-Linting and type-checking are part of the default build now—run `pnpm check` locally to execute `eslint` (including the `testing/no-route-mocks` rule) and `tsc --noEmit` before pushing changes.
+Linting and type-checking are part of the default build now—run `kc project lint frontend` locally to execute `eslint` (including the `testing/no-route-mocks` rule) and `tsc --noEmit` before pushing changes.
 
 ## Local Run Expectations
 
 Before handing off work (plans or implementation), make sure the tooling that catches regressions has already passed locally:
 
-1. Run `pnpm check` and resolve any lint or type failures.
-2. Re-run every Playwright spec file you edited (`pnpm playwright test tests/...`) plus any suites that exercise shared flows you touched.
+1. Run `kc project lint frontend` and resolve any lint or type failures.
+2. Re-run every Playwright spec file you edited (`cexec modern-app pnpm playwright test tests/...`) plus any suites that exercise shared flows you touched.
 3. Fix flakes or failures immediately—do not defer them to reviewers or CI.
 4. Note the exact commands and pass/fail status in your final summary so handoffs stay auditable.
 
@@ -92,9 +96,9 @@ Service URLs are managed automatically by worker fixtures and should not be over
 
 ## Debugging Tips
 
-- Use `pnpm playwright test --debug` to launch the inspector and step through tests.
+- Use `cexec modern-app pnpm playwright test --debug` to launch the inspector and step through tests.
 - Use the `testEvents` fixture (e.g., `await testEvents.dumpEvents()`) to inspect emitted payloads when debugging locally.
-- Enable log streaming to see real-time service output: `PLAYWRIGHT_GATEWAY_LOG_STREAM=true pnpm playwright test`.
+- Enable log streaming to see real-time service output: `cexec modern-app env PLAYWRIGHT_GATEWAY_LOG_STREAM=true pnpm playwright test`.
 - Service logs are automatically attached to test results as `backend.log`, `gateway.log`, and `frontend.log`.
 - When managed services fail to start, check the attached logs in the HTML report or enable log streaming for real-time output.
 

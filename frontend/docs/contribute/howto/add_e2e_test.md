@@ -40,7 +40,7 @@ Follow this procedure whenever you extend Playwright coverage for a new workflow
 ## 6. Run & Iterate
 
 ```bash
-pnpm playwright test tests/e2e/<feature>/<scenario>.spec.ts
+cexec modern-app pnpm playwright test tests/e2e/<feature>/<scenario>.spec.ts
 ```
 
 - Use `--debug` to inspect flaky selectors or waits.

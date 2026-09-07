@@ -17,7 +17,7 @@ Use this checklist when Playwright runs fail or behave inconsistently.
 
 ## Unexpected `console.error`
 
-- Re-run the spec with `pnpm playwright test -g "<test name>"` to isolate.
+- Re-run the spec with `cexec modern-app pnpm playwright test -g "<test name>"` to isolate.
 - Use `expectConsoleError(page, <pattern>)` if the error is expected (e.g., blocked delete).
 - Inspect frontend console output for stack traces; instrumentation often mirrors the same payload via the `error` test event.
 
@@ -53,7 +53,7 @@ Use this checklist when Playwright runs fail or behave inconsistently.
 
 ## Still Stuck?
 
-- Run `pnpm playwright test --debug` to inspect the DOM in real time.
+- Run `cexec modern-app pnpm playwright test --debug` to inspect the DOM in real time.
 - Capture the buffered events (`await testEvents.dumpEvents()`) and compare against expected sequences in [Test Instrumentation](../architecture/test_instrumentation.md).
 - Cross-check the `playwright.config.ts` settings for timeouts and managed services.
 

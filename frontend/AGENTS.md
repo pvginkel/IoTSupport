@@ -56,7 +56,7 @@ Designers drafting plans and developers implementing Playwright work must re-rea
 
 ## Verification Before Handoff
 
-- Follow `docs/contribute/testing/ci_and_execution.md#local-run-expectations` before delivering a plan or code slice: `pnpm check` must pass, every touched Playwright spec must be re-run and green, and your final message should call out the commands you executed.
+- Follow `docs/contribute/testing/ci_and_execution.md#local-run-expectations` before delivering a plan or code slice: `cexec modern-app pnpm check` must pass, every touched Playwright spec must be re-run and green, and your final message should call out the commands you executed.
 
 ## Readability Comments
 
