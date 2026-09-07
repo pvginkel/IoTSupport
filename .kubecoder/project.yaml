@@ -7,8 +7,8 @@ projects:
   # command for a by-hand full run is `cexec modern-app poetry run run-suite`.
   root:
     description: >-
-      IoTSupport monorepo — orchestration tooling (suite runner, code-health),
-      the shared Procfile.dev dev stack, and CI.
+      IoTSupport monorepo — orchestration tooling (the suite runner), the
+      shared Procfile.dev dev stack, and CI.
     # Two Jenkins jobs build this repo. IoTSupport/IoTSupport is the main
     # pipeline (validation Job, both image builds, Helm deploy); AaC/IoTSupport
     # runs Jenkinsfile.architecture, which regenerates and validates the

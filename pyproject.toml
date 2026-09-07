@@ -7,12 +7,10 @@ packages = [{include = "tools"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-pathspec = "^1"
 honcho = "^2"
 psutil = "^5"
 
 [tool.poetry.scripts]
-code-health = "tools.code_health.__main__:main"
 run-suite = "tools.suite_runner.local:cli"
 
 [tool.poetry.group.dev.dependencies]
