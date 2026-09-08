@@ -43,30 +43,13 @@ that is a decision, not a gap. `backend` declares no `build:` either: its artifa
 Build and test must be green. `kc project build` is also what preflight demands, so a red build
 here means the slice never should have reached this phase.
 
-**`kc project lint` is known red, and was before the pipeline.** Two of its four statements fail on
-code no slice has touched:
-
-- **ruff — 3 errors.** `app/__init__.py` I001 + F811 (a literally duplicated `ProxyFix` import),
-  `scripts/arch-validate.py:55` UP015. All autofixable.
-- **mypy — 106 errors in 8 files.** 82 are in `app/utils/lvgl/LVGLImage.py`, vendored upstream code
-  that `pyproject.toml` already gives a ruff per-file-ignore and no mypy override.
-- vulture and the frontend's `pnpm check` are green.
-
-There is no tracker card for this yet; it was reported in the onboarding close-out. Two
-consequences for this phase. First, **a red lint is not by itself evidence the slice broke
-something** — compare the counts against HEAD before calling it a regression, and do check they
-have not *grown*. Second, **`kc project lint` stops at the first failing statement**, so ruff's
-failure means mypy, vulture and the frontend check never ran. When you need their real state, run
-the four individually from their own directories. Once the pre-existing findings are cleared,
-delete this section.
-
-**One Playwright failure is a known, diagnosed defect — not a flake.**
-`devices-crud.spec.ts › Edit Device › edits an existing device` fails intermittently because the
-`devices` fixture teardown POSTs `/api/testing/keycloak-cleanup` with a realm-wide pattern
-(`iotdevice-playwright_.*`) while two workers share one Keycloak realm, so one worker's teardown
-deletes the other's in-flight device clients and the victim's next save returns 502. It is red in
-CI (build #133). Seeing it is a finding to report, never a pass; seeing any *other* failure is a
-regression from this slice.
+No gate in this repo is known red, and the suite has no known flake: a failure in `kc project
+build`, `test` or `lint` is this slice's, and reporting it as pre-existing needs evidence from
+HEAD, not an assumption. One mechanical caveat: **`kc project lint` stops at the first failing
+statement**, so a red lint tells you nothing about the statements behind it — read it by running
+the statements individually (`cexec modern-app poetry run ruff check .`, `... mypy .`, `...
+vulture app/ vulture_whitelist.py --min-confidence 80` from `backend/`, `... pnpm check` from
+`frontend/`).
 
 ## 2. The live check: boot the dev stack
 

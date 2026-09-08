@@ -30,8 +30,8 @@ The full CI suite is `cexec modern-app poetry run run-suite`; Jenkins runs the s
 `--output-mode full`. `scripts/dev.py` starts all three dev services (frontend :3100, backend
 :3101, SSE gateway :3102) — stop it with `^C`, never `kill`.
 
-`kc project lint` is **known red** at HEAD on pre-existing backend findings, and it stops at the
-first failing statement. Compare against HEAD before reading a red lint as your regression.
+`kc project lint` is green at HEAD. It stops at the first failing statement, so a red lint hides
+the state of every statement behind it — run them individually to read it.
 
 ## Design philosophy
 

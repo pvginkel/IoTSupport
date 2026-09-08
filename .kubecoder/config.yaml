@@ -67,14 +67,10 @@ preamble:
   instructions: |
     Operational hazards specific to this environment:
 
-    - `kc project lint` is RED at HEAD, and was before onboarding. Three ruff
-      findings (app/__init__.py I001 + F811, scripts/arch-validate.py UP015) and
-      106 mypy findings, 82 of them in the vendored app/utils/lvgl/LVGLImage.py,
-      which ruff excludes per-file but mypy has no override for. A red lint here
-      is not evidence your change broke something — compare against HEAD first.
-    - `kc project lint` stops at the first failing statement, so ruff's failure
-      means mypy, vulture and the frontend check did not run at all. Run them
-      individually when you need to know their state.
+    - `kc project lint` is green at HEAD, so a red lint is your change's.
+    - `kc project lint` stops at the first failing statement, so a failure hides
+      the state of every statement behind it. Run them individually when you
+      need to know what they say.
     - `kaniko` is a dev-container binary (`kaniko --context <dir> --destination
       <ref>`), not a `cexec` target. There is no kaniko toolchain sidecar.
     - `scripts/dev.py` ignores SIGINT and SIGTERM by design and relies on the
