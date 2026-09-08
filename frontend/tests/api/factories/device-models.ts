@@ -22,23 +22,26 @@ interface CreatedDeviceModel {
 
 export class DeviceModelsFactory {
   private client: ApiClient;
+  private codePrefix: string;
 
-  constructor(baseUrl: string, page: Page) {
+  constructor(baseUrl: string, page: Page, codePrefix = 'playwright') {
     // Use Playwright's request context for cookie sharing with the browser
     this.client = createApiClient({
       baseUrl,
       fetch: createPlaywrightFetch(page.request),
     });
+    this.codePrefix = codePrefix;
   }
 
   /**
    * Generate a random model code for testing
-   * Format: lowercase alphanumeric with underscores (e.g., "playwright_abc123def456")
+   * Format: lowercase alphanumeric with underscores (e.g., "playwright_w0_abc123def456")
    * Uses 16 characters from ULID to include both timestamp and random parts,
    * ensuring uniqueness across parallel test workers.
-   * Uses playwright_ prefix so Keycloak cleanup can target only test clients.
+   * The prefix comes from the fixture and is per worker, so Keycloak cleanup can
+   * target only the calling worker's test clients.
    */
-  randomModelCode(prefix = 'playwright'): string {
+  randomModelCode(prefix = this.codePrefix): string {
     const suffix = ulid().toLowerCase().slice(0, 16);
     return `${prefix}_${suffix}`;
   }

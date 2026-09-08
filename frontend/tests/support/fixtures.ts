@@ -17,11 +17,25 @@ type AppFixtures = {
 };
 
 /**
- * Call the Keycloak cleanup endpoint to delete Playwright test device clients.
- * Uses a pattern to match only clients created by Playwright tests (iotdevice-playwright_*).
+ * The model-code prefix this worker uses. Workers run fully parallel against one
+ * shared Keycloak realm, so the prefix carries the worker index: it is what lets
+ * teardown delete only the clients this worker created and leave another worker's
+ * in-flight device clients alone. Must stay [a-z0-9_]+ (the model code is validated
+ * by backend/app/utils/device_auth.py), and randomModelCode's trailing underscore
+ * keeps the w1 prefix from matching w10's clients.
+ */
+function workerCodePrefix(workerIndex: number): string {
+  return `playwright_w${workerIndex}`;
+}
+
+/**
+ * Call the Keycloak cleanup endpoint to delete this worker's test device clients.
+ * A device's client id is `iotdevice-<model code>-<key>`, so anchoring the pattern
+ * on the worker's own code prefix (iotdevice-playwright_w<N>_*) scopes the delete to
+ * the calling worker. The backend matches with re.match, so the pattern is anchored.
  * Has a 30s timeout to prevent hanging during teardown.
  */
-async function cleanupKeycloakClients(baseUrl: string): Promise<void> {
+async function cleanupKeycloakClients(baseUrl: string, codePrefix: string): Promise<void> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30_000);
 
@@ -29,7 +43,7 @@ async function cleanupKeycloakClients(baseUrl: string): Promise<void> {
     const response = await fetch(`${baseUrl}/api/testing/keycloak-cleanup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pattern: 'iotdevice-playwright_.*' }),
+      body: JSON.stringify({ pattern: `^iotdevice-${codePrefix}_` }),
       signal: controller.signal,
     });
     if (response.ok) {
@@ -46,19 +60,26 @@ async function cleanupKeycloakClients(baseUrl: string): Promise<void> {
 }
 
 export const test = infrastructureFixtures.extend<AppFixtures>({
-  devices: async ({ frontendUrl, page, auth }, use) => {
+  devices: async ({ frontendUrl, page, auth }, use, testInfo) => {
     await auth.createSession({ name: 'Test User', roles: ['editor'] });
-    const factory = new DevicesFactory(frontendUrl, page);
+    const codePrefix = workerCodePrefix(testInfo.workerIndex);
+    const factory = new DevicesFactory(frontendUrl, page, codePrefix);
     try {
       await use(factory);
     } finally {
-      await cleanupKeycloakClients(frontendUrl);
+      await cleanupKeycloakClients(frontendUrl, codePrefix);
     }
   },
 
-  deviceModels: async ({ frontendUrl, page, auth }, use) => {
+  // Same prefix as `devices`: a spec that creates its model here and its device
+  // there must still produce a client that this worker's cleanup matches.
+  deviceModels: async ({ frontendUrl, page, auth }, use, testInfo) => {
     await auth.createSession({ name: 'Test User', roles: ['editor'] });
-    const factory = new DeviceModelsFactory(frontendUrl, page);
+    const factory = new DeviceModelsFactory(
+      frontendUrl,
+      page,
+      workerCodePrefix(testInfo.workerIndex)
+    );
     await use(factory);
   },
 });

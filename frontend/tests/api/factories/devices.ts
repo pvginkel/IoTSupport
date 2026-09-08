@@ -51,13 +51,13 @@ export class DevicesFactory {
   private client: ApiClient;
   private deviceModelsFactory: DeviceModelsFactory;
 
-  constructor(baseUrl: string, page: Page) {
+  constructor(baseUrl: string, page: Page, codePrefix = 'playwright') {
     // Use Playwright's request context for cookie sharing with the browser
     this.client = createApiClient({
       baseUrl,
       fetch: createPlaywrightFetch(page.request),
     });
-    this.deviceModelsFactory = new DeviceModelsFactory(baseUrl, page);
+    this.deviceModelsFactory = new DeviceModelsFactory(baseUrl, page, codePrefix);
   }
 
   /**
