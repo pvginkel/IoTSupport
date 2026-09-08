@@ -52,7 +52,7 @@ def colors():
 def read_body(path):
     if path == "-":
         return sys.stdin.read()
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return f.read()
 
 
