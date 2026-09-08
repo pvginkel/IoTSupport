@@ -7,12 +7,17 @@ Keycloak admin, device provisioning, rotation, coredumps, and firmware storage.
 
 import base64
 import hashlib
+import tempfile
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# CAS thumbnails are a local cache: every file can be regenerated from the S3
+# original, so the default lives in the OS temp dir and needs no volume.
+_DEFAULT_THUMBNAIL_STORAGE_PATH = Path(tempfile.gettempdir()) / "iotsupport-thumbnails"
 
 
 def _derive_fernet_key(secret_key: str) -> str:
@@ -41,6 +46,9 @@ class AppEnvironment(BaseSettings):
     # Legacy filesystem paths (used only by CLI migrate-to-s3 command)
     ASSETS_DIR: Path | None = Field(default=None)
     COREDUMPS_DIR: Path | None = Field(default=None)
+
+    # Local cache directory for CAS thumbnails
+    THUMBNAIL_STORAGE_PATH: Path = Field(default=_DEFAULT_THUMBNAIL_STORAGE_PATH)
 
     # MQTT settings
     MQTT_URL: str | None = Field(default=None)
@@ -99,6 +107,9 @@ class AppSettings(BaseModel):
     # Legacy filesystem paths (used only by CLI migrate-to-s3 command)
     assets_dir: Path | None = None
     coredumps_dir: Path | None = None
+
+    # Local cache directory for CAS thumbnails (CasImageService)
+    thumbnail_storage_path: Path = _DEFAULT_THUMBNAIL_STORAGE_PATH
 
     # MQTT settings
     mqtt_url: str | None = None
@@ -175,6 +186,7 @@ class AppSettings(BaseModel):
         return cls(
             assets_dir=env.ASSETS_DIR,
             coredumps_dir=env.COREDUMPS_DIR,
+            thumbnail_storage_path=env.THUMBNAIL_STORAGE_PATH,
             parse_sidecar_xfer_dir=env.PARSE_SIDECAR_XFER_DIR,
             parse_sidecar_url=strip_slashes(env.PARSE_SIDECAR_URL),
             max_coredumps=env.MAX_COREDUMPS,

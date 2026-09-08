@@ -2,6 +2,7 @@
 
 import logging
 import sys
+from typing import Any
 
 from flask import g
 from flask_cors import CORS
@@ -136,7 +137,7 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
     # Register database health checks with HealthService
     from app import database as _database_module
 
-    def _check_db_readiness() -> dict:
+    def _check_db_readiness() -> dict[str, Any]:
         # Look up functions via module to allow test patching
         connected = _database_module.check_db_connection()
         if not connected:
@@ -153,7 +154,7 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
     # Register SSE Gateway readiness check with HealthService
     import requests as _requests_module
 
-    def _check_sse_gateway_readiness() -> dict:
+    def _check_sse_gateway_readiness() -> dict[str, Any]:
         try:
             resp = _requests_module.get(
                 f"{settings.sse_gateway_url}/readyz", timeout=2.0
@@ -276,7 +277,8 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
         # for STARTUP notifications will be invoked here.
         container.lifecycle_coordinator().fire_startup()
 
-    app.wsgi_app = ProxyFix(
+    # Flask's own documented pattern; mypy flags assigning over the wsgi_app method.
+    app.wsgi_app = ProxyFix(  # type: ignore[method-assign]
         app.wsgi_app,
         x_proto=1,
         x_host=1,

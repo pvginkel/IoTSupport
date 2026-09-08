@@ -27,7 +27,7 @@ import urllib.request
 DEFAULT_ENDPOINT = "https://architecture.webathome.org/api/validate"
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="arch-validate",
         description="Submit architecture artifact(s) to the validation service.",
@@ -42,25 +42,25 @@ def parse_args():
     return p.parse_args()
 
 
-def colors():
+def colors() -> dict[str, str]:
     if sys.stderr.isatty():
         return {"red": "\033[31m", "green": "\033[32m",
                 "dim": "\033[2m", "reset": "\033[0m"}
     return {"red": "", "green": "", "dim": "", "reset": ""}
 
 
-def read_body(path):
+def read_body(path: str) -> str:
     if path == "-":
         return sys.stdin.read()
     with open(path, encoding="utf-8") as f:
         return f.read()
 
 
-def display_name(path):
+def display_name(path: str) -> str:
     return "<stdin>" if path == "-" else path
 
 
-def post(endpoint, body):
+def post(endpoint: str, body: str) -> tuple[int, str]:
     """Return (http_code, response_text). Raises urllib.error.URLError on transport failure."""
     req = urllib.request.Request(
         endpoint,
@@ -75,7 +75,7 @@ def post(endpoint, body):
         return e.code, e.read().decode("utf-8", errors="replace")
 
 
-def print_human(name, response, quiet, c):
+def print_human(name: str, response: str, quiet: bool, c: dict[str, str]) -> bool:
     try:
         data = json.loads(response)
     except json.JSONDecodeError:
@@ -106,7 +106,7 @@ def print_human(name, response, quiet, c):
     return False
 
 
-def print_server_error(name, http_code, response, c):
+def print_server_error(name: str, http_code: int, response: str, c: dict[str, str]) -> None:
     sys.stderr.write(f"{c['red']}✗{c['reset']} {name} {c['dim']}(HTTP {http_code}){c['reset']}\n")
     if not response:
         sys.stderr.write("  server returned no body\n")
@@ -120,7 +120,7 @@ def print_server_error(name, http_code, response, c):
             sys.stderr.write(f"  {line}\n")
 
 
-def main():
+def main() -> None:
     args = parse_args()
     endpoint = os.environ.get("ARCHITECTURE_VALIDATE_URL", DEFAULT_ENDPOINT)
     c = colors()

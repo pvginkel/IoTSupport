@@ -120,6 +120,11 @@ ignore_errors = true
 module = "app.models.*"
 disable_error_code = ["attr-defined"]
 
+# Vendored verbatim from https://github.com/lvgl/lvgl (scripts/LVGLImage.py).
+[[tool.mypy.overrides]]
+module = "app.utils.lvgl.LVGLImage"
+ignore_errors = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

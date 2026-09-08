@@ -19,7 +19,7 @@ import sys
 
 import click
 import httpx
-from flask import Blueprint, Flask
+from flask import Blueprint, Flask, Response
 
 from app.services.container import ServiceContainer
 
@@ -90,7 +90,7 @@ def register_error_handlers(app: Flask) -> None:
     )
 
     @app.errorhandler(RecordExistsException)
-    def handle_record_exists(error: RecordExistsException) -> tuple:
+    def handle_record_exists(error: RecordExistsException) -> tuple[Response, int]:
         _mark_request_failed()
         logger.warning("Record exists: %s", error.message)
         return build_error_response(
@@ -101,7 +101,7 @@ def register_error_handlers(app: Flask) -> None:
         )
 
     @app.errorhandler(ExternalServiceException)
-    def handle_external_service(error: ExternalServiceException) -> tuple:
+    def handle_external_service(error: ExternalServiceException) -> tuple[Response, int]:
         _mark_request_failed()
         logger.warning("External service error: %s", error.message)
         return build_error_response(
@@ -112,7 +112,7 @@ def register_error_handlers(app: Flask) -> None:
         )
 
     @app.errorhandler(ServiceUnavailableException)
-    def handle_service_unavailable(error: ServiceUnavailableException) -> tuple:
+    def handle_service_unavailable(error: ServiceUnavailableException) -> tuple[Response, int]:
         _mark_request_failed()
         logger.warning("Service unavailable: %s", error.message)
         return build_error_response(
@@ -123,7 +123,7 @@ def register_error_handlers(app: Flask) -> None:
         )
 
     @app.errorhandler(ProcessingException)
-    def handle_processing(error: ProcessingException) -> tuple:
+    def handle_processing(error: ProcessingException) -> tuple[Response, int]:
         _mark_request_failed()
         logger.warning("Processing error: %s", error.message)
         return build_error_response(
