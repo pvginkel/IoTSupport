@@ -47,7 +47,7 @@ edge — that is the feature, not defensiveness. Trust what the system has alrea
 
 The one place errors are deliberately swallowed is the second half of the S3 delete rule: the row
 is committed first, then the object is deleted best-effort, because an orphaned blob is harmless
-and a dangling reference is not. See `backend/AGENTS.md` for both golden rules.
+and a dangling reference is not. See `backend/CLAUDE.md` for both golden rules.
 
 ## Testability is critical
 

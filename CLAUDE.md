@@ -44,11 +44,10 @@ not broken freely. `docs/change-discipline.md` is the full rule set and the revi
 ## Key documentation
 
 - `docs/` — the cross-cutting docs, including the pipeline's own procedure docs.
-- `backend/AGENTS.md` — backend architecture, layering, DI, testing, and S3/storage conventions
-  (`backend/CLAUDE.md` is a symlink onto it; edit the `AGENTS.md`).
+- `backend/CLAUDE.md` — backend architecture, layering, DI, testing, and S3/storage conventions.
 - `backend/docs/product_brief.md` — the domain model: devices, models, credential rotation.
 - `backend/docs/decisions/` — the ADRs.
-- `frontend/AGENTS.md` — frontend launchpad; the detailed conventions live under
+- `frontend/CLAUDE.md` — frontend launchpad; the detailed conventions live under
   `frontend/docs/contribute/`, hub at `index.md`.
 - `frontend/docs/product_brief.md` — frontend product context and workflows.
 

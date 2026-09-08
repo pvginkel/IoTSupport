@@ -43,10 +43,9 @@ stale** — they still describe the filesystem-config-file era (no database, por
 That is a reported finding, not this phase's project. Fix what your slice's diff actually
 contradicts; do not open a wholesale rewrite from inside a doc phase.
 
-### 4. `CLAUDE.md` and `AGENTS.md`
+### 4. The three `CLAUDE.md` files
 
-The root `CLAUDE.md`, and `backend/AGENTS.md` / `frontend/AGENTS.md` (each with `CLAUDE.md`
-symlinked onto it — edit the `AGENTS.md`, never the link). Kept to about one screen and holding
+The root `CLAUDE.md`, `backend/CLAUDE.md` and `frontend/CLAUDE.md`. Kept to about one screen and holding
 each fact once. A slice rarely touches them; when a new standing rule genuinely belongs there,
 something else moves out to a `docs/` topic doc rather than the file growing. Nothing the pipeline
 reads by machine goes in them — that is `.aiworkflowrc`.

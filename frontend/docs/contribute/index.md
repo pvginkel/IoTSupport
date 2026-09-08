@@ -1,6 +1,6 @@
 # Contributor Documentation
 
-Welcome! This section is the canonical reference for engineers, QA, and technical writers contributing to the Electronics Inventory frontend. It consolidates the previously scattered notes in `tests/`, `AGENTS.md`, and the Playwright epics into a single home for contributor workflows.
+Welcome! This section is the canonical reference for engineers, QA, and technical writers contributing to the Electronics Inventory frontend. It consolidates the previously scattered notes in `tests/`, `CLAUDE.md`, and the Playwright epics into a single home for contributor workflows.
 
 ## Audience & Scope
 
