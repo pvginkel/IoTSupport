@@ -124,7 +124,7 @@ def download_coredump(
         # Download from S3 as a BytesIO stream
         stream = coredump_service.get_coredump_stream(device.key, coredump.id)
 
-        return send_file(  # type: ignore[call-arg]
+        return send_file(
             stream,
             mimetype="application/octet-stream",
             as_attachment=True,

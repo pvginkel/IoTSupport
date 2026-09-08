@@ -217,7 +217,7 @@ def get_firmware(
         stream = firmware_service.get_firmware_stream(model_code, firmware_version)
 
         # Use send_file with BytesIO stream
-        return send_file(  # type: ignore[call-arg]
+        return send_file(
             stream,
             mimetype="application/octet-stream",
             as_attachment=True,

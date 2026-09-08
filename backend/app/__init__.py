@@ -224,7 +224,7 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
     annotate_openapi_security(app)
 
     @app.teardown_request
-    def close_session(exc: Exception | None) -> None:
+    def close_session(exc: BaseException | None) -> None:
         """Close the database session after each request.
 
         Roll back the session when either (a) Flask passes an unhandled

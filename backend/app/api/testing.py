@@ -8,10 +8,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from dependency_injector.wiring import Provide, inject
-from flask import Blueprint, current_app, request
+from flask import Blueprint, request
 from spectree import Response as SpectreeResponse
 
 from app.api.testing_guard import reject_if_not_testing
+from app.app import current_container
 from app.models.coredump import CoreDump, ParseStatus
 from app.schemas.coredump import CoredumpDetailSchema
 from app.schemas.testing import (
@@ -110,7 +111,7 @@ def create_test_coredump(
         parsed_at=parsed_at,
     )
 
-    session = current_app.container.db_session()
+    session = current_container().db_session()
     session.add(coredump)
     session.flush()
 

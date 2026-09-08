@@ -21,6 +21,7 @@ import click
 import httpx
 from flask import Blueprint, Flask, Response
 
+from app.app import App
 from app.services.container import ServiceContainer
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ def create_container() -> ServiceContainer:
     return ServiceContainer()
 
 
-def register_blueprints(api_bp: Blueprint, app: Flask) -> None:
+def register_blueprints(api_bp: Blueprint, app: App) -> None:
     """Register all app-specific blueprints on api_bp (under /api prefix).
 
     Flask does not allow modifying a blueprint after its first registration,
@@ -39,7 +40,7 @@ def register_blueprints(api_bp: Blueprint, app: Flask) -> None:
     repeated create_app() calls in test suites where api_bp is a module-level
     singleton.
     """
-    if not api_bp._got_registered_once:  # type: ignore[attr-defined]
+    if not api_bp._got_registered_once:
         from app.api.coredumps import coredumps_bp
         from app.api.device_log_stream import device_log_stream_bp
         from app.api.device_models import device_models_bp
@@ -50,15 +51,15 @@ def register_blueprints(api_bp: Blueprint, app: Flask) -> None:
         from app.api.rotation import rotation_bp
         from app.api.testing import testing_bp
 
-        api_bp.register_blueprint(coredumps_bp)  # type: ignore[attr-defined]
-        api_bp.register_blueprint(device_log_stream_bp)  # type: ignore[attr-defined]
-        api_bp.register_blueprint(device_models_bp)  # type: ignore[attr-defined]
-        api_bp.register_blueprint(devices_bp)  # type: ignore[attr-defined]
-        api_bp.register_blueprint(images_bp)  # type: ignore[attr-defined]
-        api_bp.register_blueprint(iot_bp)  # type: ignore[attr-defined]
-        api_bp.register_blueprint(pipeline_bp)  # type: ignore[attr-defined]
-        api_bp.register_blueprint(rotation_bp)  # type: ignore[attr-defined]
-        api_bp.register_blueprint(testing_bp)  # type: ignore[attr-defined]
+        api_bp.register_blueprint(coredumps_bp)
+        api_bp.register_blueprint(device_log_stream_bp)
+        api_bp.register_blueprint(device_models_bp)
+        api_bp.register_blueprint(devices_bp)
+        api_bp.register_blueprint(images_bp)
+        api_bp.register_blueprint(iot_bp)
+        api_bp.register_blueprint(pipeline_bp)
+        api_bp.register_blueprint(rotation_bp)
+        api_bp.register_blueprint(testing_bp)
 
     # CoredumpService needs a container reference for background-thread DB access.
     # This cannot be done via constructor injection because providers.Self()
@@ -134,7 +135,7 @@ def register_error_handlers(app: Flask) -> None:
         )
 
 
-def _notify_rotation_nudge(app: Flask) -> None:
+def _notify_rotation_nudge(app: App) -> None:
     """POST to the web process's internal endpoint to trigger a rotation nudge broadcast.
 
     Best-effort: failures are logged but do not fail the rotation job.
@@ -333,7 +334,7 @@ def post_migration_hook(app: Flask) -> None:
     pass
 
 
-def load_test_data_hook(app: Flask) -> None:
+def load_test_data_hook(app: App) -> None:
     """Load test fixtures after database recreation."""
     print("Loading fixed test dataset...")
     test_data_service = app.container.test_data_service()
