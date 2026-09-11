@@ -106,6 +106,8 @@ def test_app_settings(tmp_path: Path) -> AppSettings:
         elasticsearch_username=None,
         elasticsearch_password=None,
         elasticsearch_index_pattern="logstash-http-*",
+        # CAS thumbnail cache
+        thumbnail_storage_path=tmp_path / "thumbnails",
         # Fernet key (derived from "test-secret-key" using SHA256 + base64)
         fernet_key="LOrG82NjxiRqZMyoBc1DynoBsU6y_MUyzuw_YPL33xw=",
     )
@@ -114,6 +116,25 @@ def test_app_settings(tmp_path: Path) -> AppSettings:
 # ---------------------------------------------------------------------------
 # IoT domain fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def make_cas_image(container: ServiceContainer) -> Any:
+    """Factory fixture that uploads a PNG to CAS storage and returns its hash."""
+    import io
+
+    from PIL import Image
+
+    def _make(width: int, height: int, color: tuple[int, int, int] = (200, 30, 60)) -> str:
+        buffer = io.BytesIO()
+        Image.new("RGBA", (width, height), color=(*color, 255)).save(buffer, format="PNG")
+        content = buffer.getvalue()
+
+        s3_service = container.s3_service()
+        s3_service.upload_file(io.BytesIO(content), s3_service.generate_cas_key(content), "image/png")
+        return s3_service.compute_hash(content)
+
+    return _make
 
 
 @pytest.fixture

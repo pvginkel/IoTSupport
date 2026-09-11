@@ -142,6 +142,7 @@ Management endpoints for administrators:
 | `ROTATION_TIMEOUT_SECONDS` | Rotation timeout | `300` |
 | `BASEURL` | Backend base URL for provisioning | `https://iot.local` |
 | `ASSETS_DIR` | Firmware storage directory | `/data/firmware` |
+| `THUMBNAIL_STORAGE_PATH` | CAS thumbnail directory — a local, regenerable cache (defaults to `<tempdir>/iotsupport-thumbnails`) | `/tmp/iotsupport-thumbnails` |
 
 ### Deployment Context
 
