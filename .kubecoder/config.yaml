@@ -60,9 +60,6 @@ ports:
     port: 3102
     type: http
 
-setup:
-  - kc project setup
-
 preamble:
   instructions: |
     Operational hazards specific to this environment:
