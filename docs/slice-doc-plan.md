@@ -57,9 +57,7 @@ reads by machine goes in them — that is `.aiworkflowrc`.
   when, not a description of the system now. Leave them, including their references to commands
   that no longer exist.
 - **`docs/architecture/architecture.yaml`** in either component — the federated Architecture-as-Code
-  artifact, owned by the operator's `update-architecture` agent and validated by
-  `Jenkinsfile.architecture`. Nudge in the close-out when a slice changed something structural; do
-  not hand-edit it here.
+  artifact, validated by `Jenkinsfile.architecture`; do not hand-edit it here.
 
 ## What "up to date" means here
 
