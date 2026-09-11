@@ -1,0 +1,18 @@
+sources:
+  - backend/docs/architecture
+  - frontend/docs/architecture
+  - backend/tools/gen-architecture.py
+instructions: >
+  Producer id iotsupport-app, two subprojects. The hand-authored artifacts are
+  backend/docs/architecture/architecture.yaml and frontend/docs/architecture/architecture.yaml;
+  edit those. backend/docs/architecture/firmware-products.yaml maps firmware codes to
+  product UUIDs and is an input to the generator below.
+
+  backend/tools/gen-architecture.py is a CI-only generator (the Generate stage of
+  Jenkinsfile.architecture, job AaC/IoTSupport): it fetches the published dataset,
+  reads the live ESP32 device fleet from the prd API with a client-credentials
+  token, and emits a second, generated artifact of device:/ss: elements with
+  deterministic uuid5 ids. It cannot run outside CI and its output is not in git;
+  do not try to produce it. Change the generator only when the shape of what it
+  emits must change, never to add data; add devices and firmware through the
+  application, not the model.
