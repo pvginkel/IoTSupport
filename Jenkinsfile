@@ -88,9 +88,9 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                                   - name: S3_ENDPOINT_URL
                                                     value: http://localhost:9000
                                                   - name: S3_ACCESS_KEY_ID
-                                                    value: minioadmin
+                                                    value: s3storage
                                                   - name: S3_SECRET_ACCESS_KEY
-                                                    value: minioadmin
+                                                    value: s3storage
                                                   - name: S3_BUCKET_NAME
                                                     value: "iot-support-validation"
                                                   - name: KEYCLOAK_BASE_URL
@@ -105,15 +105,14 @@ podTemplate(inheritFrom: 'jenkins-agent kaniko', containers: [
                                                     value: "${KEYCLOAK_TEST_OIDC_TOKEN_URL}"
                                                   - name: ELASTICSEARCH_URL
                                                     value: http://localhost:9200
-                                            - name: minio
-                                              image: minio/minio
-                                              command: ["minio"]
-                                              args: ["server", "/data"]
+                                            - name: s3storage
+                                              image: rustfs/rustfs:latest
+                                              imagePullPolicy: Always
                                               env:
-                                                  - name: MINIO_ROOT_USER
-                                                    value: minioadmin
-                                                  - name: MINIO_ROOT_PASSWORD
-                                                    value: minioadmin
+                                                  - name: RUSTFS_ACCESS_KEY
+                                                    value: s3storage
+                                                  - name: RUSTFS_SECRET_KEY
+                                                    value: s3storage
                                             - name: opensearch
                                               image: opensearchproject/opensearch:2
                                               resources:

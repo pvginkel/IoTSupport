@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Block until the validation pod's MinIO and OpenSearch sidecars are ready.
+"""Block until the validation pod's S3 (RustFS) and OpenSearch sidecars are ready.
 
 The sidecars start in parallel with the validation container, so the backend
 test suite -- which runs first -- can race ahead of them and trip the backend's
-storage preflight. We also create the S3 bucket here: a fresh MinIO starts
+storage preflight. We also create the S3 bucket here: a fresh RustFS starts
 empty, whereas the Ceph backend it replaced had the bucket pre-provisioned.
 
 Connection settings are read from the same environment the backend uses, so
@@ -20,12 +20,12 @@ import boto3
 from botocore.config import Config
 
 # Overall budget for both services to come up. OpenSearch's JVM warm-up on a
-# memory-capped container is the slow part; MinIO is ready in a second or two.
+# memory-capped container is the slow part; RustFS is ready in a second or two.
 DEADLINE = time.time() + 180
 
 
-def wait_for_minio() -> None:
-    """Poll MinIO until it answers, then ensure the test bucket exists."""
+def wait_for_s3() -> None:
+    """Poll the S3 sidecar until it answers, then ensure the test bucket exists."""
     s3 = boto3.client(
         "s3",
         endpoint_url=os.environ["S3_ENDPOINT_URL"],
@@ -41,7 +41,7 @@ def wait_for_minio() -> None:
             break
         except Exception as exc:  # any connection error just means "not up yet"
             if time.time() > DEADLINE:
-                sys.exit(f"MinIO not reachable at {os.environ['S3_ENDPOINT_URL']}: {exc}")
+                sys.exit(f"S3 storage not reachable at {os.environ['S3_ENDPOINT_URL']}: {exc}")
             time.sleep(2)
 
     bucket = os.environ["S3_BUCKET_NAME"]
@@ -77,6 +77,6 @@ def wait_for_opensearch() -> None:
 
 
 if __name__ == "__main__":
-    wait_for_minio()
+    wait_for_s3()
     wait_for_opensearch()
     print("All sidecar services are ready")
