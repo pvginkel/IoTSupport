@@ -2,8 +2,8 @@
 """Start all dev services via honcho (process manager).
 
 Usage:
-    ./scripts/dev.py              # start all services (backend + frontend + gateway)
-    ./scripts/dev.py -e gateway   # start all except the SSE gateway
+    ./scripts/dev.py                    # start all services (backend + frontend + gateway)
+    ./scripts/dev.py backend frontend   # start a subset (positional; honcho's -e is --env, not --except)
 
 Reads the repo-root Procfile.dev. Per-service logs (ANSI-stripped) are written
 to logs/<service>.log. Ctrl-C stops everything cleanly.

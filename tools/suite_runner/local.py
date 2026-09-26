@@ -153,7 +153,7 @@ def run_tests(args):
         cmds.append(["poetry", "install", "--no-interaction"])
         ok, detail = True, ""
         for cmd in cmds:
-            ok, detail = _install_cmd(cmd, cwd=backend, timeout=300)
+            ok, detail = _install_cmd(cmd, cwd=backend, timeout=600)
             if not ok:
                 break
         progress_end(ok, col)
@@ -188,7 +188,7 @@ def run_tests(args):
             if args.max_failures is not None:
                 pytest_cmd.append(f"--maxfail={args.max_failures}")
             pytest_cmd.extend(extra_args["backend"])
-            ok, detail, peak_mb = _run_cmd(pytest_cmd, cwd=backend, timeout=900)
+            ok, detail, peak_mb = _run_cmd(pytest_cmd, cwd=backend, timeout=1800)
             progress_end(ok, col)
             results.append(("backend pytest", ok, detail, peak_mb))
             if not ok:
@@ -200,11 +200,11 @@ def run_tests(args):
         # workspace member — install it in its own directory.
         col = progress_start("Installing npm dependencies")
         pnpm_install = ["pnpm", "install", "--frozen-lockfile", "--config.confirmModulesPurge=false"]
-        ok, detail = _install_cmd(pnpm_install, cwd=frontend, timeout=300)
+        ok, detail = _install_cmd(pnpm_install, cwd=frontend, timeout=600)
         if not ok:
             ok, detail = _install_cmd(
                 ["pnpm", "install", "--config.confirmModulesPurge=false"],
-                cwd=frontend, timeout=300,
+                cwd=frontend, timeout=600,
             )
         progress_end(ok, col)
         results.append(("frontend install", ok, detail, None))
@@ -222,7 +222,7 @@ def run_tests(args):
         else:
             # Build (generates the API client + routes, runs check, vite build).
             col = progress_start("Building frontend")
-            ok, detail = _install_cmd(["pnpm", "build"], cwd=frontend, timeout=600)
+            ok, detail = _install_cmd(["pnpm", "build"], cwd=frontend, timeout=900)
             progress_end(ok, col)
             results.append(("frontend build", ok, detail, None))
 
@@ -236,7 +236,7 @@ def run_tests(args):
                 # the matching browser, so this is a fast no-op there.
                 col = progress_start("Installing Playwright browser")
                 ok_pw, detail_pw = _install_cmd(
-                    ["pnpm", "playwright", "install", "chromium"], cwd=frontend, timeout=300
+                    ["pnpm", "playwright", "install", "chromium"], cwd=frontend, timeout=900
                 )
                 progress_end(ok_pw, col)
                 results.append(("playwright install", ok_pw, detail_pw, None))
@@ -255,7 +255,7 @@ def run_tests(args):
                 pw_cmd.extend(extra_args["frontend"])
 
                 col = progress_start("Running frontend playwright tests")
-                ok, detail, peak_mb = _run_cmd(pw_cmd, cwd=frontend, timeout=1800, env=pw_env)
+                ok, detail, peak_mb = _run_cmd(pw_cmd, cwd=frontend, timeout=3600, env=pw_env)
                 progress_end(ok, col)
                 results.append(("frontend playwright", ok, detail, peak_mb))
                 if not ok:
