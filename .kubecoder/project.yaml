@@ -15,6 +15,9 @@ projects:
     # architecture artifacts. Only one name fits this key, so it is the main one.
     jenkins: IoTSupport/IoTSupport
     setup: cexec modern-app poetry install --no-interaction
+    # The root's own Python only; backend/ and frontend/ lint themselves. The
+    # rule set and the Ruff version are pinned in the root pyproject.toml.
+    lint: cexec modern-app poetry run ruff check scripts tools
 
   backend:
     description: >-

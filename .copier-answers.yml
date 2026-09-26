@@ -1,0 +1,22 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: v0.1.0
+_src_path: ../ModernAppTemplate
+author_email: pvginkel@gmail.com
+author_name: Pieter van Ginkel
+backend_image: iotsupport-app
+backend_image_pin_key: iotsupport
+backend_port: 3101
+database_name: iotsupport
+deploy_repo: pvginkel/IotDeploy
+frontend_image: iotsupport-ui
+frontend_image_pin_key: iotsupportUI
+frontend_port: 3100
+github_owner: pvginkel
+project_description: REST API and web UI for managing ESP32-based IoT devices in a
+    homelab
+project_name: iot-support
+repo_name: IoTSupport
+sse_gateway_port: 3102
+use_database: true
+use_s3: true
+use_sse: true

@@ -1,16 +1,17 @@
 """Local suite runner — runs the IoTSupport backend + frontend test suites.
 
-Replaces the old frontend/scripts/validation-entrypoint.sh: the validation
-flow now lives here so the same command runs locally and in CI.
+The same command runs locally and in CI (the Jenkinsfile's validation Job).
 
-Flow (mirrors the original entrypoint):
+Flow:
   1. install the backend (Poetry)
-  2. wait for the MinIO + OpenSearch sidecars and provision the S3 bucket
-     (delegated to the backend's wait-for-services.py — boto3 lives in the
-     backend venv; gated on S3_ENDPOINT_URL so local dev can skip it)
+  2. wait for services, when backend/scripts/wait-for-services.py exists
   3. run backend pytest
   4. install the frontend's npm deps (standalone pnpm project), build the
      frontend, install the Playwright browser, run Playwright
+
+Step 2 is the app's hook for sidecars that are slow to come up in CI (a search
+engine, a message broker): the script runs under the backend's Poetry venv and
+must exit non-zero if a service never becomes ready.
 
 Output modes:
   simple  — progress indicators, captured output, test_results.md (default)
@@ -26,11 +27,6 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from . import ALL_SUITES, REPO_ROOT, RESULTS_FILE
-
-# The backend requires Python 3.13 (e.g. queue.ShutDown). Pin its Poetry venv to
-# python3.13 when that interpreter is on PATH; in CI the base image's default
-# python is already 3.13 (the binary may be absent by that name), so we skip it.
-HAS_PYTHON313 = shutil.which("python3.13") is not None
 from .display import (
     is_full_mode,
     progress_end,
@@ -41,6 +37,13 @@ from .display import (
 )
 from .process import run, run_streamed, run_tracked
 
+APP_NAME = "IoTSupport"
+
+# The backend requires Python 3.13 (e.g. queue.ShutDown). Pin its Poetry venv to
+# python3.13 when that interpreter is on PATH; in CI the base image's default
+# python is already 3.13 (the binary may be absent by that name), so we skip it.
+HAS_PYTHON313 = shutil.which("python3.13") is not None
+
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -48,13 +51,13 @@ from .process import run, run_streamed, run_tracked
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="Run the IoTSupport backend and frontend test suites.",
+        description=f"Run the {APP_NAME} backend and frontend test suites.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 examples:
   %(prog)s --suite backend
-  %(prog)s --suite backend --backend-args "tests/test_device_service.py -k rotation"
-  %(prog)s --suite frontend --frontend-args "tests/domain/devices.spec.ts"
+  %(prog)s --suite backend --backend-args "tests/test_foo.py -k bar"
+  %(prog)s --suite frontend --frontend-args "tests/e2e/foo.spec.ts"
   %(prog)s --max-failures 10
   %(prog)s --output-mode full --junitxml-dir /work/results --retries 2""",
     )
@@ -160,15 +163,12 @@ def run_tests(args):
         progress_end(False, col)
         results.append(("backend install", False, f"Directory not found: {backend}", None))
 
-    # --- Sidecar readiness (CI): wait for MinIO + OpenSearch and provision the
-    #     S3 bucket before the backend's storage preflight can race ahead. The
-    #     helper uses boto3 from the backend venv. Skipped when S3_ENDPOINT_URL
-    #     is unset (local dev manages its own services). ---
-    if backend_installed and os.environ.get("S3_ENDPOINT_URL"):
-        wait_script = REPO_ROOT / "frontend" / "scripts" / "wait-for-services.py"
-        col = progress_start("Waiting for sidecar services")
+    # --- Service readiness (app hook) ---
+    wait_script = backend / "scripts" / "wait-for-services.py"
+    if backend_installed and wait_script.is_file():
+        col = progress_start("Waiting for services")
         ok, detail = _install_cmd(
-            ["poetry", "run", "python", str(wait_script)], cwd=backend, timeout=200
+            ["poetry", "run", "python", str(wait_script)], cwd=backend, timeout=300
         )
         progress_end(ok, col)
         results.append(("services", ok, detail, None))
@@ -358,7 +358,7 @@ def format_summary(all_results):
                     lines.append(f"  {step}: FAILED (see test_results.md)")
         else:
             mem_parts = []
-            for step, ok, detail, peak_mb in steps:
+            for step, _ok, _detail, peak_mb in steps:
                 mem = _format_mem(peak_mb)
                 mem_parts.append(f"{step}{mem}")
             lines.append(f"\n{app_name}: all passed ({', '.join(mem_parts)})")
@@ -404,9 +404,9 @@ def main(argv=None):
         # Simple mode: write test_results.md and print summary
         RESULTS_FILE.write_text("# Test Results\n\n")
         with RESULTS_FILE.open("a") as f:
-            f.write(format_app_detailed("IoTSupport", steps))
+            f.write(format_app_detailed(APP_NAME, steps))
         print(f"\nDetailed results written to {RESULTS_FILE}", file=sys.stderr)
-        print(format_summary([("IoTSupport", steps)]))
+        print(format_summary([(APP_NAME, steps)]))
 
     sys.exit(exit_code)
 

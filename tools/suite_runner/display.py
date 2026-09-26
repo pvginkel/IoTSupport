@@ -10,8 +10,8 @@ functions adapt automatically — callers never need to branch on the mode.
 """
 
 import io
-import subprocess
 import os
+import subprocess
 import sys
 import time
 

@@ -2,14 +2,14 @@
 """Start all dev services via honcho (process manager).
 
 Usage:
-    ./scripts/dev.py              # start all services (backend + frontend)
-    ./scripts/dev.py -e frontend  # start all except the frontend
+    ./scripts/dev.py              # start all services (backend + frontend + gateway)
+    ./scripts/dev.py -e gateway   # start all except the SSE gateway
 
 Reads the repo-root Procfile.dev. Per-service logs (ANSI-stripped) are written
 to logs/<service>.log. Ctrl-C stops everything cleanly.
 
 honcho runs inside the modern-app tool container: the dev container has neither
-poetry nor honcho, and all three services need that container anyway, so the
+poetry nor honcho, and every service needs that container anyway, so the
 Procfile lines run there natively without their own cexec. Terminating the
 cexec client stops the processes in the sidecar with it.
 
@@ -17,17 +17,17 @@ This wrapper still runs honcho under a PID namespace (unshare --user --pid
 --fork) so nothing local is left behind.
 
 Note: run `kc project setup` first — it installs the poetry and pnpm
-dependencies all three services need (the SSE gateway on :3102 runs the
+dependencies the services need (the SSE gateway on :3102 runs the
 `ssegateway` frontend devDependency).
 """
 
+import io
 import os
+import pty
 import re
 import signal
 import sys
 from pathlib import Path
-
-import pty
 
 ROOT = Path(__file__).resolve().parent.parent
 LOGS = ROOT / "logs"
