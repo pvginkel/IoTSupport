@@ -7,7 +7,10 @@ storage preflight. We also create the S3 bucket here: a fresh RustFS starts
 empty, whereas the Ceph backend it replaced had the bucket pre-provisioned.
 
 Connection settings are read from the same environment the backend uses, so
-this stays in lockstep with the Jenkins job's container env.
+this stays in lockstep with the Jenkins job's container env. The root suite
+runner calls this script after the backend install (the template's
+wait-for-services hook); without S3_ENDPOINT_URL in the environment (a local
+run whose services are managed elsewhere) it has nothing to wait for.
 """
 
 import json
@@ -77,6 +80,9 @@ def wait_for_opensearch() -> None:
 
 
 if __name__ == "__main__":
+    if not os.environ.get("S3_ENDPOINT_URL"):
+        print("S3_ENDPOINT_URL is not set; not waiting for sidecar services")
+        sys.exit(0)
     wait_for_s3()
     wait_for_opensearch()
     print("All sidecar services are ready")
