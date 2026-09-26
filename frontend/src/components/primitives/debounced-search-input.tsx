@@ -39,10 +39,14 @@ export function DebouncedSearchInput({
   const navigate = useNavigate();
   const currentSearch = useSearch({ strict: false });
 
-  // Sync URL searchTerm → local searchInput (for browser back/forward)
-  useEffect(() => {
+  // Sync URL searchTerm → local searchInput (for browser back/forward).
+  // Adjusted during render rather than in an effect, so the input never
+  // renders one frame with the stale term.
+  const [prevSearchTerm, setPrevSearchTerm] = useState(searchTerm);
+  if (searchTerm !== prevSearchTerm) {
+    setPrevSearchTerm(searchTerm);
     setSearchInput(searchTerm);
-  }, [searchTerm]);
+  }
 
   // Sync debouncedSearch → URL navigation
   useEffect(() => {

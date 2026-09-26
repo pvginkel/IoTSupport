@@ -50,13 +50,13 @@ test.describe('Authentication', () => {
         request.url().includes('/api/auth/login')
       )
 
-      await page.goto('/items?filter=active&sort=name')
+      await page.goto('/?filter=active&sort=name')
 
       const loginRequest = await loginRequestPromise
 
       const url = new URL(loginRequest.url())
       const redirectParam = url.searchParams.get('redirect')
-      expect(redirectParam).toContain('/items')
+      expect(redirectParam).toContain('/')
       expect(redirectParam).toContain('filter=active')
       expect(redirectParam).toContain('sort=name')
     })

@@ -60,6 +60,13 @@ async function runScript(
     const child = spawn(command, args, {
       cwd: options.cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        // Same override the per-worker backends get in process/servers.ts:
+        // without it, OIDC_ENABLED=true from a developer's .env sends the
+        // seed script off to a Keycloak that tests never need.
+        OIDC_ENABLED: 'false',
+      },
     });
 
     let stdout = '';

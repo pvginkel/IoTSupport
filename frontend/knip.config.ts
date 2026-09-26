@@ -32,8 +32,6 @@ const config: KnipConfig = {
     '@radix-ui/react-dialog',
     '@radix-ui/react-dropdown-menu',
     '@radix-ui/react-popover',
-    '@tanstack/router-devtools',
-    'class-variance-authority',
     'lucide-react',
     'openapi-typescript',
     'postcss',

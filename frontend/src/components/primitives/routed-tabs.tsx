@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- the tab-preference helpers and useRestoreTab belong with RoutedTabs */
 import { Link, useLocation, useNavigate } from '@tanstack/react-router'
 import { type ReactNode, useEffect } from 'react'
 
@@ -8,9 +9,9 @@ import { type ReactNode, useEffect } from 'react'
  * in localStorage-based preference persistence.
  */
 export interface RoutedTabDefinition {
-  /** Route path template for TanStack Router `<Link>` `to` prop (e.g. `/devices/$deviceId/edit`). */
+  /** Route path template for TanStack Router `<Link>` `to` prop (e.g. `/things/$thingId/edit`). */
   to: string
-  /** Route params passed to the `<Link>` (e.g. `{ deviceId: '42' }`). */
+  /** Route params passed to the `<Link>` (e.g. `{ thingId: '42' }`). */
   params?: Record<string, string>
   /**
    * Slug written to localStorage when this tab is active.
@@ -46,7 +47,7 @@ interface RoutedTabsProps {
    * 1. Guard: only persist the tab when `location.pathname` starts with this prefix.
    * 2. Match: determine the active tab by checking `pathname.startsWith(basePath + definition.value)`.
    *
-   * Must include a trailing slash (e.g. `/devices/42/`).
+   * Must include a trailing slash (e.g. `/things/42/`).
    */
   basePath?: string
 }

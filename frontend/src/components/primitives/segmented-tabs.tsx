@@ -260,7 +260,7 @@ export function SegmentedTabs({
       {indicatorStyle && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-1 rounded-full bg-primary/15 shadow transition-transform duration-200 ease-out"
+          className="pointer-events-none absolute inset-y-1 rounded-full bg-primary/30 shadow transition-transform duration-200 ease-out"
           style={{
             width: `${indicatorStyle.width - 8}px`,
             transform: `translateX(${indicatorStyle.left}px)`,
