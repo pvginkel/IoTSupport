@@ -50,13 +50,15 @@ test.describe('Authentication', () => {
         request.url().includes('/api/auth/login')
       )
 
-      await page.goto('/?filter=active&sort=name')
+      // Use a path no app redirects: '/' often redirects to a landing page
+      // (e.g. /devices), which drops the query string before the 401.
+      await page.goto('/items?filter=active&sort=name')
 
       const loginRequest = await loginRequestPromise
 
       const url = new URL(loginRequest.url())
       const redirectParam = url.searchParams.get('redirect')
-      expect(redirectParam).toContain('/')
+      expect(redirectParam).toContain('/items')
       expect(redirectParam).toContain('filter=active')
       expect(redirectParam).toContain('sort=name')
     })
