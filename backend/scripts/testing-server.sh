@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Run the testing server directly (no daemonization)
-# This script is used by both testing-daemon-ctl.sh and can be run directly
+# Playwright starts one per worker; it can also be run directly.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$(dirname "$SCRIPT_DIR")"
@@ -12,8 +12,6 @@ echo $BACKEND_DIR
 
 # Port the testing server falls back to when --port is not given. Playwright
 # always passes an explicit per-worker port; this only covers manual runs.
-# Mirrors DEFAULT_BACKEND_PORT in app/consts.py, offset to avoid colliding
-# with a dev server on 3101.
 TESTING_BACKEND_PORT=3111
 
 # Change to backend directory

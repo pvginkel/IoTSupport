@@ -4,7 +4,6 @@ import sys
 
 import click
 from dotenv import load_dotenv
-from flask import Flask
 
 from app import create_app
 from app.app import App
@@ -50,7 +49,7 @@ def load_test_data(ctx: click.Context, yes_i_am_sure: bool) -> None:
 
 
 def handle_upgrade_db(
-    app: Flask, recreate: bool = False, confirmed: bool = False
+    app: App, recreate: bool = False, confirmed: bool = False
 ) -> None:
     """Handle upgrade-db command."""
     with app.app_context():

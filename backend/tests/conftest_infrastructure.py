@@ -60,8 +60,7 @@ def pytest_configure(config: pytest.Config) -> None:
     except urllib.error.HTTPError:
         # Any HTTP response means the storage server is up and answering: MinIO
         # replies to an anonymous GET / (ListBuckets) with 403, whereas Ceph RGW
-        # returns 200 -- which is why this bare check passed before CI moved to
-        # MinIO. Only the connection-level failures below mean "unreachable".
+        # returns 200. Only the connection-level failures below mean "unreachable".
         pass
     except (urllib.error.URLError, OSError, TimeoutError):
         pytest.exit(
@@ -230,6 +229,15 @@ def app(test_settings: Settings, test_app_settings: AppSettings, template_connec
     try:
         yield app
     finally:
+        # Shut down all background services via the lifecycle coordinator.
+        # This fires PREPARE_SHUTDOWN then SHUTDOWN, which MetricsService,
+        # TempFileManager, TaskService (and any other registered service)
+        # handle in their _on_lifecycle_event callbacks.
+        try:
+            app.container.lifecycle_coordinator().shutdown()
+        except Exception:
+            pass
+
         with app.app_context():
             from app.extensions import db as flask_db
 
@@ -446,6 +454,12 @@ def oidc_app(
             try:
                 yield app
             finally:
+                # Shut down all background services via the lifecycle coordinator
+                try:
+                    app.container.lifecycle_coordinator().shutdown()
+                except Exception:
+                    pass
+
                 with app.app_context():
                     from app.extensions import db as flask_db
                     flask_db.session.remove()

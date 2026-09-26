@@ -3,22 +3,17 @@
 Best-effort outbound trigger that asks the architecture CI job to regenerate
 the deployed-architecture artifact after the fleet changes.
 
-Two-step, request-scoped design (see feature plan §7):
-
-1. Admin CRUD service methods call :meth:`mark_pending` after a successful
-   device/model write. This sets a ``contextvars.ContextVar`` flag — NOT Flask
-   ``g`` — so the service layer stays Flask-free.
-2. ``teardown_request`` calls :meth:`fire_if_pending` ONLY on the commit-success
-   branch (never on rollback), after the DB transaction is durable, then clears
-   the flag. This matches the project's "commit before external side effect"
-   ordering: the regenerating GET will see the committed rows, and a rolled-back
-   write never fires a trigger.
+Admin CRUD service methods call :meth:`mark_pending` after a successful
+device/model write. That registers :meth:`fire` with the template's
+``after_commit()``, so the trigger fires once per request, only after the DB
+transaction is durable, and never on rollback. This matches the project's
+"commit before external side effect" ordering: the regenerating GET will see the
+committed rows, and a rolled-back write never fires a trigger.
 
 The POST is fire-and-forget: failures are logged (host only, never the full URL
 which may embed a webhook token) and swallowed so they never affect the write.
 """
 
-import contextvars
 import logging
 import time
 from typing import TYPE_CHECKING
@@ -26,19 +21,13 @@ from urllib.parse import urlparse
 
 import httpx
 
+from app.utils.after_commit import after_commit
 from app.utils.iot_metrics import record_operation
 
 if TYPE_CHECKING:
     from app.app_config import AppSettings
 
 logger = logging.getLogger(__name__)
-
-# Request-scoped "fleet dirty" flag. Set by mark_pending(), read+cleared by
-# fire_if_pending() in teardown. A ContextVar is request-isolated and avoids a
-# Flask dependency inside the service layer.
-_pending: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "architecture_pipeline_pending", default=False
-)
 
 
 class ArchitecturePipelineTriggerService:
@@ -67,36 +56,18 @@ class ArchitecturePipelineTriggerService:
             logger.info("ArchitecturePipelineTriggerService disabled - no trigger URL")
 
     def mark_pending(self) -> None:
-        """Mark the current request as having changed the fleet.
+        """Fire the trigger once the current request has committed.
 
         Idempotent within a request: many writes coalesce into a single trigger
         fired post-commit. Does not perform any I/O.
         """
-        _pending.set(True)
+        after_commit(self.fire)
 
-    def is_pending(self) -> bool:
-        """Return whether the current request has been marked fleet-dirty."""
-        return _pending.get()
+    def fire(self) -> None:
+        """POST to the trigger URL, if one is configured.
 
-    def clear_pending(self) -> None:
-        """Reset the request-scoped pending flag.
-
-        Called from the teardown ``finally`` (mirrors ``db_session.reset()``)
-        so the next request in the same context starts clean.
+        Best-effort: all errors are logged and swallowed.
         """
-        _pending.set(False)
-
-    def fire_if_pending(self) -> None:
-        """Fire the trigger iff the current request was marked fleet-dirty.
-
-        Best-effort: only fires when (a) a write marked the request pending and
-        (b) a trigger URL is configured. All errors are logged and swallowed.
-        Does NOT clear the flag — the teardown ``finally`` owns that via
-        :meth:`clear_pending`.
-        """
-        if not _pending.get():
-            return
-
         if not self.enabled:
             # Marked dirty but no URL configured (dev/test) -> no-op.
             logger.debug("Architecture pipeline trigger pending but no URL configured")

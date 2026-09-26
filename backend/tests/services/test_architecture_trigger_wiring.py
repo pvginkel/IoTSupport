@@ -6,7 +6,7 @@ Two layers are covered:
   the rotation path does NOT.
 * Request lifecycle: ``teardown_request`` fires the trigger exactly once on a
   committed request, never on rollback, coalesces multiple writes into one
-  fire, and resets the ContextVar.
+  fire, and leaves nothing pending for the next request.
 """
 
 from unittest.mock import MagicMock, patch

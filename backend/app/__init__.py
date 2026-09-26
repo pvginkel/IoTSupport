@@ -12,6 +12,10 @@ from app.app import App
 from app.app_config import AppSettings
 from app.config import Settings
 from app.extensions import db
+from app.utils.after_commit import (
+    clear_after_commit_callbacks,
+    run_after_commit_callbacks,
+)
 
 
 def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | None" = None, skip_background_services: bool = False) -> App:
@@ -233,8 +237,10 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
         original exception to teardown_request when an errorhandler
         successfully returns a response, so the flag is the reliable
         rollback signal for handled exceptions.
+
+        Callbacks registered with ``app.utils.after_commit.after_commit()``
+        run only once the commit succeeded, never on rollback.
         """
-        committed = False
         try:
             db_session = container.db_session()
 
@@ -243,21 +249,16 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
                 db_session.rollback()
             else:
                 db_session.commit()
-                committed = True
 
             db_session.close()
 
-            # Fire the architecture pipeline trigger ONLY after a successful
-            # commit (never on rollback), so it reflects a durable write. The
-            # call is a no-op unless a CRUD path marked the request pending.
-            if committed:
-                container.architecture_pipeline_trigger_service().fire_if_pending()
+            if not needs_rollback:
+                run_after_commit_callbacks()
 
         finally:
             # Ensure the scoped session is removed after each request
             container.db_session.reset()
-            # Reset the request-scoped pending flag (mirrors db_session.reset()).
-            container.architecture_pipeline_trigger_service().clear_pending()
+            clear_after_commit_callbacks()
 
     # Start background services only when not in CLI mode
     if not skip_background_services:
@@ -277,7 +278,8 @@ def create_app(settings: "Settings | None" = None, app_settings: "AppSettings | 
         # for STARTUP notifications will be invoked here.
         container.lifecycle_coordinator().fire_startup()
 
-    # Flask's own documented pattern; mypy flags assigning over the wsgi_app method.
+    # Flask documents replacing wsgi_app with middleware, but declares it as a
+    # method, so mypy reads the assignment as clobbering one.
     app.wsgi_app = ProxyFix(  # type: ignore[method-assign]
         app.wsgi_app,
         x_proto=1,

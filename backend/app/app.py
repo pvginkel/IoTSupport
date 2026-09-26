@@ -16,5 +16,9 @@ class App(Flask):
 
 
 def current_container() -> ServiceContainer:
-    """Return the service container of the app handling the current request."""
+    """Return the service container of the app handling the current request.
+
+    ``current_app`` is typed as plain ``Flask``; the factory only ever builds
+    an ``App``, which is what carries the container.
+    """
     return cast(App, current_app).container
