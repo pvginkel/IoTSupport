@@ -20,9 +20,6 @@ exc_tb  # unused variable
 conn_proxy  # unused variable
 conn_record  # unused variable
 
-# Function parameters kept for API compatibility
-encoding  # unused variable
-
 # TYPE_CHECKING guard (unsatisfiable 'if' condition is expected)
 from typing import TYPE_CHECKING
 
