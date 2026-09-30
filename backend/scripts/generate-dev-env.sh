@@ -11,11 +11,11 @@ set -e
 
 BACKEND_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-# The MinIO sidecar's root credentials. The code defaults (admin/password) do
+# The s3storage (RustFS) sidecar's credentials. The code defaults (admin/password) do
 # not match it; these are the same values CI uses.
 S3_ENDPOINT_URL=http://localhost:9000
-S3_ACCESS_KEY_ID=minioadmin
-S3_SECRET_ACCESS_KEY=minioadmin
+S3_ACCESS_KEY_ID=s3storage
+S3_SECRET_ACCESS_KEY=s3storage
 
 # The homelab dev Keycloak. Only the non-secret coordinates live here; the
 # IoTSupport-specific admin client id and secret arrive as environment

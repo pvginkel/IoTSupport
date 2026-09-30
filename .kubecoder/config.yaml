@@ -14,10 +14,10 @@ capabilities:
 #                creates it and `cli upgrade-db` migrates it, both in setup:, and
 #                /health/readyz reports database.connected. The suites do NOT use
 #                it: pytest and the Playwright harness both force SQLite.
-#   minio      — S3 for firmware and attachments. Hard dependency of the backend
-#                suite: tests/conftest_infrastructure.py probes S3_ENDPOINT_URL in
-#                pytest_configure and aborts the whole run if it is unreachable.
-#                Also a CI validation-pod sidecar.
+#   s3storage  — S3 (RustFS) for firmware and attachments. Hard dependency of
+#                the backend suite: tests/conftest_infrastructure.py probes
+#                S3_ENDPOINT_URL in pytest_configure and aborts the whole run if
+#                it is unreachable. Also a CI validation-pod sidecar.
 #   opensearch — the device log viewer's backing store, via ELASTICSEARCH_URL
 #                (backend/scripts/generate-dev-env.sh points it at localhost:9200).
 #                Used by the dev stack and declared as a CI validation-pod sidecar,
@@ -26,7 +26,7 @@ capabilities:
 #                unused from the tests alone; it is not.
 services:
   - postgres
-  - minio
+  - s3storage
   - opensearch
 
 # backend/Dockerfile and frontend/Dockerfile are CI's (helmCharts.kaniko), and
