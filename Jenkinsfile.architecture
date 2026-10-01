@@ -1,65 +1,92 @@
-// Architecture producer pipeline for the federated Architecture-as-Code model.
-// One job, one producer (`iotsupport-app`) covering the whole monorepo — every
-// artifact below declares it, so they all collect into the same producer directory:
-//   - backend/  — GENERATED: backend/docs/architecture/architecture.yaml is the
-//     hand-authored logical artifact; backend/docs/architecture/deployed-architecture.yaml is
-//     generated here from the production device fleet (it is NOT committed). Needs outbound
-//     HTTPS to architecture.webathome.org (dataset + validation) and to the production IoT
-//     Support API (fleet projection, via the Vault OIDC client credentials below).
-//   - frontend/ — hand-authored: frontend/docs/architecture/*.yaml (validation only).
+// Generates IoTSupport's deployed architecture model from the production device fleet, validates
+// it and the hand-authored models against the architecture service, and archives them as the
+// producer's artifact, which AaC/Architecture collects.
+//
+// The monorepo is one producer, iotsupport-app: backend/docs/architecture/architecture.yaml, the
+// generated backend/docs/architecture/deployed-architecture.yaml and
+// frontend/docs/architecture/*.yaml all declare it, and AaC/Architecture collects them together as
+// that producer's artifact. The deployed model is generated on every build and never committed:
+// the generator reads the production IoT Support API with the OpenBao OIDC client credentials.
+//
+// Controller config:
+//   - Job: AaC/IoTSupport
+//   - SCM: pvginkel/IoTSupport, branch main
+//   - Script Path: Jenkinsfile.architecture
 
 library identifier: 'JenkinsPipelineUtils', changelog: false
 
-withVault([vaultSecrets: [
-    [path: 'kv/jenkins/iotsupport-pipeline-oidc', engineVersion: 2, secretValues: [
-        [envVar: 'IOTSUPPORT_CLIENT_ID', vaultKey: 'client_id'],
-        [envVar: 'IOTSUPPORT_CLIENT_SECRET', vaultKey: 'client_secret'],
-    ]],
-]]) {
-    podTemplate(inheritFrom: 'jenkins-agent', containers: [
-        containerTemplates.python('python'),
-        containerTemplates.aac_tools('aac-tools')
-    ]) {
-        node(POD_LABEL) {
-            stage('Cloning repo') {
+pipeline {
+    agent {
+        kubernetes {
+            inheritFrom 'jenkins-agent'
+            yaml podYaml(templates: ['aac-tools'], images: [[image: 'registry:5000/python', name: 'python']])
+        }
+    }
+
+    options {
+        disableConcurrentBuilds(abortPrevious: true)
+        skipDefaultCheckout()
+        timeout(time: 60, unit: 'MINUTES')
+        timestamps()
+    }
+
+    triggers {
+        githubPush()
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
                 checkout scm
             }
+        }
 
-            stage('Generate backend architecture') {
-                // Project the production fleet into deployed-architecture.yaml.
-                // The generator fetches the published dataset and calls the
-                // production /api/pipeline/fleet-projection with client credentials.
+        stage('Generate architecture (backend)') {
+            steps {
                 dir('backend') {
                     container('python') {
                         sh 'pip install --quiet -r ./tools/requirements.txt'
-                        sh '''
-                            IOTSUPPORT_API_URL=https://iot.ginbov.nl \\
-                            IOTSUPPORT_TOKEN_URL=$KEYCLOAK_OIDC_TOKEN_URL \\
-                            ./tools/gen-architecture.py \\
-                                --dataset-url https://architecture.webathome.org/data/v0.1/architecture.json
-                        '''
+                        withVault([vaultSecrets: [
+                            [path: 'kv/jenkins/iotsupport-pipeline-oidc', engineVersion: 2, secretValues: [
+                                [envVar: 'IOTSUPPORT_CLIENT_ID', vaultKey: 'client_id'],
+                                [envVar: 'IOTSUPPORT_CLIENT_SECRET', vaultKey: 'client_secret'],
+                            ]],
+                        ]]) {
+                            sh '''
+                                IOTSUPPORT_API_URL=https://iot.ginbov.nl \\
+                                IOTSUPPORT_TOKEN_URL=$KEYCLOAK_OIDC_TOKEN_URL \\
+                                ./tools/gen-architecture.py \\
+                                    --dataset-url https://architecture.webathome.org/data/v0.1/architecture.json
+                            '''
+                        }
                     }
+                }
+                script {
+                    architectureProducer.archive(files: ['backend/docs/architecture/deployed-architecture.yaml'])
                 }
             }
+        }
 
-            stage('Validate backend architecture') {
-                dir('backend') {
-                    container('aac-tools') {
-                        // Validate only the architecture artifacts; firmware-products.yaml
-                        // is an annotation file (generator input), not an artifact.
-                        sh 'arch-validate docs/architecture/architecture.yaml docs/architecture/deployed-architecture.yaml'
-                    }
+        // firmware-products.yaml is the generator's input, not a model: it is neither validated
+        // nor archived.
+        stage('Validate architecture (backend)') {
+            steps {
+                script {
+                    architectureProducer.validate(files: [
+                        'backend/docs/architecture/architecture.yaml',
+                        'backend/docs/architecture/deployed-architecture.yaml',
+                    ])
+                    architectureProducer.archive(files: ['backend/docs/architecture/architecture.yaml'])
                 }
-                archiveArtifacts artifacts: 'backend/docs/architecture/architecture.yaml,backend/docs/architecture/deployed-architecture.yaml', fingerprint: true
             }
+        }
 
-            stage('Validate frontend architecture') {
-                dir('frontend') {
-                    container('aac-tools') {
-                        sh 'arch-validate docs/architecture/*.yaml'
-                    }
+        stage('Validate architecture (frontend)') {
+            steps {
+                script {
+                    architectureProducer.validate(files: ['frontend/docs/architecture/*.yaml'])
+                    architectureProducer.archive(files: ['frontend/docs/architecture/*.yaml'])
                 }
-                archiveArtifacts artifacts: 'frontend/docs/architecture/*.yaml', fingerprint: true
             }
         }
     }
