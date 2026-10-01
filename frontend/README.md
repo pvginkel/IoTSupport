@@ -1,146 +1,70 @@
 # IoT Support Frontend
 
-A web application for managing configuration files for ESP32-based IoT devices in a homelab environment. It provides a visual interface to list, create, edit, and delete device configurations that were previously managed through manual file editing and Helm chart deployments.
-
-## Features
-
-- **Device Configuration List** - View all device configurations with sortable columns (MAC address, device name, entity ID, OTA status)
-- **Configuration Editor** - Full-featured Monaco JSON editor with syntax highlighting, code folding, and validation
-- **Create & Duplicate** - Start from a minimal template or copy existing configurations
-- **Delete with Confirmation** - Safe removal of configurations with confirmation dialog
-- **Dark Mode Interface** - Modern dark theme with skeleton loaders during data fetching
+The web UI for IoT Support: managing the ESP32 device fleet in a homelab. It provisions, edits and
+duplicates devices, manages device models and shows their firmware versions, shows each device's
+logs and coredumps, and follows the fleet's credential rotation. It talks only to the IoTSupport
+backend in `../backend`, through the generated OpenAPI client.
 
 ## Tech Stack
 
 - **React 19** with TypeScript (strict mode)
 - **TanStack Router** - File-based routing with type-safe navigation
 - **TanStack Query** - Server state management and caching
-- **Monaco Editor** - JSON editing with full IDE features
+- **Monaco Editor** - JSON editing for device and model configuration
 - **Tailwind CSS 4** - Utility-first styling with dark mode
 - **Radix UI** - Accessible component primitives
-- **Vite** - Fast development and optimized builds
+- **Vite** - Development server and production builds
 - **openapi-typescript** - Generated API types and hooks
 - **Playwright** - End-to-end testing
 
-## Prerequisites
+## Development
 
-- **Node.js 18+**
-- **pnpm** package manager (`npm install -g pnpm`)
-- **Backend service** running locally on port 5000 (see backend repository)
-
-## Getting Started
-
-### Installation
+Node, pnpm and the Playwright browsers come from the KubeCoder environment's `modern-app` tool
+container. Run the `kc project` verbs from the repository root:
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Generate type-safe API client from backend OpenAPI spec
-pnpm generate:api
-
-# Generate route types (optional, auto-generated on dev)
-pnpm generate:routes
+kc project setup frontend   # pnpm install and the Playwright browser
+kc project build frontend   # production build
+kc project lint frontend    # ESLint, TypeScript, knip
+kc project test frontend    # Playwright, booting the frontend and a backend per worker
 ```
 
-### Environment Setup
+`scripts/dev.py` at the repository root starts the whole dev stack — the frontend on
+`http://localhost:3100`, the backend on 3101 and the SSE gateway on 3102. Stop it with `^C`. The
+Vite dev server proxies `/api/**` to the backend.
 
-Copy `.env.example` to `.env` and adjust values as needed:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BACKEND_URL` | `http://localhost:5000` | Backend API origin |
-| `SSE_GATEWAY_URL` | `http://localhost:3001` | SSE Gateway origin |
-| `VITE_TEST_MODE` | `false` | Enable test instrumentation |
-
-### Development
+After a backend API change, regenerate the API client from `frontend/`:
 
 ```bash
-# Start dev server on http://localhost:3200
-pnpm dev
-
-# Run linting and type checking
-pnpm check
-
-# Build for production
-pnpm build
-
-# Preview production build
-pnpm preview
+cexec modern-app pnpm generate:api
 ```
 
-## Project Structure
-
-```
-src/
-├── components/
-│   ├── devices/          # Device-specific components
-│   │   ├── device-editor.tsx
-│   │   └── device-list-table.tsx
-│   ├── layout/           # Layout components (sidebar)
-│   └── ui/               # Reusable UI primitives
-├── contexts/             # React contexts (toast)
-├── hooks/                # Custom hooks (useDevices, useConfirm)
-├── lib/
-│   ├── api/              # Generated API client and hooks
-│   ├── config/           # App configuration
-│   ├── test/             # Test instrumentation
-│   └── utils/            # Utility functions
-├── routes/               # TanStack Router file-based routes
-│   ├── devices/
-│   │   ├── index.tsx     # Device list
-│   │   ├── new.tsx       # Create new device
-│   │   ├── $macAddress.tsx        # Edit device
-│   │   └── $macAddress/duplicate.tsx  # Duplicate device
-│   └── __root.tsx        # Root layout
-└── types/                # TypeScript type definitions
-```
+The generated client is never edited by hand.
 
 ## URL Routes
 
 | Route | Purpose |
 |-------|---------|
 | `/` | Redirects to `/devices` |
-| `/devices` | List all device configurations |
-| `/devices/new` | Create new device configuration |
-| `/devices/:macAddress` | Edit existing device configuration |
-| `/devices/:macAddress/duplicate` | Duplicate existing configuration |
-
-## Testing
-
-```bash
-# Install Playwright browsers (one-time)
-pnpm exec playwright install
-
-# Run all tests headless
-pnpm playwright test
-
-# Run tests with UI
-pnpm playwright test --ui
-
-# Run specific test file
-pnpm playwright test tests/example.spec.ts
-```
-
-Playwright automatically manages frontend and backend services during test runs with per-worker isolation.
-
-## API Integration
-
-The frontend connects to a REST API backend that stores configurations as JSON files on CephFS. The Vite dev server proxies `/api/**` requests to the backend.
-
-API types are generated from the backend's OpenAPI specification:
-
-```bash
-# Regenerate after backend API changes
-pnpm generate:api
-```
+| `/devices` | Device list |
+| `/devices/new` | Provision a new device |
+| `/devices/:deviceId` | Device detail; opens the last-used tab |
+| `/devices/:deviceId/edit` | Edit the device |
+| `/devices/:deviceId/logs` | Device logs |
+| `/devices/:deviceId/coredumps` | Device coredumps |
+| `/devices/:deviceId/duplicate` | Duplicate the device |
+| `/device-models` | Device model list |
+| `/device-models/new` | Create a device model |
+| `/device-models/:modelId` | Edit a device model |
+| `/rotation` | Credential rotation dashboard |
 
 ## Documentation
 
-Detailed documentation is available in the `docs/` directory:
+`CLAUDE.md` is the launchpad; the contributor documentation lives under `docs/contribute/`:
 
-- [Product Brief](docs/product_brief.md) - Product context and workflows
+- [Contributor hub](docs/contribute/index.md)
 - [Getting Started](docs/contribute/getting_started.md) - Setup guide
+- [Environment Reference](docs/contribute/environment.md) - Environment variables and ports
 - [Architecture Overview](docs/contribute/architecture/application_overview.md) - Technical architecture
 - [Testing Guide](docs/contribute/testing/index.md) - Testing principles and patterns
 - [Playwright Guide](docs/contribute/testing/playwright_developer_guide.md) - E2E test authoring

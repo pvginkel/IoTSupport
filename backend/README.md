@@ -1,144 +1,44 @@
 # IoT Support Backend
 
-A lightweight REST API for managing configuration files for ESP32-based IoT devices. Configurations are stored as JSON files on the filesystem, making changes immediately available to devices without redeployment.
+The Flask REST API behind IoT Support: device and device-model management, firmware storage and
+distribution, provisioning packages, and automatic rotation of device OAuth2 credentials. Device
+metadata lives in PostgreSQL, firmware and other blobs in S3, and every device is a Keycloak client
+that authenticates machine-to-machine. Rotation notifications go out over MQTT.
 
-## Features
+The API has three audiences, each on its own blueprint:
 
-- **Configuration Management** - CRUD operations for device configurations identified by MAC address
-- **No Database Required** - Configurations stored directly on filesystem (CephFS in production)
-- **Asset Upload** - Upload and manage device assets with cryptographic signing
-- **LVGL Image Proxy** - Convert images to LVGL-compatible format for ESP32 displays
-- **OpenAPI Documentation** - Auto-generated API docs at `/api/docs`
-- **Prometheus Metrics** - Operational metrics at `/metrics`
-- **Health Checks** - Kubernetes liveness/readiness probes at `/api/health`
+- `/api/*` (the rest) — the frontend (a BFF: this API serves only the IoTSupport frontend).
+- `/api/iot/*` — deployed device firmware, authenticated with the device's own Keycloak client.
+- `/api/pipeline/*` — other repositories' CI, e.g. firmware uploads, with the `pipeline` role.
 
-## Requirements
-
-- Python 3.11+
-- Poetry
-
-## Quick Start
-
-1. **Install dependencies**
-   ```bash
-   poetry install
-   ```
-
-2. **Configure environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your settings
-   ```
-
-3. **Run the development server**
-   ```bash
-   poetry run dev
-   ```
-
-   The API will be available at `http://localhost:3201`
-
-## Configuration
-
-Environment variables (can be set in `.env`):
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ESP32_CONFIGS_DIR` | Path to configuration files directory | (required) |
-| `ASSETS_DIR` | Path to assets upload directory | (required) |
-| `SIGNING_KEY_PATH` | Path to RSA signing key for asset uploads | (required) |
-| `CORS_ORIGINS` | Allowed CORS origins (JSON array) | `["http://localhost:3000"]` |
-| `DEBUG` | Enable debug mode | `true` |
-| `HOST` | Server bind address | `0.0.0.0` |
-| `PORT` | Server port | `3201` |
-
-## API Endpoints
-
-### Device Configurations
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/configs` | List all configurations |
-| `GET` | `/api/configs/{mac}` | Get configuration by MAC address |
-| `PUT` | `/api/configs/{mac}` | Create or update configuration |
-| `DELETE` | `/api/configs/{mac}` | Delete configuration |
-
-MAC addresses must be in lowercase, hyphen-separated format: `xx-xx-xx-xx-xx-xx`
-
-#### Save Configuration Request
-
-```json
-{
-  "content": { ... },
-  "allow_overwrite": true
-}
-```
-
-Set `allow_overwrite` to `false` to prevent overwriting existing configurations (returns 409 Conflict if exists).
-
-### Assets
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/assets/upload` | Upload a signed asset |
-
-### Images
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/images/proxy` | Proxy and convert image to LVGL format |
-
-### Operations
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/health` | Health check (returns 200/503) |
-| `GET` | `/metrics` | Prometheus metrics |
-| `GET` | `/api/docs` | OpenAPI documentation |
+`docs/product_brief.md` describes the domain model; `CLAUDE.md` the architecture, layering and
+testing conventions; `docs/decisions/` the ADRs.
 
 ## Development
 
-### Running Tests
+Python, Poetry and the services the backend needs (PostgreSQL, S3 storage, OpenSearch) come with
+the KubeCoder environment; commands run in the `modern-app` tool container. Run the `kc project`
+verbs from the repository root:
 
 ```bash
-poetry run pytest
+kc project setup backend   # poetry install, generate .env/.env.test, create and migrate the database
+kc project test backend    # pytest
+kc project lint backend    # ruff, mypy, vulture
 ```
 
-With coverage:
-```bash
-poetry run pytest --cov=app --cov-report=term-missing
-```
+`scripts/dev.py` at the repository root starts the whole dev stack — the API on
+`http://localhost:3101`, the frontend on 3100 and the SSE gateway on 3102. Stop it with `^C`.
 
-### Linting
+### Configuration
 
-```bash
-poetry run ruff check .
-```
+Settings are read from the environment and from `.env`. `kc project setup` generates `.env` and
+`.env.test` with local defaults (`scripts/generate-dev-env.sh`); it leaves existing files alone.
+The settings themselves, with their defaults, are in `app/config.py` and `app/app_config.py`.
 
-### Type Checking
+### API documentation
 
-```bash
-poetry run mypy .
-```
-
-## Architecture
-
-```
-app/
-├── api/           # HTTP endpoints (Flask blueprints)
-│   ├── configs.py # Device configuration CRUD
-│   ├── assets.py  # Asset upload
-│   ├── images.py  # LVGL image proxy
-│   ├── health.py  # Health checks
-│   └── metrics.py # Prometheus metrics
-├── services/      # Business logic layer
-│   ├── config_service.py
-│   ├── asset_upload_service.py
-│   ├── image_proxy_service.py
-│   └── metrics_service.py
-├── schemas/       # Pydantic request/response models
-├── utils/         # Shared utilities
-└── config.py      # Application settings
-```
+The OpenAPI documentation is served at `/api/docs`, Prometheus metrics at `/metrics`, and the
+Kubernetes probes under `/health`.
 
 ## Keycloak configuration
 
