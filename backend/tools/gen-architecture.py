@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import uuid
 from datetime import datetime
@@ -605,9 +606,35 @@ def fetch_projection(api_url: str, token: str) -> dict[str, Any]:
     return dict(resp.json())
 
 
+class _Yaml12SafeDumper(yaml.SafeDumper):
+    """SafeDumper that also quotes strings a YAML 1.2 reader would not read as str.
+
+    PyYAML resolves scalars by YAML 1.1 rules, so it writes e.g. a firmware
+    version "9e10234" plain; arch-validate reads YAML 1.2, where that is a float
+    (here overflowing to Infinity). Registering the 1.2 core-schema number
+    patterns as implicit resolvers makes the emitter quote such strings.
+    """
+
+
+_Yaml12SafeDumper.add_implicit_resolver(
+    "tag:yaml.org,2002:int",
+    re.compile(r"^(?:[-+]?[0-9]+|0o[0-7]+|0x[0-9a-fA-F]+)$"),
+    list("-+0123456789"),
+)
+_Yaml12SafeDumper.add_implicit_resolver(
+    "tag:yaml.org,2002:float",
+    re.compile(r"^[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)(?:[eE][-+]?[0-9]+)?$"),
+    list("-+.0123456789"),
+)
+
+
 def dump_yaml(artifact: dict[str, Any]) -> str:
     """Serialize the artifact deterministically (no key sorting, block style)."""
-    return str(yaml.safe_dump(artifact, sort_keys=False, default_flow_style=False))
+    return str(
+        yaml.dump(
+            artifact, Dumper=_Yaml12SafeDumper, sort_keys=False, default_flow_style=False
+        )
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -366,6 +366,34 @@ class TestArtifactGeneration:
         )
         assert a1 == a2
 
+    @pytest.mark.parametrize(
+        ("version", "rendered"),
+        [
+            # YAML 1.2 numbers PyYAML's 1.1 resolver would leave plain.
+            ("9e10234", "'9e10234'"),
+            ("1.5e3", "'1.5e3'"),
+            ("0o17", "'0o17'"),
+            ("089", "'089'"),
+            # Not a number in either version: stays plain.
+            ("0.1.0", "0.1.0"),
+        ],
+    )
+    def test_number_like_firmware_version_is_quoted(
+        self,
+        dataset: Any,
+        projection: dict[str, Any],
+        firmware_products: dict[str, str],
+        version: str,
+        rendered: str,
+    ) -> None:
+        """arch-validate reads YAML 1.2; a version must never read back as a number."""
+        projection = copy.deepcopy(projection)
+        projection["devices"][0]["firmware_version"] = version
+        out = genarch.dump_yaml(
+            genarch.generate_artifact(dataset, projection, firmware_products, warn=_silent)
+        )
+        assert f"    firmware: {rendered}\n" in out
+
     def test_uuid5_ids_stable_and_namespaced(
         self, dataset: Any, projection: dict[str, Any], firmware_products: dict[str, str]
     ) -> None:
