@@ -29,7 +29,7 @@ services:
   - s3storage
   - opensearch
 
-# backend/Dockerfile and frontend/Dockerfile are CI's (helmCharts.kaniko), and
+# backend/Dockerfile and frontend/Dockerfile are CI's (helmCharts.kaniko2), and
 # neither is wired into a build: verb. This is still needed so the two
 # scripts/build-image.sh wrappers can build them by hand in-env.
 imageBuilder: true

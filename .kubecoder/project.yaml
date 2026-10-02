@@ -29,7 +29,8 @@ projects:
       - cexec modern-app poetry run python scripts/init-dev-database.py
       - cexec modern-app poetry run cli upgrade-db
     # No build verb: the deployable artifact is backend/Dockerfile, which CI
-    # builds with helmCharts.kaniko("backend/Dockerfile", "backend", ...). It is
+    # builds with helmCharts.kaniko2(dockerfile: 'backend/Dockerfile',
+    # context: 'backend', ...). It is
     # not wired here on purpose — an image build in the default sweep would put
     # minutes into every per-task gate. Build it by hand with
     # scripts/build-image.sh (kaniko, pushes :dev, never the deployed :latest).

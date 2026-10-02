@@ -19,7 +19,7 @@ pipeline {
     agent {
         kubernetes {
             inheritFrom 'jenkins-agent'
-            yaml podYaml(templates: ['aac-tools'], images: [[image: 'registry:5000/python', name: 'python']])
+            yaml podYaml(templates: ['aac-tools', 'python'])
         }
     }
 
@@ -54,7 +54,7 @@ pipeline {
                         ]]) {
                             sh '''
                                 IOTSUPPORT_API_URL=https://iot.ginbov.nl \\
-                                IOTSUPPORT_TOKEN_URL=$KEYCLOAK_OIDC_TOKEN_URL \\
+                                IOTSUPPORT_TOKEN_URL=https://auth.ginbov.nl/realms/homelab/protocol/openid-connect/token \\
                                 ./tools/gen-architecture.py \\
                                     --dataset-url https://architecture.webathome.org/data/v0.1/architecture.json
                             '''
