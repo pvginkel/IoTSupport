@@ -5,7 +5,7 @@
 // there is no promote stage.
 //
 // Controller config:
-//   - Job: IoTSupport/IoTSupport
+//   - Job: IoTSupport
 //   - SCM: pvginkel/IoTSupport, branch main
 //   - Script Path: Jenkinsfile
 

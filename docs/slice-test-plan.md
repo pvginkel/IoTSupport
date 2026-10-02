@@ -115,12 +115,12 @@ Pushing is this phase's job — the driver ff-merges locally and never pushes a 
 checks before the doc phase that every repo in `state.json`'s `bases` reached `origin`. Push each
 one, honouring any repo named in `plan.md`'s `## Push holds`.
 
-The push triggers Jenkins job **`IoTSupport/IoTSupport`**. Follow it in the foreground:
+The push triggers Jenkins job **`IoTSupport`**. Follow it in the foreground:
 
 ```
-mcp__jenkins__getJob   jobFullName="IoTSupport/IoTSupport"
+mcp__jenkins__getJob   jobFullName="IoTSupport"
                        tree="lastBuild[number,result,building,url],inQueue"
-mcp__jenkins__getBuild jobFullName="IoTSupport/IoTSupport" buildNumber=<n>
+mcp__jenkins__getBuild jobFullName="IoTSupport" buildNumber=<n>
                        tree="number,result,building,duration"
 ```
 
