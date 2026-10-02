@@ -12,8 +12,9 @@ against a deployed instance. It runs the suites tree-wide and boots this repo's 
 this environment, from the merged working tree.
 
 **The push deploys to production.** `Jenkinsfile` runs a validation Job, then builds both images
-with `helmCharts.kaniko2` (`backend/Dockerfile` → `iot-support`, `frontend/Dockerfile` →
-`iot-support-frontend`), then `cicd.helmDeploy()`. There is no DTAP: a green build on `main` *is*
+with `helmCharts.kaniko2` (`backend/Dockerfile` → `iotsupport-app`, `frontend/Dockerfile` →
+`iotsupport-ui`), then `cicd.writeVersionPins(...)` pins both tags into IotDeploy, which Argo CD
+syncs to prd. There is no DTAP: a green build on `main` *is*
 the release. That is the repo's standing behaviour, not something this phase controls, and it is
 the whole reason for the ordering below — **everything is verified before the push, because after
 the push it is live.**

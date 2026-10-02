@@ -10,7 +10,7 @@ projects:
       IoTSupport monorepo — orchestration tooling (the suite runner), the
       shared Procfile.dev dev stack, and CI.
     # Two Jenkins jobs build this repo. The IoTSupport job is the main
-    # pipeline (validation Job, both image builds, Helm deploy); AaC/IoTSupport
+    # pipeline (validation Job, both image builds, pin into IotDeploy); AaC/IoTSupport
     # runs Jenkinsfile.architecture, which regenerates and validates the
     # architecture artifacts. Only one name fits this key, so it is the main one.
     jenkins: IoTSupport
