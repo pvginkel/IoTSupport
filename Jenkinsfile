@@ -59,7 +59,7 @@ pipeline {
                                     RUSTFS_SECRET_KEY: 's3storage',
                                 ]],
                                 [name: 'opensearch', image: 'opensearchproject/opensearch:2',
-                                    resources: [requests: [memory: '640Mi'], limits: [memory: '640Mi']],
+                                    resources: [limits: [memory: '640Mi']],
                                     env: [
                                         'discovery.type': 'single-node',
                                         'plugins.security.disabled': 'true',
