@@ -8,6 +8,7 @@ from queue import ShutDown
 from unittest.mock import MagicMock, Mock, patch
 
 import httpx
+from prometheus_client import REGISTRY
 
 from app.app_config import AppSettings
 from app.services.logsink_service import LogSinkService
@@ -45,6 +46,14 @@ def _make_mock_mqtt_service(mqtt_url: str | None = "mqtt://localhost:1883") -> M
     mock_service.config.mqtt_url = mqtt_url
     mock_service.enabled = bool(mqtt_url)
     return mock_service
+
+
+def _ok_response() -> MagicMock:
+    """Create a mock _bulk answer that accepted every item."""
+    return MagicMock(
+        raise_for_status=MagicMock(),
+        json=MagicMock(return_value={"errors": False}),
+    )
 
 
 def _drain_service(service: LogSinkService, lifecycle: TestLifecycleCoordinator) -> None:
@@ -141,8 +150,7 @@ class TestLogSinkServiceMessageProcessing:
     def test_on_message_enqueues_document(self, mock_http_client_class: Mock):
         """Valid JSON message is enqueued for batch writing."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -174,8 +182,7 @@ class TestLogSinkServiceMessageProcessing:
     def test_on_message_strips_ansi_codes(self, mock_http_client_class: Mock):
         """ANSI escape codes are stripped from message field."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -211,8 +218,7 @@ class TestLogSinkServiceMessageProcessing:
     def test_on_message_removes_relative_time(self, mock_http_client_class: Mock):
         """relative_time field is removed from document."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -248,8 +254,7 @@ class TestLogSinkServiceMessageProcessing:
     def test_on_message_adds_timestamp(self, mock_http_client_class: Mock):
         """@timestamp field is added with current UTC time."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -287,8 +292,7 @@ class TestLogSinkServiceMessageProcessing:
     ):
         """Documents without message field are handled gracefully."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -342,8 +346,7 @@ class TestLogSinkServiceMessageProcessing:
     def test_on_message_preserves_other_fields(self, mock_http_client_class: Mock):
         """Other fields in payload are preserved in document."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -386,8 +389,7 @@ class TestLogSinkServiceBatching:
     def test_single_message_batched(self, mock_http_client_class: Mock):
         """One message results in one bulk request with one doc."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -422,8 +424,7 @@ class TestLogSinkServiceBatching:
         # Use an event to block the writer thread until all messages are enqueued
         write_gate = threading.Event()
         original_post = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         original_post.return_value = mock_response
 
         mock_http_client = MagicMock()
@@ -470,8 +471,7 @@ class TestLogSinkServiceBatching:
     def test_bulk_request_format(self, mock_http_client_class: Mock):
         """Verify NDJSON format with action/doc pairs."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -526,8 +526,7 @@ class TestLogSinkServiceBatching:
         # Use an event to block the writer thread
         write_gate = threading.Event()
         original_post = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         original_post.return_value = mock_response
 
         mock_http_client = MagicMock()
@@ -584,7 +583,7 @@ class TestLogSinkServiceElasticsearchRetry:
         mock_http_client.post.side_effect = [
             httpx.ConnectError("Connection refused"),
             httpx.ConnectError("Connection refused"),
-            MagicMock(raise_for_status=MagicMock()),
+            _ok_response(),
         ]
         mock_http_client_class.return_value = mock_http_client
 
@@ -615,7 +614,7 @@ class TestLogSinkServiceElasticsearchRetry:
         mock_http_client = MagicMock()
         mock_http_client.post.side_effect = [
             httpx.TimeoutException("Request timed out"),
-            MagicMock(raise_for_status=MagicMock()),
+            _ok_response(),
         ]
         mock_http_client_class.return_value = mock_http_client
 
@@ -648,7 +647,7 @@ class TestLogSinkServiceElasticsearchRetry:
         error_response.text = "Service Unavailable"
         mock_http_client.post.side_effect = [
             httpx.HTTPStatusError("503", request=MagicMock(), response=error_response),
-            MagicMock(raise_for_status=MagicMock()),
+            _ok_response(),
         ]
         mock_http_client_class.return_value = mock_http_client
 
@@ -705,8 +704,7 @@ class TestLogSinkServiceElasticsearchRetry:
     ):
         """ES auth is used when username/password configured."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -735,6 +733,98 @@ class TestLogSinkServiceElasticsearchRetry:
             _drain_service(service, lifecycle)
 
 
+class TestLogSinkServiceBulkItemErrors:
+    """Tests for _bulk answers that are 2xx but not a clean success."""
+
+    @patch("app.services.logsink_service.logger")
+    @patch("app.services.logsink_service.httpx.Client")
+    def test_rejected_items_are_counted_logged_and_not_retried(
+        self, mock_http_client_class: Mock, mock_logger: Mock
+    ):
+        """A 200 answer with errors: true counts item_rejected, logs the first refusal, and does not retry."""
+        rejected_response = MagicMock(raise_for_status=MagicMock())
+        rejected_response.json.return_value = {
+            "errors": True,
+            "items": [
+                {"index": {"_index": "logstash-http-2026.10.09", "status": 201}},
+                {"index": {
+                    "_index": "logstash-http-2026.10.09",
+                    "status": 403,
+                    "error": {
+                        "type": "security_exception",
+                        "reason": "action [indices:data/write/bulk[s]] is unauthorized",
+                    },
+                }},
+                {"index": {
+                    "_index": "logstash-http-2026.10.09",
+                    "status": 403,
+                    "error": {"type": "security_exception", "reason": "unauthorized"},
+                }},
+            ],
+        }
+        mock_http_client = MagicMock()
+        # A retry would get the second answer instead of looping forever
+        mock_http_client.post.side_effect = [rejected_response, _ok_response()]
+        mock_http_client_class.return_value = mock_http_client
+
+        service = LogSinkService(
+            config=_make_test_settings(), mqtt_service=_make_mock_mqtt_service(),
+            lifecycle_coordinator=StubLifecycleCoordinator(),
+        )
+
+        batch = [("logstash-http-2026.10.09", {"message": f"Log {i}"}) for i in range(3)]
+        service._write_batch_to_elasticsearch(batch)
+
+        assert mock_http_client.post.call_count == 1
+        assert REGISTRY.get_sample_value(
+            "iot_logsink_es_writes_total",
+            {"status": "error", "error_type": "item_rejected"},
+        ) == 1
+        assert REGISTRY.get_sample_value(
+            "iot_logsink_es_writes_total", {"status": "success", "error_type": "none"}
+        ) is None
+        mock_logger.warning.assert_called_once()
+        warning_args = mock_logger.warning.call_args[0]
+        rendered = warning_args[0] % warning_args[1:]
+        assert "refused 2 of 3 docs" in rendered
+        assert "status 403" in rendered
+        assert "security_exception" in rendered
+        assert "action [indices:data/write/bulk[s]] is unauthorized" in rendered
+
+    @patch("app.services.logsink_service.logger")
+    @patch("app.services.logsink_service.httpx.Client")
+    def test_unparseable_answer_is_counted_as_success_and_not_retried(
+        self, mock_http_client_class: Mock, mock_logger: Mock
+    ):
+        """A 2xx answer that is not JSON keeps counting as a success, with a warning."""
+        garbled_response = MagicMock(raise_for_status=MagicMock())
+        garbled_response.status_code = 200
+        garbled_response.text = "<html>proxy</html>"
+        garbled_response.json.side_effect = json.JSONDecodeError("Expecting value", "", 0)
+        mock_http_client = MagicMock()
+        mock_http_client.post.side_effect = [garbled_response, _ok_response()]
+        mock_http_client_class.return_value = mock_http_client
+
+        service = LogSinkService(
+            config=_make_test_settings(), mqtt_service=_make_mock_mqtt_service(),
+            lifecycle_coordinator=StubLifecycleCoordinator(),
+        )
+
+        service._write_batch_to_elasticsearch(
+            [("logstash-http-2026.10.09", {"message": "Log"})]
+        )
+
+        assert mock_http_client.post.call_count == 1
+        assert REGISTRY.get_sample_value(
+            "iot_logsink_es_writes_total", {"status": "success", "error_type": "none"}
+        ) == 1
+        mock_logger.warning.assert_called_once()
+        warning_args = mock_logger.warning.call_args[0]
+        rendered = warning_args[0] % warning_args[1:]
+        assert "is not JSON" in rendered
+        assert "<html>proxy</html>" in rendered
+
+
 class TestLogSinkServiceLifecycle:
     """Tests for lifecycle coordinator integration."""
 
@@ -742,8 +832,7 @@ class TestLogSinkServiceLifecycle:
     def test_prepare_shutdown_shuts_down_queue(self, mock_http_client_class: Mock):
         """PREPARE_SHUTDOWN event shuts down the queue so producers get ShutDown."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -821,8 +910,7 @@ class TestLogSinkServiceLifecycle:
         # Use an event to block the writer thread
         write_gate = threading.Event()
         original_post = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         original_post.return_value = mock_response
 
         mock_http_client = MagicMock()
@@ -932,8 +1020,7 @@ class TestLogSinkServiceNdjson:
     def test_on_message_processes_multiple_lines(self, mock_http_client_class: Mock):
         """Multiple JSON lines are each processed and enqueued."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -980,8 +1067,7 @@ class TestLogSinkServiceNdjson:
     def test_on_message_skips_empty_lines(self, mock_http_client_class: Mock):
         """Empty lines in NDJSON are skipped."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -1017,8 +1103,7 @@ class TestLogSinkServiceNdjson:
     ):
         """Invalid JSON on one line doesn't prevent other lines from processing."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -1054,8 +1139,7 @@ class TestLogSinkServiceNdjson:
     ):
         """Lines with only whitespace are skipped."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -1092,8 +1176,7 @@ class TestLogSinkServiceIndexNaming:
     def test_index_name_format(self, mock_http_client_class: Mock):
         """Index name follows logstash-http-YYYY.MM.dd format."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -1135,8 +1218,7 @@ class TestLogSinkServiceSSEForwarding:
         """When a callback is registered and messages arrive,
         it is called with the parsed documents."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -1180,8 +1262,7 @@ class TestLogSinkServiceSSEForwarding:
     ):
         """NDJSON with multiple lines forwards all parsed documents."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -1216,8 +1297,7 @@ class TestLogSinkServiceSSEForwarding:
     def test_no_callback_when_none_registered(self, mock_http_client_class: Mock):
         """When no callbacks are registered, ES enqueue proceeds normally."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -1247,8 +1327,7 @@ class TestLogSinkServiceSSEForwarding:
     ):
         """If a callback raises, ES enqueue still proceeds."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -1305,8 +1384,7 @@ class TestLogSinkServiceSSEForwarding:
     def test_multiple_callbacks_all_invoked(self, mock_http_client_class: Mock):
         """Multiple registered callbacks are all invoked."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 
@@ -1338,8 +1416,7 @@ class TestLogSinkServiceSSEForwarding:
     def test_failing_callback_does_not_block_others(self, mock_http_client_class: Mock):
         """A failing callback does not prevent subsequent callbacks from running."""
         mock_http_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
+        mock_response = _ok_response()
         mock_http_client.post.return_value = mock_response
         mock_http_client_class.return_value = mock_http_client
 

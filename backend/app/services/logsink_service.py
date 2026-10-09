@@ -348,6 +348,16 @@ class LogSinkService:
                 )
                 response.raise_for_status()
 
+                # _bulk answers 2xx even when it refuses single items; those
+                # documents are dropped, not retried, since a retry would
+                # duplicate the items it did accept
+                if self._log_rejected_bulk_items(response, len(batch)):
+                    self.logsink_es_writes_total.labels(
+                        status="error", error_type="item_rejected"
+                    ).inc()
+                    self.logsink_retry_delay_seconds.set(0)
+                    return
+
                 # Success
                 duration = time.perf_counter() - start_time
                 self.logsink_es_write_duration_seconds.observe(duration)
@@ -432,6 +442,44 @@ class LogSinkService:
 
             # Increment delay for next attempt (capped at MAX_RETRY_DELAY)
             delay = min(delay + self.RETRY_DELAY_INCREMENT, self.MAX_RETRY_DELAY)
+
+    def _log_rejected_bulk_items(
+        self, response: httpx.Response, batch_size: int
+    ) -> bool:
+        """Log the items a 2xx _bulk answer refused, and return whether there were any.
+
+        A body that is not JSON is logged and counted as written rather than
+        retried, so it can never cause endless retries or duplicate documents.
+        """
+        try:
+            body = response.json()
+        except ValueError:
+            logger.warning(
+                "LogSinkService ES bulk answer %d is not JSON, counting %d docs "
+                "as written: %s",
+                response.status_code,
+                batch_size,
+                response.text[:200] if response.text else "No body",
+            )
+            return False
+
+        if not body["errors"]:
+            return False
+
+        # Each item is keyed by its action ("index"); a refused one carries an error
+        results = [next(iter(item.values())) for item in body["items"]]
+        failed = [result for result in results if "error" in result]
+        first = failed[0]
+        logger.warning(
+            "LogSinkService ES bulk refused %d of %d docs, dropping them "
+            "(first: status %d, %s: %s)",
+            len(failed),
+            batch_size,
+            first["status"],
+            first["error"]["type"],
+            first["error"]["reason"],
+        )
+        return True
 
     def _get_es_auth(self) -> tuple[str, str] | None:
         """Get Elasticsearch HTTP Basic Auth credentials if configured.
