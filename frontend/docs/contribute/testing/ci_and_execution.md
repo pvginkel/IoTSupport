@@ -43,7 +43,7 @@ Playwright is configured in `playwright.config.ts` with `headless: true` by defa
 Playwright now uses per-worker managed services exclusively. Each worker starts its own isolated backend, SSE Gateway, and frontend on dynamically allocated ports.
 
 Service startup sequence (per worker):
-1. **Backend** – Started via `../backend/scripts/testing-server.sh` with a worker-specific SQLite database copy.
+1. **Backend** – Started via `../backend/scripts/testing-server.sh --database-url <worker-db>`, on the worker's own PostgreSQL database, cloned from the run's seed (`<run>_w<parallel index>`).
 2. **SSE Gateway** – Started via `../ssegateway/scripts/run-gateway.sh` with callback URL pointing to the worker's backend.
 3. **Frontend** – Started via `./scripts/testing-server.sh` with `VITE_TEST_MODE=true`, proxying to the worker's backend and gateway.
 
@@ -59,8 +59,7 @@ The external services mode (`PLAYWRIGHT_MANAGED_SERVICES=false`) has been remove
 `tests/support/global-setup.ts` runs once before the suite:
 - Loads `.env.test`.
 - Throws an error if `PLAYWRIGHT_MANAGED_SERVICES=false` is detected (external services mode has been removed).
-- Initializes a seeded SQLite database that each worker copies for isolation.
-- Sets `PLAYWRIGHT_SEEDED_SQLITE_DB` environment variable for worker fixtures.
+- Builds the run's seed database (`iot_support_e2e_<run id>_seed`) on the PostgreSQL server the backend suite uses (`TEST_DATABASE_ADMIN_URL`, the `postgres` sidecar by default), with the backend's `load-test-data`. Each worker clones it, and global teardown drops the run's databases (`tests/support/helpers/pg-admin.ts`).
 
 ## Execution Policies
 
