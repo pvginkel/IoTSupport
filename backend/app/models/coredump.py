@@ -44,7 +44,7 @@ class CoreDump(db.Model):  # type: ignore[name-defined]
 
     # Foreign key to device (required, cascade delete with device)
     device_id: Mapped[int] = mapped_column(
-        ForeignKey("devices.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
     # Chip type (e.g., esp32, esp32s3)

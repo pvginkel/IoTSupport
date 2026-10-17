@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, Text, func
+from sqlalchemy import DateTime, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
@@ -24,15 +24,16 @@ class DeviceModel(db.Model):  # type: ignore[name-defined]
     """
 
     __tablename__ = "device_models"
+    # Revision 002 built both the column's unique constraint and this plain
+    # index; the model describes what the revisions built.
+    __table_args__ = (Index("ix_device_models_code", "code"),)
 
     # Surrogate primary key (auto-increment)
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     # Model code (unique, immutable, lowercase alphanumeric with underscores)
     # Pattern: [a-z0-9_]+, max 50 chars
-    code: Mapped[str] = mapped_column(
-        String(50), unique=True, nullable=False, index=True
-    )
+    code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
 
     # Human-readable model name
     name: Mapped[str] = mapped_column(String(255), nullable=False)

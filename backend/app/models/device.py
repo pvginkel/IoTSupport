@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
@@ -40,18 +40,19 @@ class Device(db.Model):  # type: ignore[name-defined]
     """
 
     __tablename__ = "devices"
+    # Revision 002 built both the key's unique constraint and this plain
+    # index; the model describes what the revisions built.
+    __table_args__ = (Index("ix_devices_key", "key"),)
 
     # Surrogate primary key (auto-increment)
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     # Device key (unique, 8 chars, pattern [a-z0-9])
-    key: Mapped[str] = mapped_column(
-        String(8), unique=True, nullable=False, index=True
-    )
+    key: Mapped[str] = mapped_column(String(8), unique=True, nullable=False)
 
     # Foreign key to device model (required)
     device_model_id: Mapped[int] = mapped_column(
-        ForeignKey("device_models.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("device_models.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
     # JSON configuration content (stored as text)
@@ -69,7 +70,7 @@ class Device(db.Model):  # type: ignore[name-defined]
 
     # Rotation state machine
     rotation_state: Mapped[str] = mapped_column(
-        String(20), nullable=False, default=RotationState.OK.value
+        String(20), nullable=False, default=RotationState.OK.value, index=True
     )
 
     # Cached secret for timeout recovery (encrypted with Fernet)

@@ -29,7 +29,7 @@ class FirmwareVersion(db.Model):  # type: ignore[name-defined]
 
     # Foreign key to device_models (required, cascade delete with model)
     device_model_id: Mapped[int] = mapped_column(
-        ForeignKey("device_models.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("device_models.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
     # Firmware version string (e.g., "1.2.3")
