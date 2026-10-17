@@ -12,8 +12,10 @@ capabilities:
 # dropping one:
 #   postgres   — the dev stack's database. backend/scripts/init-dev-database.py
 #                creates it and `cli upgrade-db` migrates it, both in setup:, and
-#                /health/readyz reports database.connected. The suites do NOT use
-#                it: pytest and the Playwright harness both force SQLite.
+#                /health/readyz reports checks.database.status. Both suites use
+#                it too, through TEST_DATABASE_ADMIN_URL: pytest builds a template
+#                database per run from the revisions, and the Playwright harness a
+#                seed database, each served to the tests as clones.
 #   s3storage  — S3 (RustFS) for firmware and attachments. Hard dependency of
 #                the backend suite: tests/conftest_infrastructure.py probes
 #                S3_ENDPOINT_URL in pytest_configure and aborts the whole run if
