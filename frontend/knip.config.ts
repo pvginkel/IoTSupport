@@ -27,6 +27,10 @@ const config: KnipConfig = {
     // Used via Vite resolve.alias when VITE_TEST_MODE=true (knip can't follow aliases)
     'tests/support/mocks/esptool-mock.ts',
   ],
+  ignoreBinaries: [
+    // generate:api:with-backend runs the repository root's regenerate-openapi.py
+    'python3',
+  ],
   ignoreDependencies: [
     // Template-provided dependencies used in template-owned (ignored) code
     '@radix-ui/react-dialog',

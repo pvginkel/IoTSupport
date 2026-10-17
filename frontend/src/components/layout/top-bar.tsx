@@ -6,6 +6,7 @@
 
 import { Link } from '@tanstack/react-router'
 import { PROJECT_TITLE, PROJECT_DESCRIPTION } from '@/lib/consts'
+import { StageIndicator } from './stage-indicator'
 import { UserDropdown } from './user-dropdown'
 
 interface TopBarProps {
@@ -72,6 +73,9 @@ export function TopBar({ onMenuToggle }: TopBarProps) {
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Deployment stage, hidden on prd */}
+      <StageIndicator />
 
       {/* User dropdown */}
       <UserDropdown />
