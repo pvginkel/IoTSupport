@@ -10,7 +10,7 @@ spec repo is not.
 - **Root** — orchestration tooling (`tools/suite_runner`, `scripts/`), the `Procfile.dev` dev
   stack, `docs/`, and CI (`Jenkinsfile`, `Jenkinsfile.architecture`).
 - **`backend/`** — Flask REST API: device/model CRUD, firmware storage, Keycloak M2M auth, MQTT
-  rotation notifications, Prometheus metrics. Python/Poetry.
+  rotation notifications, Prometheus metrics. Python/uv.
 - **`frontend/`** — React 19 + TanStack Router/Query SPA with a generated OpenAPI client.
   pnpm + Vite + Playwright.
 - **`../IoTSupportSpecs`** — the slice/planning repo, a **separate git repo**. Commit there as you
@@ -26,7 +26,7 @@ for them.
 Everything executes in the `modern-app` tool container, one sidecar for both toolsets because the
 Playwright harness boots the Flask backend per worker.
 
-The full CI suite is `cexec modern-app poetry run run-suite`; Jenkins runs the same command with
+The full CI suite is `cexec modern-app uv run run-suite`; Jenkins runs the same command with
 `--output-mode full`. `scripts/dev.py` starts all three dev services (frontend :3100, backend
 :3101, SSE gateway :3102) — stop it with `^C`, never `kill`.
 

@@ -15,7 +15,7 @@ that's what we poll.
 ## Customize for your project
 
 The defaults below assume:
-- A `backend/` subproject started with `poetry run dev` (long-running server).
+- A `backend/` subproject started with `uv run dev` (long-running server).
   The IoTSupport backend bootstraps its DB itself, so there is no separate
   one-shot prepare step (point DATABASE_URL at a reachable dev DB first).
 - The OpenAPI spec lives at `/api/docs/openapi.json`.
@@ -105,7 +105,7 @@ def start_backend(port: int, log_path: Path) -> subprocess.Popen[bytes]:
     log_file = open(log_path, "wb")
     try:
         return subprocess.Popen(
-            ["poetry", "run", "dev"],
+            ["uv", "run", "dev"],
             cwd=BACKEND_DIR,
             env=env,
             stdout=log_file,

@@ -182,15 +182,15 @@ class TestPartService:
 ### Linting and Formatting
 Before committing, run all checks with a single command:
 ```bash
-cexec modern-app poetry run check   # Runs ruff, mypy, vulture, and pytest
+cexec modern-app uv run check       # Runs ruff, mypy, vulture, and pytest
 ```
 
 Or run individual tools:
 ```bash
-cexec modern-app poetry run ruff check .                                           # Linting
-cexec modern-app poetry run mypy .                                                 # Type checking
-cexec modern-app poetry run vulture app/ vulture_whitelist.py --min-confidence 80  # Dead code detection
-cexec modern-app poetry run pytest                                                 # Full test suite
+cexec modern-app uv run ruff check .                                               # Linting
+cexec modern-app uv run mypy .                                                     # Type checking
+cexec modern-app uv run vulture app/ vulture_whitelist.py --min-confidence 80      # Dead code detection
+cexec modern-app uv run pytest                                                     # Full test suite
 ```
 
 `kc project lint backend` runs the first three; `kc project test backend` runs

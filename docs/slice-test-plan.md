@@ -48,7 +48,7 @@ No gate in this repo is known red, and the suite has no known flake: a failure i
 build`, `test` or `lint` is this slice's, and reporting it as pre-existing needs evidence from
 HEAD, not an assumption. One mechanical caveat: **`kc project lint` stops at the first failing
 statement**, so a red lint tells you nothing about the statements behind it — read it by running
-the statements individually (`cexec modern-app poetry run ruff check .`, `... mypy .`, `...
+the statements individually (`cexec modern-app uv run ruff check .`, `... mypy .`, `...
 vulture app/ vulture_whitelist.py --min-confidence 80` from `backend/`, `... pnpm check` from
 `frontend/`).
 

@@ -4,7 +4,7 @@
 # call). A .dockerignore at the repository root is never read for this build.
 #
 # Everything listed here is a path the Dockerfile does not COPY (it takes only
-# pyproject.toml, poetry.lock, run.py, alembic.ini, app/ and alembic/), so this
+# pyproject.toml, uv.lock, *.py, alembic.ini, app/ and alembic/), so this
 # file cannot change what CI builds — it only stops the dev environment from
 # streaming its build and tool output to the builder. CI never noticed the
 # absence because it builds from a clean clone; here the lint and test gates

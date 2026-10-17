@@ -16,12 +16,12 @@ testing conventions; `docs/decisions/` the ADRs.
 
 ## Development
 
-Python, Poetry and the services the backend needs (PostgreSQL, S3 storage, OpenSearch) come with
+Python, uv and the services the backend needs (PostgreSQL, S3 storage, OpenSearch) come with
 the KubeCoder environment; commands run in the `modern-app` tool container. Run the `kc project`
 verbs from the repository root:
 
 ```bash
-kc project setup backend   # poetry install, generate .env/.env.test, create and migrate the database
+kc project setup backend   # uv sync, generate .env/.env.test, create and migrate the database
 kc project test backend    # pytest
 kc project lint backend    # ruff, mypy, vulture
 ```
