@@ -22,10 +22,12 @@ capabilities:
 #                it is unreachable. Also a CI validation-pod sidecar.
 #   opensearch — the device log viewer's backing store, via ELASTICSEARCH_URL
 #                (backend/scripts/generate-dev-env.sh points it at localhost:9200).
-#                Used by the dev stack and declared as a CI validation-pod sidecar,
-#                but exercised by NEITHER suite: pytest mocks the HTTP client and
-#                the Playwright specs read an in-memory seeded path. It looks
-#                unused from the tests alone; it is not.
+#                Used by the dev stack and a CI validation-pod sidecar. pytest
+#                mocks the HTTP client, but the Playwright device specs need it:
+#                the log viewer's history query (GET /api/devices/<id>/logs) reads
+#                it unless a spec seeded logs in memory, and answers 503 when it
+#                is unreachable (7 specs in devices-logs*, devices-tabs and
+#                devices-crud).
 services:
   - postgres
   - s3storage
@@ -37,7 +39,7 @@ services:
 imageBuilder: true
 
 # Creating a device creates a Keycloak client, so the Playwright suite cannot run
-# without an admin client — 70 of its 130 tests fail with "Keycloak admin API not
+# without an admin client — 70 of its 138 tests fail with "Keycloak admin API not
 # configured". The non-secret coordinates (base URL, realm, token URL) are written
 # into backend/.env by backend/scripts/generate-dev-env.sh.
 secrets:
