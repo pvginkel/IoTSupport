@@ -17,6 +17,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.database import scoped_session
 from app.exceptions import (
     RecordNotFoundException,
     ValidationException,
@@ -86,11 +87,8 @@ class CoredumpService:
         """
         return f"coredumps/{device_key}/{coredump_id}.dmp"
 
-    def _get_session(self) -> Session:
-        """Get a DB session from the container.
-
-        Returns the request-scoped session (for request context) or a new
-        session (for background threads via the ContextLocalSingleton).
+    def _require_container(self) -> "ServiceContainer":
+        """The container reference, set post-init in ``create_app()``.
 
         Raises:
             RuntimeError: If the container reference has not been set.
@@ -100,7 +98,18 @@ class CoredumpService:
                 "CoredumpService.container not set. "
                 "Ensure it is assigned post-init in create_app()."
             )
-        return self.container.db_session()  # type: ignore[no-any-return]
+        return self.container
+
+    def _get_session(self) -> Session:
+        """Get a DB session from the container.
+
+        Returns the request-scoped session (for request context) or a new
+        session (for background threads via the ContextLocalSingleton).
+
+        Raises:
+            RuntimeError: If the container reference has not been set.
+        """
+        return self._require_container().db_session()  # type: ignore[no-any-return]
 
     # -------------------------------------------------------------------------
     # Upload flow (called within a request-scoped session)
@@ -411,18 +420,17 @@ class CoredumpService:
     def _update_parse_status(
         self, coredump_id: int, status: ParseStatus, output: str
     ) -> None:
-        """Update a coredump record's parse status using the singleton DB pattern.
+        """Update a coredump record's parse status from the parsing thread.
 
-        Acquires a session from the container, updates the record, commits,
-        and resets the session.
+        Runs in a ``scoped_session``, which commits, closes the session and
+        resets the container's provider.
 
         Args:
             coredump_id: ID of the coredump to update.
             status: New parse status.
             output: Parsed output or error message.
         """
-        session = self._get_session()
-        try:
+        with scoped_session(self._require_container()) as session:
             stmt = select(CoreDump).where(CoreDump.id == coredump_id)
             coredump = session.execute(stmt).scalar_one_or_none()
             if coredump is None:
@@ -432,15 +440,6 @@ class CoredumpService:
             coredump.parse_status = status.value
             coredump.parsed_output = output
             coredump.parsed_at = datetime.now(UTC)
-            session.commit()
-
-        except Exception:
-            session.rollback()
-            raise
-
-        finally:
-            assert self.container is not None  # Guaranteed by _get_session() above
-            self.container.db_session.reset()
 
     def _cleanup_xfer_files(
         self, dmp_path: Path | None, elf_path: Path | None
