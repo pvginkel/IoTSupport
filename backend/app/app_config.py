@@ -9,9 +9,12 @@ import base64
 import hashlib
 import tempfile
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.config import Sensitive, dump_config_for_logging
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -93,7 +96,11 @@ class AppEnvironment(BaseSettings):
 
 
 class AppSettings(BaseModel):
-    """IoT Support application-specific settings."""
+    """IoT Support application-specific settings.
+
+    Annotate every field that holds a secret ``Annotated[str, Sensitive]``:
+    run.py logs these settings at boot.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -115,7 +122,7 @@ class AppSettings(BaseModel):
     mqtt_url: str | None = None
     device_mqtt_url: str | None = None
     mqtt_username: str | None = None
-    mqtt_password: str | None = None
+    mqtt_password: Annotated[str | None, Sensitive] = None
     mqtt_client_id: str = "iotsupport-backend"
 
     # Keycloak Admin API Settings
@@ -123,7 +130,7 @@ class AppSettings(BaseModel):
     keycloak_base_url: str | None = None
     keycloak_realm: str | None = None
     keycloak_admin_client_id: str | None = None
-    keycloak_admin_client_secret: str | None = None
+    keycloak_admin_client_secret: Annotated[str | None, Sensitive] = None
     keycloak_device_scope_name: str = "iot-device-audience"
     keycloak_admin_url: str | None = None
     keycloak_console_base_url: str | None = None
@@ -133,7 +140,7 @@ class AppSettings(BaseModel):
 
     # WiFi Credentials
     wifi_ssid: str | None = None
-    wifi_password: str | None = None
+    wifi_password: Annotated[str | None, Sensitive] = None
 
     # Rotation Settings
     rotation_cron: str | None = None
@@ -143,17 +150,21 @@ class AppSettings(BaseModel):
     # Elasticsearch Settings
     elasticsearch_url: str | None = None
     elasticsearch_username: str | None = None
-    elasticsearch_password: str | None = None
+    elasticsearch_password: Annotated[str | None, Sensitive] = None
     elasticsearch_index_pattern: str = "logstash-http-*"
 
     # Internal API URL for CronJob -> web process notifications
     internal_api_url: str | None = None
 
-    # Architecture pipeline trigger URL (opaque Jenkins webhook)
-    architecture_pipeline_trigger_url: str | None = None
+    # Architecture pipeline trigger URL (opaque Jenkins webhook; its token is a secret)
+    architecture_pipeline_trigger_url: Annotated[str | None, Sensitive] = None
 
     # Secret Encryption Key (derived from secret_key)
-    fernet_key: str = ""
+    fernet_key: Annotated[str, Sensitive] = ""
+
+    def dump_for_logging(self) -> dict[str, str]:
+        """Every setting, for the boot log, with the Sensitive ones as ``***``."""
+        return dump_config_for_logging(self)
 
     @classmethod
     def load(cls, env: "AppEnvironment | None" = None, flask_env: str = "development") -> "AppSettings":
