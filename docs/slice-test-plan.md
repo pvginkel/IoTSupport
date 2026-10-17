@@ -87,9 +87,10 @@ curl -s               http://localhost:3101/health/readyz                       
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3101/metrics
 ```
 
-All answer `200`; `readyz` reports `"ready": true` with `database.connected` and
-`sse_gateway.reachable` both true — which is what confirms postgres and the gateway on :3102, since
-neither suite exercises them. The proxied `/api/devices` is the one probe that proves the frontend
+All answer `200`; `readyz` reports `"status": "ok"` with `checks.database`, `checks.s3` and
+`checks.sse_gateway` each at `"status": "ok"` — which is what confirms the dev database and the
+gateway on :3102, since neither suite touches them (the suites run on their own database clones and
+gateways). The proxied `/api/devices` is the one probe that proves the frontend
 and backend are talking, so it is not optional.
 
 Stop it by sending `^C` down the fifo and waiting on the pid you captured:
