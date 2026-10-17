@@ -1,21 +1,18 @@
 """Tests for testing API endpoints."""
 
-import sqlite3
 from collections.abc import Generator
 from pathlib import Path
 
 import pytest
 from flask import Flask
 from flask.testing import FlaskClient
-from sqlalchemy.pool import StaticPool
 
-from app import create_app
 from app.app_config import AppSettings
 from app.config import Settings
-from app.database import upgrade_database
 from app.models.device import Device
 from app.models.device_model import DeviceModel
 from app.services.container import ServiceContainer
+from tests.conftest_infrastructure import RunDatabases, _create_test_app, _dispose_app
 
 
 def _build_testing_settings(tmp_path: Path) -> Settings:
@@ -25,8 +22,6 @@ def _build_testing_settings(tmp_path: Path) -> Settings:
         secret_key="test-secret-key",
         flask_env="testing",  # Enable testing mode
         debug=True,
-        # Database settings
-        database_url="sqlite:///:memory:",
         # CORS settings
         cors_origins=["http://localhost:3000"],
         # OIDC settings (disabled)
@@ -88,36 +83,6 @@ def _build_testing_app_settings(tmp_path: Path) -> AppSettings:
     )
 
 
-def _override_settings_for_sqlite(settings: Settings, conn: sqlite3.Connection) -> Settings:
-    """Create a copy of settings configured for SQLite with static pool."""
-    return settings.model_copy(
-        update={
-            "database_url": "sqlite://",
-            "sqlalchemy_engine_options": {
-                "poolclass": StaticPool,
-                "creator": lambda: conn,
-            },
-        }
-    )
-
-
-@pytest.fixture(scope="module")
-def testing_template_connection(tmp_path_factory) -> Generator[sqlite3.Connection]:
-    """Create a template SQLite database for testing mode tests."""
-    tmp_path = tmp_path_factory.mktemp("testing")
-    conn = sqlite3.connect(":memory:", check_same_thread=False)
-
-    settings = _override_settings_for_sqlite(_build_testing_settings(tmp_path), conn)
-    app_settings = _build_testing_app_settings(tmp_path)
-
-    template_app = create_app(settings, app_settings=app_settings, skip_background_services=True)
-    with template_app.app_context():
-        upgrade_database(recreate=True)
-
-    yield conn
-    conn.close()
-
-
 @pytest.fixture
 def testing_settings(tmp_path) -> Settings:
     """Create infrastructure test settings with FLASK_ENV=testing to enable testing endpoints."""
@@ -132,25 +97,25 @@ def testing_app_settings(tmp_path) -> AppSettings:
 
 @pytest.fixture
 def testing_app(
+    run_databases: RunDatabases,
     testing_settings: Settings,
     testing_app_settings: AppSettings,
-    testing_template_connection: sqlite3.Connection,
 ) -> Generator[Flask]:
-    """Create Flask app with testing mode enabled and database set up."""
-    clone_conn = sqlite3.connect(":memory:", check_same_thread=False)
-    testing_template_connection.backup(clone_conn)
+    """Create Flask app with testing mode enabled, on a database of its own.
 
-    settings = _override_settings_for_sqlite(testing_settings, clone_conn)
-
-    app = create_app(settings, app_settings=testing_app_settings, skip_background_services=True)
+    The database is a clone of the run's template, dropped afterwards, as the
+    template's committed_app does it: the app's commits are real.
+    """
+    url = run_databases.clone()
+    app = _create_test_app(
+        testing_settings.model_copy(update={"database_url": url}), testing_app_settings
+    )
 
     try:
         yield app
     finally:
-        with app.app_context():
-            from app.extensions import db as flask_db
-            flask_db.session.remove()
-        clone_conn.close()
+        _dispose_app(app)
+        run_databases.drop(url)
 
 
 @pytest.fixture

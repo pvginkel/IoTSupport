@@ -28,7 +28,6 @@ from tests.api.test_testing import (
     testing_client,  # noqa: F401
     testing_container,  # noqa: F401
     testing_settings,  # noqa: F401
-    testing_template_connection,  # noqa: F401
 )
 
 # ---------------------------------------------------------------------------

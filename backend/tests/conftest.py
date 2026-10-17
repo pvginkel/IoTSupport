@@ -8,14 +8,13 @@ domain fixtures.
 import os
 import struct
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
 import requests
 
 from app.app_config import AppSettings
-from app.config import Settings
+from app.config import TEST_DB_POOL_MAX_OVERFLOW, TEST_DB_POOL_SIZE, Settings
 from app.services.container import ServiceContainer
 
 if TYPE_CHECKING:
@@ -74,18 +73,30 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 # Override test_settings to use flask_env="development" (not "testing")
 # so that testing endpoints are properly gated.
 # IoT has separate testing_app/testing_client fixtures for testing mode.
+# Both overrides are session-scoped, as the template's session app requires.
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def test_settings() -> Settings:
     """Override infrastructure test_settings with flask_env=development.
 
     This ensures testing-only endpoints are gated behind FLASK_ENV=testing.
     Tests that need testing mode use the separate testing_client fixture.
+    The database URL is set by the fixture that builds an app.
     """
     return Settings(
-        database_url="sqlite:///:memory:",
+        # The small test pool, as the template's test_settings has it
+        db_pool_size=TEST_DB_POOL_SIZE,
+        db_pool_max_overflow=TEST_DB_POOL_MAX_OVERFLOW,
+        db_pool_timeout=10,
+        sqlalchemy_engine_options={
+            "pool_size": TEST_DB_POOL_SIZE,
+            "max_overflow": TEST_DB_POOL_MAX_OVERFLOW,
+            "pool_timeout": 10,
+            "pool_pre_ping": True,
+            "echo_pool": False,
+        },
         secret_key="test-secret-key",
         debug=True,
         flask_env="development",
@@ -114,9 +125,10 @@ def test_settings() -> Settings:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def test_app_settings(tmp_path: Path) -> AppSettings:
+@pytest.fixture(scope="session")
+def test_app_settings(tmp_path_factory: pytest.TempPathFactory) -> AppSettings:
     """Create IoT-specific test app settings."""
+    tmp_path = tmp_path_factory.mktemp("app_settings")
     return AppSettings(
         # Coredump parsing sidecar
         parse_sidecar_xfer_dir=None,
