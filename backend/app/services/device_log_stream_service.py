@@ -18,7 +18,7 @@ from typing import Any
 from prometheus_client import Counter, Gauge
 
 from app.exceptions import AuthorizationException, RecordNotFoundException
-from app.services.sse_connection_manager import SSEConnectionManager
+from app.services.sse_connection_manager import SSEConnectionManager, Target
 from app.utils.lifecycle_coordinator import LifecycleCoordinatorProtocol, LifecycleEvent
 
 logger = logging.getLogger(__name__)
@@ -295,7 +295,7 @@ class DeviceLogStreamService:
             # Send to each subscriber outside the lock
             for request_id in targets:
                 success = self.sse_connection_manager.send_event(
-                    request_id,
+                    Target.connection(request_id),
                     event_data,
                     event_name="device-logs",
                     service_type="device-logs",

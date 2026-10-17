@@ -9,7 +9,7 @@ import logging
 
 from prometheus_client import Counter
 
-from app.services.sse_connection_manager import SSEConnectionManager
+from app.services.sse_connection_manager import BROADCAST_TARGET, SSEConnectionManager
 from app.utils.lifecycle_coordinator import LifecycleCoordinatorProtocol, LifecycleEvent
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ class RotationNudgeService:
         SSE_ROTATION_NUDGE_BROADCAST_TOTAL.labels(source=source).inc()
 
         result = self.sse_connection_manager.send_event(
-            None,  # None = broadcast to all connections
+            BROADCAST_TARGET,
             {},
             event_name="rotation-updated",
             service_type="rotation",

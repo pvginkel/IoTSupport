@@ -6,7 +6,7 @@ import pytest
 
 from app.exceptions import AuthorizationException, RecordNotFoundException
 from app.services.device_log_stream_service import DeviceLogStreamService
-from app.services.sse_connection_manager import ConnectionInfo, SSEConnectionManager
+from app.services.sse_connection_manager import ConnectionInfo, SSEConnectionManager, Target
 from tests.testing_utils import StubLifecycleCoordinator, TestLifecycleCoordinator
 
 
@@ -165,7 +165,7 @@ class TestLogForwarding:
 
         mock_sse.send_event.assert_called_once()
         call_args = mock_sse.send_event.call_args
-        assert call_args[0][0] == "req-1"  # request_id
+        assert call_args[0][0] == Target.connection("req-1")
         assert call_args[0][1]["device_entity_id"] == "sensor.a"
         assert len(call_args[0][1]["logs"]) == 2
         assert call_args[1]["event_name"] == "device-logs"
@@ -220,10 +220,10 @@ class TestLogForwarding:
         service.forward_logs(documents)
 
         assert mock_sse.send_event.call_count == 2
-        sent_request_ids = {
+        sent_targets = {
             call[0][0] for call in mock_sse.send_event.call_args_list
         }
-        assert sent_request_ids == {"req-1", "req-2"}
+        assert sent_targets == {Target.connection("req-1"), Target.connection("req-2")}
 
     def test_forward_logs_groups_by_entity(self) -> None:
         """Documents are grouped by entity_id for batched delivery."""

@@ -3,7 +3,7 @@
 from unittest.mock import Mock
 
 from app.services.rotation_nudge_service import RotationNudgeService
-from app.services.sse_connection_manager import SSEConnectionManager
+from app.services.sse_connection_manager import BROADCAST_TARGET, SSEConnectionManager
 from tests.testing_utils import StubLifecycleCoordinator, TestLifecycleCoordinator
 
 
@@ -37,7 +37,7 @@ class TestBroadcast:
 
         assert result is True
         mock_sse.send_event.assert_called_once_with(
-            None, {}, event_name="rotation-updated", service_type="rotation"
+            BROADCAST_TARGET, {}, event_name="rotation-updated", service_type="rotation"
         )
 
     def test_broadcast_no_connections(self) -> None:
