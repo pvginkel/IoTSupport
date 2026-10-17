@@ -301,10 +301,11 @@ class TestForceAuthError:
 
     def test_force_error_500(self, testing_client: FlaskClient):
         """Forces a 500 error on next /api/auth/self request."""
-        # Create a session first
+        # Create a session first. A caller with none of the app's roles gets
+        # 403 before the forced error.
         testing_client.post(
             "/api/testing/auth/session",
-            json={"subject": "test-user"},
+            json={"subject": "test-user", "roles": ["editor"]},
         )
 
         # Force a 500 error
@@ -321,7 +322,7 @@ class TestForceAuthError:
         """Forces a 503 error on next /api/auth/self request."""
         testing_client.post(
             "/api/testing/auth/session",
-            json={"subject": "test-user"},
+            json={"subject": "test-user", "roles": ["editor"]},
         )
 
         testing_client.post("/api/testing/auth/force-error?status=503")
@@ -367,12 +368,12 @@ class TestTestSessionAuthenticationMiddleware:
         self, testing_client: FlaskClient, testing_container: ServiceContainer
     ):
         """Test sessions grant access to endpoints that require authentication."""
-        # Create a test session with admin role
+        # Create a test session with one of the app's roles
         testing_client.post(
             "/api/testing/auth/session",
             json={
-                "subject": "admin-user",
-                "roles": ["admin"],
+                "subject": "editor-user",
+                "roles": ["editor"],
             },
         )
 
