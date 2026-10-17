@@ -2,9 +2,15 @@
 
 from unittest.mock import ANY, MagicMock, Mock, patch
 
+import pytest
+
 from app.app_config import AppSettings
 from app.services.mqtt_service import MqttService
 from tests.testing_utils import StubLifecycleCoordinator, TestLifecycleCoordinator
+
+# These tests build MqttService (and LogSinkService) themselves, and both
+# register their metrics when constructed.
+pytestmark = pytest.mark.usefixtures("clear_prometheus_registry")
 
 
 def _make_test_settings(
