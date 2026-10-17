@@ -1,5 +1,6 @@
 """Tests for ElasticsearchService."""
 
+from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -11,6 +12,15 @@ from app.core_exceptions import ExternalServiceException
 from app.exceptions import ServiceUnavailableException
 from app.services.container import ServiceContainer
 from app.services.elasticsearch_service import ElasticsearchService
+
+
+@pytest.fixture(autouse=True)
+def _restore_elasticsearch_service(container: ServiceContainer) -> Generator[None]:
+    """Undo the tests' ``enabled`` and ``config`` swaps on the session app's singleton."""
+    service = container.elasticsearch_service()
+    enabled, config = service.enabled, service.config
+    yield
+    service.enabled, service.config = enabled, config
 
 
 class TestElasticsearchServiceQueryLogs:

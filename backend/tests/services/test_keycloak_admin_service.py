@@ -1,5 +1,6 @@
 """Tests for KeycloakAdminService."""
 
+from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -8,6 +9,15 @@ from flask import Flask
 
 from app.core_exceptions import ExternalServiceException
 from app.services.container import ServiceContainer
+
+
+@pytest.fixture(autouse=True)
+def _restore_keycloak_service(container: ServiceContainer) -> Generator[None]:
+    """Undo the tests' ``enabled`` flips on the session app's singleton."""
+    service = container.keycloak_admin_service()
+    enabled = service.enabled
+    yield
+    service.enabled = enabled
 
 
 class TestKeycloakAdminServiceUpdateClientMetadata:

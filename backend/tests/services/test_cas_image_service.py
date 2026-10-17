@@ -18,13 +18,18 @@ class TestCasImageService:
     """Tests for CasImageService thumbnail caching."""
 
     def test_construction_creates_thumbnail_directory(
-        self, container: ServiceContainer, test_app_settings: AppSettings
+        self, container: ServiceContainer, test_app_settings: AppSettings, tmp_path: Path
     ) -> None:
         """Constructing the service creates thumbnail_storage_path."""
-        thumbnail_dir = test_app_settings.thumbnail_storage_path
+        # The session's thumbnail directory exists once any test has built the
+        # service, so this one builds it on a directory of its own.
+        thumbnail_dir = tmp_path / "thumbnails"
+        app_settings = test_app_settings.model_copy(
+            update={"thumbnail_storage_path": thumbnail_dir}
+        )
         assert not thumbnail_dir.exists()
 
-        container.cas_image_service()
+        container.cas_image_service(app_settings=app_settings)
 
         assert thumbnail_dir.is_dir()
 

@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from flask import Flask
 
 from app.startup import _notify_rotation_nudge
@@ -10,14 +11,17 @@ from app.startup import _notify_rotation_nudge
 class TestNotifyRotationNudge:
     """Tests for _notify_rotation_nudge helper."""
 
-    def test_nudge_sent_when_url_configured(self, app: Flask) -> None:
+    def test_nudge_sent_when_url_configured(
+        self, app: Flask, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Given INTERNAL_API_URL is set, when called, then HTTP POST is made."""
         mock_config = MagicMock()
         mock_config.internal_api_url = "http://web-process:3200"
 
         mock_container = MagicMock()
         mock_container.app_config.return_value = mock_config
-        app.container = mock_container
+        # The session app is shared: monkeypatch puts its container back.
+        monkeypatch.setattr(app, "container", mock_container)
 
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
@@ -32,28 +36,34 @@ class TestNotifyRotationNudge:
             )
             mock_response.raise_for_status.assert_called_once()
 
-    def test_nudge_skipped_when_url_not_configured(self, app: Flask) -> None:
+    def test_nudge_skipped_when_url_not_configured(
+        self, app: Flask, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Given INTERNAL_API_URL is not set, when called, then no HTTP call is made."""
         mock_config = MagicMock()
         mock_config.internal_api_url = None
 
         mock_container = MagicMock()
         mock_container.app_config.return_value = mock_config
-        app.container = mock_container
+        # The session app is shared: monkeypatch puts its container back.
+        monkeypatch.setattr(app, "container", mock_container)
 
         with patch("app.startup.httpx.post") as mock_post:
             _notify_rotation_nudge(app)
 
             mock_post.assert_not_called()
 
-    def test_nudge_failure_does_not_raise(self, app: Flask) -> None:
+    def test_nudge_failure_does_not_raise(
+        self, app: Flask, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Given HTTP call fails, when called, then exception is swallowed."""
         mock_config = MagicMock()
         mock_config.internal_api_url = "http://web-process:3200"
 
         mock_container = MagicMock()
         mock_container.app_config.return_value = mock_config
-        app.container = mock_container
+        # The session app is shared: monkeypatch puts its container back.
+        monkeypatch.setattr(app, "container", mock_container)
 
         with patch(
             "app.startup.httpx.post",
@@ -62,7 +72,9 @@ class TestNotifyRotationNudge:
             # Should not raise
             _notify_rotation_nudge(app)
 
-    def test_nudge_strips_trailing_slash(self, app: Flask) -> None:
+    def test_nudge_strips_trailing_slash(
+        self, app: Flask, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Given INTERNAL_API_URL has trailing slash, URL is still correct.
 
         Note: strip_slashes is applied during AppSettings.load(), so the value
@@ -74,7 +86,8 @@ class TestNotifyRotationNudge:
 
         mock_container = MagicMock()
         mock_container.app_config.return_value = mock_config
-        app.container = mock_container
+        # The session app is shared: monkeypatch puts its container back.
+        monkeypatch.setattr(app, "container", mock_container)
 
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
