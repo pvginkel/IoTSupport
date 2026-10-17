@@ -189,6 +189,7 @@ export function useDeviceLogs({
   useEffect(() => {
     dispatch({ type: 'RESET' })
     isFetchingOlderRef.current = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional reset when the device changes
     setIsFetchingOlder(false)
     backfillAbortRef.current?.abort()
     backfillAbortRef.current = null
