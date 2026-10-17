@@ -1,41 +1,39 @@
-FROM python:3.13-slim AS build
-
-ENV POETRY_VIRTUALENVS_IN_PROJECT=1 \
-    POETRY_VIRTUALENVS_CREATE=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
-
-RUN pip install poetry
+# The build image (DockerImages, modern-app-backend-build) carries Python 3.13,
+# uv, the -dev packages wheels compile against, and uv's settings: the image's
+# own Python, never a downloaded one, and copy mode.
+FROM registry:5000/modern-app-backend-build AS build
 
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock ./
-RUN poetry install --only main --no-root --no-interaction --no-ansi
+# --- Reproduce the environment ---
+COPY pyproject.toml uv.lock /app/
 
-COPY run.py alembic.ini ./
-COPY app ./app
-COPY alembic ./alembic
+# Install project deps into .venv
+RUN uv sync --locked --no-dev --no-install-project
 
-# Runtime image
-FROM python:3.13-slim
+# copy your source (no re-resolution needed)
+COPY *.py /app/
+COPY alembic.ini /app/
+COPY alembic /app/alembic
+COPY app /app/app
 
-# netcat-openbsd is used by the setup job to find whether the database has started up.
+# The runtime image (DockerImages, modern-app-backend) carries tini, netcat and
+# the shared libraries: libmagic, the image codecs and libpq.
+FROM registry:5000/modern-app-backend
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends tini netcat-openbsd && \
-    rm -rf /var/lib/apt/lists/*
+EXPOSE 3101
 
 WORKDIR /app
 
+COPY --from=build /app/.venv /app/.venv
 COPY --from=build /app /app
 
 ENV PATH="/app/.venv/bin:${PATH}" \
+    DATA_PATH=/app/data \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     FLASK_ENV=production
 
-EXPOSE 3101
-
 ENTRYPOINT ["tini", "--"]
 
-CMD ["python", "run.py"]
+CMD ["python","run.py"]

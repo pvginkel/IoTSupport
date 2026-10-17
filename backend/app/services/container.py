@@ -60,16 +60,6 @@ class ServiceContainer(containers.DeclarativeContainer):
         session_maker.provided.call()
     )
 
-    # S3 storage services
-    s3_service = providers.Factory(S3Service, settings=config)
-    register_for_background_startup(lambda c: c.s3_service().startup())
-
-    cas_image_service = providers.Factory(
-        CasImageService,
-        s3_service=s3_service,
-        app_settings=app_config,
-    )
-
     # Lifecycle coordinator - manages startup and graceful shutdown
     lifecycle_coordinator = providers.Singleton(
         LifecycleCoordinator,
@@ -81,6 +71,16 @@ class ServiceContainer(containers.DeclarativeContainer):
         HealthService,
         lifecycle_coordinator=lifecycle_coordinator,
         settings=config,
+    )
+
+    # S3 storage services
+    s3_service = providers.Factory(S3Service, settings=config, health_service=health_service)
+    register_for_background_startup(lambda c: c.s3_service().startup())
+
+    cas_image_service = providers.Factory(
+        CasImageService,
+        s3_service=s3_service,
+        app_settings=app_config,
     )
 
     # Temp file manager
@@ -114,6 +114,7 @@ class ServiceContainer(containers.DeclarativeContainer):
         SSEConnectionManager,
         gateway_url=config.provided.sse_gateway_url,
         http_timeout=2.0,
+        health_service=health_service,
     )
 
     # Task service - in-memory task management

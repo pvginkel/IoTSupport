@@ -1,88 +1,102 @@
 #!/usr/bin/env python3
-"""Block until the validation pod's S3 (RustFS) and OpenSearch sidecars are ready.
+"""Wait until the services the backend suite needs answer, or fail clearly.
 
-The sidecars start in parallel with the validation container, so the backend
-test suite -- which runs first -- can race ahead of them and trip the backend's
-storage preflight. We also create the S3 bucket here: a fresh RustFS starts
-empty, whereas the Ceph backend it replaced had the bucket pre-provisioned.
+The suite runner (tools/suite_runner/local.py at the repo root) runs this after
+the backend install and before the suites. In CI the services are containers
+in the validation Job's pod and start together with the suite, so they may not
+answer yet. Locally they are the environment's sidecars, and this returns at
+once.
 
-Connection settings are read from the same environment the backend uses, so
-this stays in lockstep with the Jenkins job's container env. The root suite
-runner calls this script after the backend install (the template's
-wait-for-services hook); without S3_ENDPOINT_URL in the environment (a local
-run whose services are managed elsewhere) it has nothing to wait for.
+It reads the same settings as the suite: .env, then .env.test over it.
+
+- PostgreSQL at TEST_DATABASE_ADMIN_URL, the server the suite creates its
+  databases on, until it accepts a login. A TCP connect is not enough: the
+  server takes connections before it can serve them.
+- S3 at S3_ENDPOINT_URL, until it answers HTTP at all (an anonymous request
+  gets a 403 from most servers, which is an answer).
 """
 
-import json
+from __future__ import annotations
+
 import os
 import sys
 import time
+import urllib.error
 import urllib.request
+from collections.abc import Callable
+from pathlib import Path
 
-import boto3
-from botocore.config import Config
+import psycopg
+from dotenv import load_dotenv
+from sqlalchemy import make_url
 
-# Overall budget for both services to come up. OpenSearch's JVM warm-up on a
-# memory-capped container is the slow part; RustFS is ready in a second or two.
-DEADLINE = time.time() + 180
+TIMEOUT_SECONDS = 60
+INTERVAL_SECONDS = 1
+
+# Keep in step with tests/conftest_infrastructure.py.
+DEFAULT_ADMIN_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/postgres"
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
-def wait_for_s3() -> None:
-    """Poll the S3 sidecar until it answers, then ensure the test bucket exists."""
-    s3 = boto3.client(
-        "s3",
-        endpoint_url=os.environ["S3_ENDPOINT_URL"],
-        aws_access_key_id=os.environ["S3_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["S3_SECRET_ACCESS_KEY"],
-        region_name=os.environ.get("S3_REGION", "us-east-1"),
-        config=Config(connect_timeout=3, read_timeout=5, retries={"max_attempts": 1}),
-    )
-
+def _wait(label: str, probe: Callable[[], None]) -> bool:
+    """Call probe until it stops raising, for up to TIMEOUT_SECONDS."""
+    deadline = time.monotonic() + TIMEOUT_SECONDS
     while True:
         try:
-            s3.list_buckets()
-            break
-        except Exception as exc:  # any connection error just means "not up yet"
-            if time.time() > DEADLINE:
-                sys.exit(f"S3 storage not reachable at {os.environ['S3_ENDPOINT_URL']}: {exc}")
-            time.sleep(2)
-
-    bucket = os.environ["S3_BUCKET_NAME"]
-    try:
-        s3.create_bucket(Bucket=bucket)
-        print(f"Created S3 bucket '{bucket}'")
-    except (s3.exceptions.BucketAlreadyOwnedByYou, s3.exceptions.BucketAlreadyExists):
-        print(f"S3 bucket '{bucket}' already exists")
-
-
-def wait_for_opensearch() -> None:
-    """Poll OpenSearch until the cluster reports yellow/green status.
-
-    A plain 200 from _cluster/health can still report "red" during start-up, so
-    gate on status the way DesignAssistant's suite runner does. The server-side
-    wait_for_status holds each request until the status is met (or 5s elapses).
-    """
-    url = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200").rstrip("/")
-    health = f"{url}/_cluster/health?wait_for_status=yellow&timeout=5s"
-
-    while True:
-        try:
-            with urllib.request.urlopen(health, timeout=10) as resp:
-                if resp.status == 200 and json.loads(resp.read()).get("status") in ("yellow", "green"):
-                    print(f"OpenSearch ready at {url}")
-                    return
+            probe()
+            return True
         except Exception as exc:
-            if time.time() > DEADLINE:
-                sys.exit(f"OpenSearch not reachable at {url}: {exc}")
-        if time.time() > DEADLINE:
-            sys.exit(f"OpenSearch did not reach yellow status at {url}")
-        time.sleep(2)
+            if time.monotonic() >= deadline:
+                print(
+                    f"{label} did not answer within {TIMEOUT_SECONDS} s: {exc}",
+                    file=sys.stderr,
+                )
+                return False
+        time.sleep(INTERVAL_SECONDS)
+
+
+def _wait_for_postgres() -> bool:
+    url = make_url(os.environ.get("TEST_DATABASE_ADMIN_URL", DEFAULT_ADMIN_URL))
+    # psycopg takes a plain conninfo, not SQLAlchemy's postgresql+psycopg URL.
+    conninfo = url.set(drivername="postgresql").render_as_string(hide_password=False)
+
+    def probe() -> None:
+        with psycopg.connect(conninfo, connect_timeout=3) as conn:
+            conn.execute("SELECT 1")
+
+    label = f"PostgreSQL at {url.render_as_string(hide_password=True)}"
+    return _wait(label, probe)
+
+
+def _wait_for_s3() -> bool:
+    endpoint = os.environ.get("S3_ENDPOINT_URL", "")
+    if not endpoint:
+        # The suite stops with its own message about the missing setting.
+        return True
+
+    def probe() -> None:
+        try:
+            urllib.request.urlopen(endpoint, timeout=3)
+        except urllib.error.HTTPError:
+            pass
+
+    return _wait(f"S3 at {endpoint}", probe)
+
+
+def main() -> int:
+    env_file = _BACKEND_DIR / ".env"
+    test_env_file = _BACKEND_DIR / ".env.test"
+    if env_file.exists():
+        load_dotenv(env_file)
+    if test_env_file.exists():
+        load_dotenv(test_env_file, override=True)
+
+    ok = True
+    ok = _wait_for_postgres() and ok
+    ok = _wait_for_s3() and ok
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
-    if not os.environ.get("S3_ENDPOINT_URL"):
-        print("S3_ENDPOINT_URL is not set; not waiting for sidecar services")
-        sys.exit(0)
-    wait_for_s3()
-    wait_for_opensearch()
-    print("All sidecar services are ready")
+    sys.exit(main())

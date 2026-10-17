@@ -7,10 +7,12 @@ domain fixtures.
 
 import os
 import struct
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
+import requests
 
 from app.app_config import AppSettings
 from app.config import Settings
@@ -22,6 +24,51 @@ if TYPE_CHECKING:
 
 # Import all infrastructure fixtures
 from tests.conftest_infrastructure import *  # noqa: F403
+
+# ---------------------------------------------------------------------------
+# OpenSearch pre-flight, for CI. The template's pre-flight is the
+# pytest_configure star-imported above (S3, PostgreSQL), and its
+# scripts/wait-for-services.py waits for those two before the suites. In the
+# validation pod OpenSearch is IoT's own sidecar: it starts with the pod, its
+# JVM warm-up takes minutes on a memory-capped container, and the Playwright
+# suite's backend reads it. The suite runner runs this suite first, so the wait
+# goes here. STAGE=tst is the Jenkinsfile's, and ELASTICSEARCH_URL is in its
+# env. The backend tests themselves never reach OpenSearch (test_app_settings
+# points at elasticsearch.test), so a local run does not wait, as it never did.
+# ---------------------------------------------------------------------------
+
+_OPENSEARCH_WAIT_SECONDS = 180
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """In CI, wait until OpenSearch reports yellow or green, or stop the run."""
+    url = os.environ.get("ELASTICSEARCH_URL", "").rstrip("/")
+    if os.environ.get("STAGE") != "tst" or not url:
+        return
+
+    # A 200 from _cluster/health can still say "red" during start-up, so gate
+    # on the status. wait_for_status holds each request until it is met (or
+    # 5 s pass).
+    health = f"{url}/_cluster/health?wait_for_status=yellow&timeout=5s"
+    deadline = time.monotonic() + _OPENSEARCH_WAIT_SECONDS
+    problem = "no answer"
+    while time.monotonic() < deadline:
+        try:
+            response = requests.get(health, timeout=10)
+            status = response.json().get("status") if response.ok else None
+            if status in ("yellow", "green"):
+                return
+            problem = f"HTTP {response.status_code}, status {status!r}"
+        except (requests.RequestException, ValueError) as exc:
+            problem = str(exc)
+        time.sleep(2)
+
+    pytest.exit(
+        f"OpenSearch at {url!r} did not reach yellow status within "
+        f"{_OPENSEARCH_WAIT_SECONDS} s ({problem}). Check the opensearch "
+        "service in the Jenkinsfile.",
+        returncode=1,
+    )
 
 # ---------------------------------------------------------------------------
 # Override test_settings to use flask_env="development" (not "testing")
