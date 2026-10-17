@@ -34,7 +34,7 @@ function transformCoredumpSummary(apiCoredump: {
   firmware_version: string
   size: number
   parse_status: string
-  parsed_at: string | null
+  parsed_at?: string | null
   uploaded_at: string
   created_at: string
 }): CoredumpSummary {
@@ -45,7 +45,7 @@ function transformCoredumpSummary(apiCoredump: {
     firmwareVersion: apiCoredump.firmware_version,
     size: apiCoredump.size,
     parseStatus: apiCoredump.parse_status,
-    parsedAt: apiCoredump.parsed_at,
+    parsedAt: apiCoredump.parsed_at ?? null,
     uploadedAt: apiCoredump.uploaded_at,
     createdAt: apiCoredump.created_at
   }
@@ -59,15 +59,15 @@ function transformCoredumpDetail(apiCoredump: {
   firmware_version: string
   size: number
   parse_status: string
-  parsed_at: string | null
-  parsed_output: string | null
+  parsed_at?: string | null
+  parsed_output?: string | null
   uploaded_at: string
   created_at: string
   updated_at: string
 }): CoredumpDetail {
   return {
     ...transformCoredumpSummary(apiCoredump),
-    parsedOutput: apiCoredump.parsed_output,
+    parsedOutput: apiCoredump.parsed_output ?? null,
     updatedAt: apiCoredump.updated_at
   }
 }

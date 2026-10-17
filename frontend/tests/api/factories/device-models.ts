@@ -139,7 +139,7 @@ export class DeviceModelsFactory {
     name: string;
     has_config_schema: boolean;
     device_count: number;
-    firmware_version: string | null;
+    firmware_version?: string | null;
   }>> {
     const result = await apiRequest(() =>
       this.client.GET('/api/device-models')

@@ -199,9 +199,9 @@ export class DevicesFactory {
     id: number;
     key: string;
     device_model_id: number;
-    device_name: string | null;
-    device_entity_id: string | null;
-    enable_ota: boolean | null;
+    device_name?: string | null;
+    device_entity_id?: string | null;
+    enable_ota?: boolean | null;
     rotation_state: string;
   }>> {
     const result = await apiRequest(() =>

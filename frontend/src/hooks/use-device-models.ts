@@ -41,7 +41,7 @@ function transformDeviceModelSummary(apiModel: {
   name: string
   has_config_schema: boolean
   device_count: number
-  firmware_version: string | null
+  firmware_version?: string | null
 }): DeviceModelSummary {
   return {
     id: apiModel.id,
@@ -49,7 +49,7 @@ function transformDeviceModelSummary(apiModel: {
     name: apiModel.name,
     hasConfigSchema: apiModel.has_config_schema,
     deviceCount: apiModel.device_count,
-    firmwareVersion: apiModel.firmware_version
+    firmwareVersion: apiModel.firmware_version ?? null
   }
 }
 
@@ -61,7 +61,7 @@ function transformDeviceModelResponse(apiModel: {
   has_config_schema: boolean
   config_schema?: string | null
   device_count: number
-  firmware_version: string | null
+  firmware_version?: string | null
   created_at: string
   updated_at: string
 }): DeviceModel {
@@ -72,7 +72,7 @@ function transformDeviceModelResponse(apiModel: {
     hasConfigSchema: apiModel.has_config_schema,
     configSchema: apiModel.config_schema ?? null,
     deviceCount: apiModel.device_count,
-    firmwareVersion: apiModel.firmware_version,
+    firmwareVersion: apiModel.firmware_version ?? null,
     createdAt: apiModel.created_at,
     updatedAt: apiModel.updated_at
   }

@@ -34,22 +34,22 @@ function transformDashboardDevice(
   apiDevice: {
     id: number
     key: string
-    device_name: string | null
+    device_name?: string | null
     device_model_code: string
     rotation_state: string
-    days_since_rotation: number | null
-    last_rotation_completed_at: string | null
+    days_since_rotation?: number | null
+    last_rotation_completed_at?: string | null
   },
   category: 'healthy' | 'warning' | 'critical'
 ): RotationDashboardDevice {
   return {
     id: apiDevice.id,
     key: apiDevice.key,
-    deviceName: apiDevice.device_name,
+    deviceName: apiDevice.device_name ?? null,
     deviceModelCode: apiDevice.device_model_code,
     rotationState: apiDevice.rotation_state,
-    daysSinceRotation: apiDevice.days_since_rotation,
-    lastRotationCompletedAt: apiDevice.last_rotation_completed_at,
+    daysSinceRotation: apiDevice.days_since_rotation ?? null,
+    lastRotationCompletedAt: apiDevice.last_rotation_completed_at ?? null,
     category
   }
 }
@@ -57,15 +57,15 @@ function transformDashboardDevice(
 // Transform status response to camelCase
 function transformStatus(apiStatus: {
   counts_by_state: Record<string, number>
-  last_rotation_completed_at: string | null
-  next_scheduled_rotation: string | null
-  pending_device_id: number | null
+  last_rotation_completed_at?: string | null
+  next_scheduled_rotation?: string | null
+  pending_device_id?: number | null
 }): RotationStatus {
   return {
     countsByState: apiStatus.counts_by_state,
-    lastRotationCompletedAt: apiStatus.last_rotation_completed_at,
-    nextScheduledRotation: apiStatus.next_scheduled_rotation,
-    pendingDeviceId: apiStatus.pending_device_id
+    lastRotationCompletedAt: apiStatus.last_rotation_completed_at ?? null,
+    nextScheduledRotation: apiStatus.next_scheduled_rotation ?? null,
+    pendingDeviceId: apiStatus.pending_device_id ?? null
   }
 }
 

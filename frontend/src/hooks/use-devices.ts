@@ -58,9 +58,9 @@ function transformDeviceSummary(apiDevice: {
   key: string
   active?: boolean
   device_model_id: number
-  device_name: string | null
-  device_entity_id: string | null
-  enable_ota: boolean | null
+  device_name?: string | null
+  device_entity_id?: string | null
+  enable_ota?: boolean | null
   rotation_state: string
   secret_created_at?: string | null
   last_coredump_at?: string | null
@@ -72,7 +72,7 @@ function transformDeviceSummary(apiDevice: {
     deviceModelId: apiDevice.device_model_id,
     deviceName: apiDevice.device_name || '',
     deviceEntityId: apiDevice.device_entity_id || '',
-    enableOta: apiDevice.enable_ota,
+    enableOta: apiDevice.enable_ota ?? null,
     rotationState: apiDevice.rotation_state,
     secretCreatedAt: apiDevice.secret_created_at ?? null,
     lastCoredumpAt: apiDevice.last_coredump_at ?? null
@@ -92,9 +92,9 @@ function transformDeviceResponse(apiDevice: {
     firmware_version?: string | null
   }
   config: string
-  device_name: string | null
-  device_entity_id: string | null
-  enable_ota: boolean | null
+  device_name?: string | null
+  device_entity_id?: string | null
+  enable_ota?: boolean | null
   rotation_state: string
   client_id: string
   secret_created_at?: string | null
@@ -117,7 +117,7 @@ function transformDeviceResponse(apiDevice: {
     config: apiDevice.config,
     deviceName: apiDevice.device_name || '',
     deviceEntityId: apiDevice.device_entity_id || '',
-    enableOta: apiDevice.enable_ota,
+    enableOta: apiDevice.enable_ota ?? null,
     rotationState: apiDevice.rotation_state,
     clientId: apiDevice.client_id,
     secretCreatedAt: apiDevice.secret_created_at ?? null,
@@ -277,14 +277,14 @@ interface KeycloakClientStatus {
 function transformKeycloakStatus(apiStatus: {
   client_id: string
   exists: boolean
-  console_url: string | null
-  keycloak_uuid: string | null
+  console_url?: string | null
+  keycloak_uuid?: string | null
 }): KeycloakClientStatus {
   return {
     clientId: apiStatus.client_id,
     exists: apiStatus.exists,
-    consoleUrl: apiStatus.console_url,
-    keycloakUuid: apiStatus.keycloak_uuid
+    consoleUrl: apiStatus.console_url ?? null,
+    keycloakUuid: apiStatus.keycloak_uuid ?? null
   }
 }
 
