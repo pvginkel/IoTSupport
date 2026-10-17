@@ -92,7 +92,6 @@ export function DeviceLogsDownloadDialog({
     if (open) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional reset when dialog opens
       setDownloadState({ phase: 'selecting' })
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional reset when dialog opens
       setSelectedCount(1000)
     }
   }, [open])
