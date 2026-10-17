@@ -7,7 +7,8 @@ import httpx
 import pytest
 from flask import Flask
 
-from app.exceptions import ExternalServiceException, ServiceUnavailableException
+from app.core_exceptions import ExternalServiceException
+from app.exceptions import ServiceUnavailableException
 from app.services.container import ServiceContainer
 from app.services.elasticsearch_service import ElasticsearchService
 

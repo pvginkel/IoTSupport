@@ -9,11 +9,11 @@ from flask import jsonify
 from flask.wrappers import Response
 from pydantic import ValidationError
 
+from app.core_exceptions import ExternalServiceException
 from app.exceptions import (
     AuthenticationException,
     AuthorizationException,
     BusinessLogicException,
-    ExternalServiceException,
     InvalidOperationException,
     ProcessingException,
     RecordExistsException,

@@ -10,7 +10,8 @@ import httpx
 from PIL import Image
 from prometheus_client import Counter, Histogram
 
-from app.exceptions import ExternalServiceException, ProcessingException
+from app.core_exceptions import ExternalServiceException
+from app.exceptions import ProcessingException
 from app.utils.lvgl import ColorFormat, CompressMethod, LVGLImage
 
 logger = logging.getLogger(__name__)

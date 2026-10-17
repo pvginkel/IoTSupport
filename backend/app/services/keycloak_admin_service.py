@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING, Any, cast
 import httpx
 from prometheus_client import Counter
 
-from app.exceptions import ExternalServiceException, ValidationException
+from app.core_exceptions import ExternalServiceException
+from app.exceptions import ValidationException
 
 if TYPE_CHECKING:
     from app.app_config import AppSettings

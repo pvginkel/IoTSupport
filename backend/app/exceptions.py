@@ -89,16 +89,6 @@ class RecordExistsException(BusinessLogicException):
         super().__init__(message, error_code="RECORD_EXISTS")
 
 
-class ExternalServiceException(BusinessLogicException):
-    """Exception raised when an external service call fails."""
-
-    def __init__(self, operation: str, cause: str) -> None:
-        self.operation = operation
-        self.cause = cause
-        message = f"Cannot {operation} because external service failed: {cause}"
-        super().__init__(message, error_code="EXTERNAL_SERVICE_ERROR")
-
-
 class ServiceUnavailableException(BusinessLogicException):
     """Exception raised when a service is unavailable or unreachable."""
 

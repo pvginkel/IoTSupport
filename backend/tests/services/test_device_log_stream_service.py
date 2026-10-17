@@ -6,7 +6,11 @@ import pytest
 
 from app.exceptions import AuthorizationException, RecordNotFoundException
 from app.services.device_log_stream_service import DeviceLogStreamService
-from app.services.sse_connection_manager import ConnectionInfo, SSEConnectionManager, Target
+from app.services.sse_connection_manager import (
+    ConnectionInfo,
+    SSEConnectionManager,
+    Target,
+)
 from tests.testing_utils import StubLifecycleCoordinator, TestLifecycleCoordinator
 
 

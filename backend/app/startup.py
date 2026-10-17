@@ -80,7 +80,6 @@ def register_root_blueprints(app: Flask) -> None:
 def register_error_handlers(app: Flask) -> None:
     """Register app-specific error handlers for IoT exceptions."""
     from app.exceptions import (
-        ExternalServiceException,
         ProcessingException,
         RecordExistsException,
         ServiceUnavailableException,
@@ -99,17 +98,6 @@ def register_error_handlers(app: Flask) -> None:
             {"message": "The resource already exists"},
             code=error.error_code,
             status_code=409,
-        )
-
-    @app.errorhandler(ExternalServiceException)
-    def handle_external_service(error: ExternalServiceException) -> tuple[Response, int]:
-        _mark_request_failed()
-        logger.warning("External service error: %s", error.message)
-        return build_error_response(
-            error.message,
-            {"message": "External service request failed"},
-            code=error.error_code,
-            status_code=502,
         )
 
     @app.errorhandler(ServiceUnavailableException)

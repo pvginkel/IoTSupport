@@ -6,7 +6,7 @@ import httpx
 import pytest
 from flask import Flask
 
-from app.exceptions import ExternalServiceException
+from app.core_exceptions import ExternalServiceException
 from app.services.container import ServiceContainer
 
 

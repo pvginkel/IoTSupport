@@ -7,8 +7,8 @@ from dependency_injector.wiring import Provide, inject
 from flask import Blueprint, Response, request
 from spectree import Response as SpectreeResponse
 
+from app.core_exceptions import ExternalServiceException
 from app.exceptions import (
-    ExternalServiceException,
     InvalidOperationException,
     ProcessingException,
 )

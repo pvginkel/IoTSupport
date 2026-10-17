@@ -19,7 +19,7 @@ from prometheus_client import Counter
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.exceptions import ExternalServiceException
+from app.core_exceptions import ExternalServiceException
 from app.models.device import Device, RotationState
 
 if TYPE_CHECKING:

@@ -614,7 +614,7 @@ class TestDevicesProvisioning:
         self, app: Flask, client: FlaskClient, container: ServiceContainer
     ) -> None:
         """Test that Keycloak failure returns 502."""
-        from app.exceptions import ExternalServiceException
+        from app.core_exceptions import ExternalServiceException
 
         with app.app_context():
             model_service = container.device_model_service()

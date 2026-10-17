@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from flask import Flask
 
+from app.core_exceptions import ExternalServiceException
 from app.exceptions import (
-    ExternalServiceException,
     RecordNotFoundException,
     ValidationException,
 )
@@ -512,7 +512,7 @@ class TestDeviceServiceProvisioning:
         self, app: Flask, container: ServiceContainer
     ) -> None:
         """Test that Keycloak failure during secret retrieval propagates."""
-        from app.exceptions import ExternalServiceException
+        from app.core_exceptions import ExternalServiceException
 
         with app.app_context():
             model_service = container.device_model_service()

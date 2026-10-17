@@ -8,7 +8,8 @@ import pytest
 from flask import Flask
 from PIL import Image
 
-from app.exceptions import ExternalServiceException, ProcessingException
+from app.core_exceptions import ExternalServiceException
+from app.exceptions import ProcessingException
 from app.services.container import ServiceContainer
 
 

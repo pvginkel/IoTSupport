@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from prometheus_client import Counter, Histogram
 
-from app.exceptions import ExternalServiceException, ServiceUnavailableException
+from app.core_exceptions import ExternalServiceException
+from app.exceptions import ServiceUnavailableException
 
 if TYPE_CHECKING:
     from app.app_config import AppSettings

@@ -12,8 +12,8 @@ from cryptography.fernet import Fernet
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core_exceptions import ExternalServiceException
 from app.exceptions import (
-    ExternalServiceException,
     InvalidOperationException,
     RecordNotFoundException,
     ValidationException,
