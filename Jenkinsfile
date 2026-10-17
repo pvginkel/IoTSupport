@@ -50,10 +50,13 @@ pipeline {
                     ]]) {
                         modernApp.test(
                             job: 'iot-support-validation',
-                            install: 'poetry install --no-interaction --without dev',
-                            run: 'poetry run',
+                            install: 'uv sync --locked --no-dev',
+                            run: 'uv run --no-sync',
                             suites: ['backend', 'frontend'],
                             services: [
+                                [name: 'postgres', image: 'postgres:18-trixie', env: [
+                                    POSTGRES_PASSWORD: 'postgres',
+                                ]],
                                 [name: 's3storage', image: 'rustfs/rustfs:latest', env: [
                                     RUSTFS_ACCESS_KEY: 's3storage',
                                     RUSTFS_SECRET_KEY: 's3storage',
@@ -69,6 +72,11 @@ pipeline {
                                     ]],
                             ],
                             env: [
+                                // CI is the tst tier; under testing STAGE would default to local-tst.
+                                STAGE: 'tst',
+                                // The library fixes run-suite's flags, so the suite runner's pnpm store
+                                // cache is switched on here instead of with --build-cache.
+                                BUILD_CACHE: 'true',
                                 S3_ENDPOINT_URL: 'http://localhost:9000',
                                 S3_ACCESS_KEY_ID: 's3storage',
                                 S3_SECRET_ACCESS_KEY: 's3storage',
