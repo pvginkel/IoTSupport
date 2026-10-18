@@ -44,6 +44,11 @@ projects:
       - cexec modern-app uv run ruff check .
       - cexec modern-app uv run mypy .
       - cexec modern-app uv run vulture app/ vulture_whitelist.py --min-confidence 80
+      # The hand-authored model AaC/IoTSupport validates (Jenkinsfile.architecture).
+      # firmware-products.yaml beside it is the generator's input, not a model,
+      # and deployed-architecture.yaml is generated in CI only. Exit 0 valid,
+      # 1 invalid, 2 transport — a 2 is the validation service, not this repository.
+      - cexec aac-tools arch-validate docs/architecture/architecture.yaml
 
   frontend:
     description: >-
@@ -55,4 +60,7 @@ projects:
     # `pnpm build` only — frontend/Dockerfile is CI's, same reasoning as backend.
     build: cexec modern-app pnpm build
     test: cexec modern-app pnpm playwright test
-    lint: cexec modern-app pnpm check
+    lint:
+      - cexec modern-app pnpm check
+      # The model AaC/IoTSupport validates (Jenkinsfile.architecture).
+      - cexec aac-tools arch-validate docs/architecture/*.yaml

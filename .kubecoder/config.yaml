@@ -51,6 +51,7 @@ secrets:
 # single command needs both toolsets in the same container.
 tools:
   - use: modern-app
+  - use: aac-tools # arch-validate, the last statement of both components' lint
 
 ports:
   - name: frontend

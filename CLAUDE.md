@@ -69,7 +69,8 @@ the backend's in `backend/docs/architecture/architecture.yaml` and the frontend'
 generator's input, not a model. `Jenkinsfile.architecture`, the job `AaC/IoTSupport`, generates a
 deployed-architecture model from the production device fleet on every build (never committed),
 validates it and the hand-authored models against the architecture service, and archives them for
-AaC/Architecture to collect.
+AaC/Architecture to collect. `kc project lint` validates the hand-authored models too
+(`arch-validate`, in the `aac-tools` sidecar).
 
 The model is kept current centrally, not from here: the central architecture update in
 `pvginkel/Architecture` (`tooling/fleet.py update`) reads the commits since the model last changed
