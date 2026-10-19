@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v0.22.0
+_commit: v0.23.0
 _src_path: ../../ModernAppTemplate/frontend
 author_email: dev@example.com
 author_name: Developer
@@ -8,7 +8,6 @@ frontend_port: 3100
 project_description: IoT device management and support platform
 project_name: iot-support
 project_title: IoT Support
-sse_gateway_port: 3102
 use_app_shell: true
 use_oidc: true
 use_sse: true
