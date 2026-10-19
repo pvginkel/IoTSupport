@@ -27,7 +27,7 @@ kc project lint backend    # ruff, mypy, vulture
 ```
 
 `scripts/dev.py` at the repository root starts the whole dev stack — the API on
-`http://localhost:3101`, the frontend on 3100 and the SSE gateway on 3102. Stop it with `^C`.
+`http://localhost:3101`, which serves the SSE stream too, and the frontend on 3100. Stop it with `^C`.
 
 ### Configuration
 

@@ -61,9 +61,6 @@ ports:
   - name: backend
     port: 3101
     type: http
-  - name: sse-gateway
-    port: 3102
-    type: http
 
 preamble:
   instructions: |
@@ -77,4 +74,4 @@ preamble:
       <ref>`), not a `cexec` target. There is no kaniko toolchain sidecar.
     - `scripts/dev.py` ignores SIGINT and SIGTERM by design and relies on the
       terminal delivering SIGINT through the pty. `kill` on it orphans the whole
-      process tree and leaves ports 3100-3102 held. Stop it with Ctrl-C.
+      process tree and leaves ports 3100-3101 held. Stop it with Ctrl-C.

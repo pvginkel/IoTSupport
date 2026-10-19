@@ -54,9 +54,9 @@ vulture app/ vulture_whitelist.py --min-confidence 80` from `backend/`, `... pnp
 
 ## 2. The live check: boot the dev stack
 
-`scripts/dev.py` runs honcho over `Procfile.dev` inside the `modern-app` sidecar and starts all
-three services on the ports `.kubecoder/config.yaml` publishes: **frontend :3100**, **backend
-:3101**, **SSE gateway :3102**.
+`scripts/dev.py` runs honcho over `Procfile.dev` inside the `modern-app` sidecar and starts both
+services on the ports `.kubecoder/config.yaml` publishes: **frontend :3100** and **backend
+:3101**, which serves the SSE stream too.
 
 Do this whenever the slice touched `backend/` or `frontend/`. A docs-only or tooling-only slice
 skips to step 3 and says so.
@@ -87,10 +87,9 @@ curl -s               http://localhost:3101/health/readyz                       
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3101/metrics
 ```
 
-All answer `200`; `readyz` reports `"status": "ok"` with `checks.database`, `checks.s3` and
-`checks.sse_gateway` each at `"status": "ok"` — which is what confirms the dev database and the
-gateway on :3102, since neither suite touches them (the suites run on their own database clones and
-gateways). The proxied `/api/devices` is the one probe that proves the frontend
+All answer `200`; `readyz` reports `"status": "ok"` with `checks.database` and `checks.s3` each
+at `"status": "ok"` — which is what confirms the dev database, since neither suite touches it (the
+suites run on their own database clones). The proxied `/api/devices` is the one probe that proves the frontend
 and backend are talking, so it is not optional.
 
 Stop it by sending `^C` down the fifo and waiting on the pid you captured:

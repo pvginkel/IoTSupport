@@ -30,8 +30,8 @@ kc project test frontend    # Playwright, booting the frontend and a backend per
 ```
 
 `scripts/dev.py` at the repository root starts the whole dev stack — the frontend on
-`http://localhost:3100`, the backend on 3101 and the SSE gateway on 3102. Stop it with `^C`. The
-Vite dev server proxies `/api/**` to the backend.
+`http://localhost:3100` and the backend on 3101. Stop it with `^C`. The
+Vite dev server proxies `/api/**`, the SSE stream included, to the backend.
 
 After a backend API change, regenerate the API client from `frontend/`:
 

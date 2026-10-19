@@ -48,7 +48,7 @@ If the backend API spec changes, run `cexec modern-app pnpm generate:api` again 
 cexec modern-app pnpm dev
 ```
 
-To run the whole stack — backend, frontend and SSE gateway together — use the repo's dev runner instead: `scripts/dev.py` from the repository root, or the "Dev Services" task in the VS Code workspace.
+To run the whole stack — backend and frontend together — use the repo's dev runner instead: `scripts/dev.py` from the repository root, or the "Dev Services" task in the VS Code workspace.
 
 The dev server uses your `.env` values and does **not** automatically enable test instrumentation. To exercise test-mode behaviors locally, run through the Playwright managed services via `scripts/testing-server.sh` or set `VITE_TEST_MODE=true` manually.
 

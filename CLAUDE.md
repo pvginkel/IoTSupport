@@ -28,8 +28,8 @@ Everything executes in the `modern-app` tool container, one sidecar for both too
 Playwright harness boots the Flask backend per worker.
 
 The full CI suite is `cexec modern-app uv run run-suite`; Jenkins runs the same command with
-`--output-mode full`. `scripts/dev.py` starts all three dev services (frontend :3100, backend :3101,
-SSE gateway :3102) — stop it with `^C`, never `kill`; `scripts/dev.py stop` stops it from another
+`--output-mode full`. `scripts/dev.py` starts both dev services (frontend :3100, backend :3101, which serves the
+SSE stream too) — stop it with `^C`, never `kill`; `scripts/dev.py stop` stops it from another
 shell. The root and `backend/` are two uv projects, each with its own committed `uv.lock`, because
 CI and the image sync `--locked`. After a backend API change,
 `scripts/regenerate-openapi.py --frontend` refreshes the frontend's OpenAPI cache and client; a
