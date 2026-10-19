@@ -50,10 +50,10 @@ class TestDeviceLogSubscribe:
         when POST subscribe, then 200 with device_entity_id."""
         device_id = _setup_device(app, container)
 
-        # Register connection and bind identity (simulating SSE connect)
+        # Register the connection bound to its identity, as the stream does
+        # for the local admin (OIDC off)
         sse_mgr = container.sse_connection_manager()
-        sse_mgr.on_connect("req-test-1", "fake-token-1", "http://test")
-        sse_mgr.bind_identity("req-test-1", "local-user")
+        sse_mgr.on_connect("req-test-1", "local-user", local_admin=True)
 
         response = client.post(
             "/api/device-logs/subscribe",
@@ -70,8 +70,7 @@ class TestDeviceLogSubscribe:
     ) -> None:
         """Given a device_id that doesn't exist, when POST subscribe, then 404."""
         sse_mgr = container.sse_connection_manager()
-        sse_mgr.on_connect("req-test-1", "fake-token-1", "http://test")
-        sse_mgr.bind_identity("req-test-1", "local-user")
+        sse_mgr.on_connect("req-test-1", "local-user", local_admin=True)
 
         response = client.post(
             "/api/device-logs/subscribe",
@@ -87,8 +86,7 @@ class TestDeviceLogSubscribe:
         device_id = _setup_device(app, container, entity_id=None)
 
         sse_mgr = container.sse_connection_manager()
-        sse_mgr.on_connect("req-test-1", "fake-token-1", "http://test")
-        sse_mgr.bind_identity("req-test-1", "local-user")
+        sse_mgr.on_connect("req-test-1", "local-user", local_admin=True)
 
         response = client.post(
             "/api/device-logs/subscribe",
@@ -135,8 +133,7 @@ class TestDeviceLogSubscribe:
         device_id = _setup_device(app, container)
 
         sse_mgr = container.sse_connection_manager()
-        sse_mgr.on_connect("req-test-1", "fake-token-1", "http://test")
-        sse_mgr.bind_identity("req-test-1", "local-user")
+        sse_mgr.on_connect("req-test-1", "local-user", local_admin=True)
 
         payload = {"request_id": "req-test-1", "device_id": device_id}
         response1 = client.post("/api/device-logs/subscribe", json=payload)
@@ -156,8 +153,7 @@ class TestDeviceLogUnsubscribe:
         device_id = _setup_device(app, container)
 
         sse_mgr = container.sse_connection_manager()
-        sse_mgr.on_connect("req-test-1", "fake-token-1", "http://test")
-        sse_mgr.bind_identity("req-test-1", "local-user")
+        sse_mgr.on_connect("req-test-1", "local-user", local_admin=True)
         dls = container.device_log_stream_service()
         dls.subscribe("req-test-1", "sensor.living_room", None)
 
@@ -177,8 +173,7 @@ class TestDeviceLogUnsubscribe:
         device_id = _setup_device(app, container)
 
         sse_mgr = container.sse_connection_manager()
-        sse_mgr.on_connect("req-test-1", "fake-token-1", "http://test")
-        sse_mgr.bind_identity("req-test-1", "local-user")
+        sse_mgr.on_connect("req-test-1", "local-user", local_admin=True)
 
         response = client.post(
             "/api/device-logs/unsubscribe",
@@ -207,8 +202,7 @@ class TestDeviceLogUnsubscribe:
         device_id = _setup_device(app, container, entity_id=None)
 
         sse_mgr = container.sse_connection_manager()
-        sse_mgr.on_connect("req-test-1", "fake-token-1", "http://test")
-        sse_mgr.bind_identity("req-test-1", "local-user")
+        sse_mgr.on_connect("req-test-1", "local-user", local_admin=True)
 
         response = client.post(
             "/api/device-logs/unsubscribe",
