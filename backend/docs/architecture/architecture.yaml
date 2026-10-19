@@ -99,14 +99,6 @@ relations:
     type: Association
     boundBy: "env:ELASTICSEARCH_URL"
 
-  # In-house provider service — reference the SSE gateway's specific svc UUID.
-  - id: rel:iotsupport-consumes-ssegateway
-    source: app:iotsupport-app,bbc500fd-ef66-4d82-846c-cd0357cb03f7
-    target: svc:ssegateway,59a7d043-bb0c-4e44-a8b8-3e943338f807
-    type: Association
-    boundBy: "env:SSE_GATEWAY_URL"
-    boundByDefaultValue: "http://localhost:3102"
-
   # Parse sidecar: the backend posts ESP32 coredumps to the DockerImages-owned
   # esp32-coredump-parser service to turn them into backtraces. Cross-producer
   # svc (docker-images), resolved by UUID from the published dataset.

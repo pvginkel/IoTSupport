@@ -4,10 +4,10 @@ producer: iotsupport-app
 # IoT Support UI — React SPA admin interface for the IoT Support backend.
 # One producer per repo: this monorepo's backend and UI are both `iotsupport-app`,
 # so the REST API this SPA consumes is declared by its sibling artifact under
-# backend/. The SSE gateway it streams from is its own producer (ssegateway). This
-# artifact models the logical, type-level surface: the SoftwareProduct identity,
-# the static web surface it serves to browsers, the browser-mediated serial
-# flashing interface it exposes, and the app's outbound runtime-dependency edges.
+# backend/, the SSE event stream (/api/sse/stream) included. This artifact
+# models the logical, type-level surface: the SoftwareProduct identity, the
+# static web surface it serves to browsers, the browser-mediated serial flashing
+# interface it exposes, and the app's outbound runtime-dependency edges.
 # environment/cluster stay unset (per-env placement is the helm-charts concern).
 
 applicationComponents:
@@ -73,12 +73,4 @@ relations:
   - id: rel:iotsupport-ui-consumes-api
     source: app:iotsupport-ui,2ab5d9e8-6450-4dd0-b201-29c93b99a24b
     target: svc:iotsupport-api,b7c5b5ba-36eb-47b8-bf7e-5c50fa1a3656
-    type: Association
-
-  # Frontend → SSE gateway: the SPA opens an event stream at /api/sse/ (nginx
-  # proxies it to the gateway on pod-local loopback). In-house provider service,
-  # referenced by its specific svc UUID. No boundBy for the same loopback reason.
-  - id: rel:iotsupport-ui-consumes-ssegateway
-    source: app:iotsupport-ui,2ab5d9e8-6450-4dd0-b201-29c93b99a24b
-    target: svc:ssegateway,59a7d043-bb0c-4e44-a8b8-3e943338f807
     type: Association
