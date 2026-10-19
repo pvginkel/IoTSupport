@@ -2,7 +2,7 @@
  * Domain-specific test fixtures.
  * App-owned — extends infrastructure fixtures with domain page objects and factories.
  *
- * Service management (backend, SSE gateway, frontend startup) is handled by
+ * Service management (backend and frontend startup) is handled by
  * fixtures-infrastructure.ts. This file only adds app-specific fixtures.
  */
 

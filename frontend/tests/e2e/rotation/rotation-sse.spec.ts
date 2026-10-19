@@ -8,7 +8,8 @@ import { RotationPage } from './RotationPage';
  * event is received, using the backend testing endpoint:
  * - POST /api/testing/rotation/nudge
  *
- * Requires the SSE Gateway to be running (managed by fixtures).
+ * The SSE stream is the backend's own (GET /api/sse/stream), served by every
+ * worker's backend.
  */
 test.describe('Rotation Dashboard SSE Nudge', () => {
   test('dashboard loads with device panels visible', async ({

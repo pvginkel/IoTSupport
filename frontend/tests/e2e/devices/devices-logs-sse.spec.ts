@@ -1,4 +1,5 @@
 import { test, expect } from '../../support/fixtures';
+import type { DeploymentSseHelper } from '../../support/helpers/deployment-sse';
 import { DevicesPage } from './DevicesPage';
 
 /**
@@ -9,73 +10,53 @@ import { DevicesPage } from './DevicesPage';
  * - POST /api/testing/devices/logs/inject
  * - GET /api/testing/devices/logs/subscriptions
  *
- * Requires the SSE Gateway to be running (managed by fixtures).
+ * The SSE stream is the backend's own (GET /api/sse/stream), served by every
+ * worker's backend.
  */
 
 /**
- * Poll the testing endpoint until an active SSE subscription exists for the device,
- * or fail after timeout. Uses expect().toPass() instead of manual polling with
+ * Poll the testing endpoint until an active SSE subscription exists for the
+ * device. Uses expect().toPass() instead of manual polling with
  * waitForTimeout to comply with the no-sleep policy.
- *
- * Returns true if subscription is active, false if the endpoint is unreachable
- * (gateway not running).
  */
-async function waitForSseSubscription(
+async function expectSseSubscription(
   page: import('@playwright/test').Page,
   frontendUrl: string,
   entityId: string,
   timeout = 15_000,
-): Promise<boolean> {
-  try {
-    await expect(async () => {
-      const resp = await page.request.get(
-        `${frontendUrl}/api/testing/devices/logs/subscriptions?device_entity_id=${encodeURIComponent(entityId)}`,
-      );
-      expect(resp.ok()).toBe(true);
-      const data = await resp.json();
-      expect(data.subscriptions?.length).toBeGreaterThan(0);
-    }).toPass({ timeout });
-    return true;
-  } catch {
-    return false;
-  }
+): Promise<void> {
+  await expect(async () => {
+    const resp = await page.request.get(
+      `${frontendUrl}/api/testing/devices/logs/subscriptions?device_entity_id=${encodeURIComponent(entityId)}`,
+    );
+    expect(resp.ok()).toBe(true);
+    const data = await resp.json();
+    expect(data.subscriptions?.length).toBeGreaterThan(0);
+  }).toPass({ timeout });
 }
 
 /**
- * Ensure the SSE connection is registered on the backend and a device-log
- * subscription exists. The useDeviceLogs hook subscribes automatically, but in
- * test mode there are two races:
- *
- * 1. Gateway callback race: the frontend's EventSource opens before the gateway's
- *    callback POST registers the connection on the backend, causing the hook's
- *    subscribe call to fail (no retry).
- * 2. StrictMode double-mount: React's StrictMode fires a cleanup (unsubscribe)
- *    between two mounts, and the fire-and-forget unsubscribe can arrive at the
- *    backend after the re-subscribe, removing the subscription.
- *
- * This helper polls subscribe until it succeeds (handles race 1) and is called
- * after the logs tab is mounted (handles race 2 by re-creating the subscription
- * if StrictMode removed it).
+ * Ensure a device-log subscription exists for the page's SSE connection. The
+ * useDeviceLogs hook subscribes automatically, but React's StrictMode fires a
+ * cleanup (unsubscribe) between its two mounts, and the fire-and-forget
+ * unsubscribe can arrive at the backend after the re-subscribe, removing the
+ * subscription. Called after the logs tab is mounted, this re-creates it.
+ * The backend registers the connection before it sends `ready`, so once
+ * ensureConnected() returns the subscribe is accepted.
  */
 async function ensureSubscription(
   page: import('@playwright/test').Page,
   frontendUrl: string,
-  requestId: string,
+  deploymentSse: DeploymentSseHelper,
   deviceId: number,
-  timeout = 5_000,
-): Promise<boolean> {
-  try {
-    await expect(async () => {
-      const resp = await page.request.post(
-        `${frontendUrl}/api/device-logs/subscribe`,
-        { data: { request_id: requestId, device_id: deviceId } },
-      );
-      expect(resp.ok()).toBe(true);
-    }).toPass({ timeout });
-    return true;
-  } catch {
-    return false;
-  }
+): Promise<void> {
+  const requestId = await deploymentSse.getRequestId();
+  expect(requestId).toBeTruthy();
+  const resp = await page.request.post(
+    `${frontendUrl}/api/device-logs/subscribe`,
+    { data: { request_id: requestId, device_id: deviceId } },
+  );
+  expect(resp.ok()).toBe(true);
 }
 
 test.describe('Device Logs SSE Streaming', () => {
@@ -99,27 +80,14 @@ test.describe('Device Logs SSE Streaming', () => {
     // Switch to logs tab (client-side navigation — SSE connection preserved)
     await devicesPage.clickTab('logs');
 
-    // Ensure the subscription exists (handles gateway callback race + StrictMode)
-    const requestId = await deploymentSse.getRequestId();
-    if (!requestId) {
-      test.skip(true, 'SSE connection has no requestId');
-      return;
-    }
-    const subscribed = await ensureSubscription(page, frontendUrl, requestId, device.id);
-    if (!subscribed) {
-      test.skip(true, 'Could not subscribe -- gateway may not be available');
-      return;
-    }
+    // Ensure the subscription exists (StrictMode may have removed it)
+    await ensureSubscription(page, frontendUrl, deploymentSse, device.id);
 
     // Wait for the log viewer to appear (SSE subscription + initial history load)
     await expect(devicesPage.logsViewer).toBeVisible({ timeout: 15_000 });
 
     // Verify SSE subscription is active via testing endpoint
-    const subscriptionActive = await waitForSseSubscription(page, frontendUrl, entityId);
-    if (!subscriptionActive) {
-      test.skip(true, 'SSE subscription not active -- gateway may not be available');
-      return;
-    }
+    await expectSseSubscription(page, frontendUrl, entityId);
   });
 
   test('injected logs appear in the viewer in real time', async ({
@@ -136,26 +104,13 @@ test.describe('Device Logs SSE Streaming', () => {
     await deploymentSse.ensureConnected();
     await devicesPage.clickTab('logs');
 
-    const requestId = await deploymentSse.getRequestId();
-    if (!requestId) {
-      test.skip(true, 'SSE connection has no requestId');
-      return;
-    }
-    const subscribed = await ensureSubscription(page, frontendUrl, requestId, device.id);
-    if (!subscribed) {
-      test.skip(true, 'Could not subscribe -- gateway may not be available');
-      return;
-    }
+    await ensureSubscription(page, frontendUrl, deploymentSse, device.id);
 
     // Wait for the viewer to be ready
     await expect(devicesPage.logsViewer).toBeVisible({ timeout: 15_000 });
 
     // Wait for active SSE subscription
-    const subscriptionActive = await waitForSseSubscription(page, frontendUrl, entityId);
-    if (!subscriptionActive) {
-      test.skip(true, 'SSE subscription not active -- gateway may not be available');
-      return;
-    }
+    await expectSseSubscription(page, frontendUrl, entityId);
 
     // Inject log entries via the testing endpoint
     const testMessages = [
@@ -198,25 +153,12 @@ test.describe('Device Logs SSE Streaming', () => {
     await deploymentSse.ensureConnected();
     await devicesPage.clickTab('logs');
 
-    const requestId = await deploymentSse.getRequestId();
-    if (!requestId) {
-      test.skip(true, 'SSE connection has no requestId');
-      return;
-    }
-    const subscribed = await ensureSubscription(page, frontendUrl, requestId, device.id);
-    if (!subscribed) {
-      test.skip(true, 'Could not subscribe -- gateway may not be available');
-      return;
-    }
+    await ensureSubscription(page, frontendUrl, deploymentSse, device.id);
 
     await expect(devicesPage.logsViewer).toBeVisible({ timeout: 15_000 });
 
     // Wait for active SSE subscription
-    const subscriptionActive = await waitForSseSubscription(page, frontendUrl, entityId);
-    if (!subscriptionActive) {
-      test.skip(true, 'SSE subscription not active');
-      return;
-    }
+    await expectSseSubscription(page, frontendUrl, entityId);
 
     // Inject ordered entries
     const orderedMessages = ['First entry', 'Second entry', 'Third entry'];

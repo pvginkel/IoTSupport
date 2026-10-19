@@ -64,7 +64,6 @@
     "openapi-typescript": "^7.0.0",
     "pg": "^8.23.1",
     "split2": "^4.2.0",
-    "ssegateway": "github:pvginkel/SSEGateway#stable",
     "typescript": "~5.9.0",
     "typescript-eslint": "^8.39.1",
     "vite": "^7.1.2"

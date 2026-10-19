@@ -20,7 +20,7 @@ interface DeviceLogsApiResponse {
 
 /**
  * SSE event payload for device-logs events.
- * The gateway sends `@timestamp` (with @ prefix) whereas the REST API uses `timestamp`.
+ * The SSE event carries `@timestamp` (with @ prefix) whereas the REST API uses `timestamp`.
  */
 interface SseDeviceLogsPayload {
   device_entity_id: string
