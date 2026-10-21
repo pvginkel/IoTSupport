@@ -3,6 +3,7 @@
 Provides endpoints for Playwright tests to:
 - Inject log entries into the DeviceLogStreamService SSE pipeline
 - Poll active SSE subscription state
+- End an SSE stream server-side, dropping its subscriptions
 - Broadcast rotation-updated SSE events
 
 All endpoints are guarded by reject_if_not_testing() so they are
@@ -18,7 +19,11 @@ from flask import Blueprint, request
 from spectree import Response as SpectreeResponse
 
 from app.api.testing_guard import reject_if_not_testing
+from app.exceptions import RecordNotFoundException
+from app.schemas.common import ApiErrorResponseSchema
 from app.schemas.testing_device_sse import (
+    DropStreamRequestSchema,
+    DropStreamResponseSchema,
     LogInjectRequestSchema,
     LogInjectResponseSchema,
     NudgeResponseSchema,
@@ -30,6 +35,7 @@ from app.services.container import ServiceContainer
 from app.services.device_log_stream_service import DeviceLogStreamService
 from app.services.elasticsearch_service import ElasticsearchService
 from app.services.rotation_nudge_service import RotationNudgeService
+from app.services.sse_connection_manager import SSEConnectionManager
 from app.utils.spectree_config import api
 
 logger = logging.getLogger(__name__)
@@ -120,6 +126,54 @@ def get_log_subscriptions(
     return SubscriptionsResponseSchema.model_validate(
         {"subscriptions": subscriptions},
     ).model_dump(), 200
+
+
+# ---------------------------------------------------------------------------
+# Stream drop
+# ---------------------------------------------------------------------------
+
+
+@testing_device_sse_bp.route("/devices/logs/drop-stream", methods=["POST"])
+@api.validate(
+    json=DropStreamRequestSchema,
+    resp=SpectreeResponse(
+        HTTP_200=DropStreamResponseSchema,
+        HTTP_404=ApiErrorResponseSchema,
+    ),
+)
+@inject
+def drop_stream(
+    sse_connection_manager: SSEConnectionManager = Provide[
+        ServiceContainer.sse_connection_manager
+    ],
+) -> tuple[dict[str, Any], int]:
+    """End an SSE stream server-side, as a stream that ends on its own does.
+
+    The subscriptions the request_id held are dropped, and the browser
+    reconnects with the same request_id to a connection that has none, as
+    after a pod restart. Used by Playwright tests to check that the frontend
+    subscribes again.
+
+    Raises:
+        RecordNotFoundException: 404, no SSE connection has that request_id
+    """
+    data = DropStreamRequestSchema.model_validate(request.get_json())
+
+    info = sse_connection_manager.get_connection_info(data.request_id)
+    if info is None:
+        raise RecordNotFoundException("SSE connection", data.request_id)
+
+    # A stand-in replaces the browser's connection, which ends its stream.
+    # Ending the stand-in, the current connection, notifies the disconnect
+    # observers, which drop every subscription the request_id held.
+    stand_in = sse_connection_manager.on_connect(
+        data.request_id, info.subject, local_admin=info.local_admin
+    )
+    sse_connection_manager.on_disconnect(stand_in)
+
+    logger.info("Dropped SSE stream %s from testing endpoint", data.request_id)
+
+    return DropStreamResponseSchema(status="dropped").model_dump(), 200
 
 
 # ---------------------------------------------------------------------------

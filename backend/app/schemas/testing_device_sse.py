@@ -1,7 +1,7 @@
 """Pydantic schemas for device SSE testing endpoints.
 
-Covers log injection, subscription status, and rotation nudge endpoints
-used by Playwright tests to exercise SSE-driven features.
+Covers log injection, subscription status, stream drop, and rotation nudge
+endpoints used by Playwright tests to exercise SSE-driven features.
 """
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -78,6 +78,26 @@ class SubscriptionsResponseSchema(BaseModel):
     subscriptions: list[SubscriptionEntrySchema] = Field(
         ...,
         description="Active SSE subscriptions, empty when none exist",
+    )
+
+
+class DropStreamRequestSchema(BaseModel):
+    """Request body for POST /api/testing/devices/logs/drop-stream."""
+
+    request_id: str = Field(
+        ...,
+        min_length=1,
+        description="Request ID of the SSE connection whose stream to end",
+        examples=["abc123"],
+    )
+
+
+class DropStreamResponseSchema(BaseModel):
+    """Response for POST /api/testing/devices/logs/drop-stream."""
+
+    status: str = Field(
+        ...,
+        description="Always 'dropped' on success",
     )
 
 

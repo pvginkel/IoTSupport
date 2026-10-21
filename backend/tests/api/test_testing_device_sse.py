@@ -1,9 +1,11 @@
 """Tests for device SSE testing API endpoints.
 
-Covers the three testing-only endpoints:
+Covers the testing-only endpoints:
 - POST /api/testing/devices/logs/inject
 - GET  /api/testing/devices/logs/subscriptions
+- POST /api/testing/devices/logs/drop-stream
 - POST /api/testing/rotation/nudge
+- POST /api/testing/devices/logs/seed
 """
 
 from collections.abc import Generator
@@ -80,7 +82,7 @@ def populate_subscriptions(
 
 
 class TestDeviceSSEEndpointsDisabled:
-    """Verify all three endpoints return 400 when not in testing mode."""
+    """Verify the endpoints return 400 when not in testing mode."""
 
     def test_inject_returns_400_when_not_testing(self, client: FlaskClient) -> None:
         response = client.post(
@@ -97,6 +99,15 @@ class TestDeviceSSEEndpointsDisabled:
 
     def test_subscriptions_returns_400_when_not_testing(self, client: FlaskClient) -> None:
         response = client.get("/api/testing/devices/logs/subscriptions")
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["code"] == "ROUTE_NOT_AVAILABLE"
+
+    def test_drop_stream_returns_400_when_not_testing(self, client: FlaskClient) -> None:
+        response = client.post(
+            "/api/testing/devices/logs/drop-stream",
+            json={"request_id": "req-1"},
+        )
         assert response.status_code == 400
         data = response.get_json()
         assert data["code"] == "ROUTE_NOT_AVAILABLE"
@@ -392,6 +403,85 @@ class TestGetLogSubscriptions:
         assert response.status_code == 200
         data = response.get_json()
         assert data["subscriptions"] == []
+
+
+# ===========================================================================
+# POST /api/testing/devices/logs/drop-stream
+# ===========================================================================
+
+
+class TestDropStream:
+    """Tests for the stream drop endpoint."""
+
+    def test_drop_stream_ends_stream_and_drops_subscriptions(
+        self,
+        testing_client: FlaskClient,  # noqa: F811
+        testing_container: ServiceContainer,  # noqa: F811
+        device_log_stream_service: DeviceLogStreamService,
+    ) -> None:
+        """The stream ends, and the request_id keeps no connection or subscription."""
+        sse_mgr = testing_container.sse_connection_manager()
+        connection = sse_mgr.on_connect("req-drop", "local-user", local_admin=True)
+        device_log_stream_service.subscribe("req-drop", "sensor.drop_test", "local-user")
+
+        response = testing_client.post(
+            "/api/testing/devices/logs/drop-stream",
+            json={"request_id": "req-drop"},
+        )
+
+        assert response.status_code == 200
+        assert response.get_json() == {"status": "dropped"}
+        assert connection.closed
+        assert not sse_mgr.has_connection("req-drop")
+        assert device_log_stream_service.get_subscriptions("sensor.drop_test") == []
+
+    def test_drop_stream_keeps_other_connections_subscriptions(
+        self,
+        testing_client: FlaskClient,  # noqa: F811
+        testing_container: ServiceContainer,  # noqa: F811
+        device_log_stream_service: DeviceLogStreamService,
+    ) -> None:
+        """Another connection's stream and subscription are untouched."""
+        sse_mgr = testing_container.sse_connection_manager()
+        sse_mgr.on_connect("req-drop", "local-user", local_admin=True)
+        other = sse_mgr.on_connect("req-other", "local-user", local_admin=True)
+        device_log_stream_service.subscribe("req-drop", "sensor.drop_test", "local-user")
+        device_log_stream_service.subscribe("req-other", "sensor.drop_test", "local-user")
+
+        response = testing_client.post(
+            "/api/testing/devices/logs/drop-stream",
+            json={"request_id": "req-drop"},
+        )
+
+        assert response.status_code == 200
+        assert not other.closed
+        assert device_log_stream_service.get_subscriptions("sensor.drop_test") == [
+            {"device_entity_id": "sensor.drop_test", "request_ids": ["req-other"]}
+        ]
+
+    def test_drop_stream_unknown_request_id_returns_404(
+        self,
+        testing_client: FlaskClient,  # noqa: F811
+    ) -> None:
+        """No SSE connection has the request_id."""
+        response = testing_client.post(
+            "/api/testing/devices/logs/drop-stream",
+            json={"request_id": "req-unknown"},
+        )
+
+        assert response.status_code == 404
+
+    def test_drop_stream_missing_request_id_returns_400(
+        self,
+        testing_client: FlaskClient,  # noqa: F811
+    ) -> None:
+        """The body has no request_id."""
+        response = testing_client.post(
+            "/api/testing/devices/logs/drop-stream",
+            json={},
+        )
+
+        assert response.status_code == 400
 
 
 # ===========================================================================

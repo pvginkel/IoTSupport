@@ -1432,6 +1432,40 @@
         "title": "DeviceUpdateSchema",
         "type": "object"
       },
+      "DropStreamRequestSchema.2e62f0a": {
+        "description": "Request body for POST /api/testing/devices/logs/drop-stream.",
+        "properties": {
+          "request_id": {
+            "description": "Request ID of the SSE connection whose stream to end",
+            "examples": [
+              "abc123"
+            ],
+            "minLength": 1,
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "DropStreamRequestSchema",
+        "type": "object"
+      },
+      "DropStreamResponseSchema.2e62f0a": {
+        "description": "Response for POST /api/testing/devices/logs/drop-stream.",
+        "properties": {
+          "status": {
+            "description": "Always 'dropped' on success",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "DropStreamResponseSchema",
+        "type": "object"
+      },
       "ErrorResponseSchema.8c5cd6b": {
         "description": "Standard error response.",
         "properties": {
@@ -5135,6 +5169,63 @@
           }
         ],
         "summary": "Trigger a version event for integration testing.",
+        "tags": [],
+        "x-required-role": "editor"
+      }
+    },
+    "/api/testing/devices/logs/drop-stream": {
+      "post": {
+        "description": "The subscriptions the request_id held are dropped, and the browser reconnects with the same request_id to a connection that has none, as after a pod restart. Used by Playwright tests to check that the frontend subscribes again.\n\nRaises:     RecordNotFoundException: 404, no SSE connection has that request_id",
+        "operationId": "post__api_testing_devices_logs_drop-stream",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DropStreamRequestSchema.2e62f0a"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DropStreamResponseSchema.2e62f0a"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError.6a07bef"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseSchema.c2a0d71"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "End an SSE stream server-side, as a stream that ends on its own does.",
         "tags": [],
         "x-required-role": "editor"
       }
