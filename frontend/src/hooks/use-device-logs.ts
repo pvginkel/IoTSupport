@@ -146,7 +146,7 @@ interface UseDeviceLogsOptions {
 /**
  * Custom hook for SSE-driven device log streaming with backward pagination.
  *
- * Lifecycle:
+ * Lifecycle, once the SSE stream is connected and again on every reconnect:
  * 1. Register SSE event listener for "device-logs" events (queue while loading).
  * 2. Subscribe via POST /api/device-logs/subscribe.
  * 3. Fetch initial history via GET /api/devices/{id}/logs (up to 1000 entries).
@@ -168,7 +168,7 @@ export function useDeviceLogs({
 
   const hasEntityId = Boolean(deviceEntityId && deviceEntityId.trim() !== '')
 
-  const { requestId, addEventListener } = useSseContext()
+  const { isConnected, requestId, addEventListener } = useSseContext()
 
   // Ref to guard against concurrent backfill fetches, paired with state for re-renders
   const isFetchingOlderRef = useRef(false)
@@ -220,15 +220,17 @@ export function useDeviceLogs({
   // pending unsubscribe before it reaches the backend.
   const pendingUnsubscribeRef = useRef<AbortController | null>(null)
 
-  // Main effect: fetch history (always) and optionally set up SSE streaming.
-  // History fetching only depends on deviceId + hasEntityId.
-  // SSE streaming additionally requires requestId from the SSE context.
+  // Main effect: subscribe, fetch history and stream, once the SSE stream is
+  // connected. A stream that reconnects starts with no subscriptions, whether
+  // it reconnects to a new pod or to the same one, with the same requestId. So
+  // the effect runs again when isConnected turns true: it subscribes anew and
+  // fetches the latest history window, which fills the gap.
   useEffect(() => {
     // Cancel any pending unsubscribe from a previous cleanup (StrictMode)
     pendingUnsubscribeRef.current?.abort()
     pendingUnsubscribeRef.current = null
 
-    if (!hasEntityId || deviceId === undefined || !requestId) {
+    if (!hasEntityId || deviceId === undefined || !requestId || !isConnected) {
       return
     }
 
@@ -331,8 +333,8 @@ export function useDeviceLogs({
     }
 
     // Orchestrate the subscribe -> fetch -> flush -> stream lifecycle.
-    // History is always fetched regardless of SSE subscribe result, so
-    // historical logs are visible even without a streaming connection.
+    // History is fetched whatever the subscribe's outcome, so historical logs
+    // are visible even when the subscribe fails.
     const run = async () => {
       // Subscribe (best-effort — streaming is a bonus, not a prerequisite)
       const subscribed = await subscribe()
@@ -412,7 +414,7 @@ export function useDeviceLogs({
         // Swallow -- best-effort cleanup (includes AbortError from StrictMode cancel)
       })
     }
-  }, [deviceId, deviceEntityId, hasEntityId, requestId, addEventListener, emitLoadingEvent])
+  }, [deviceId, deviceEntityId, hasEntityId, requestId, isConnected, addEventListener, emitLoadingEvent])
 
   /**
    * Fetch one page of older logs for backward pagination (infinite scroll).

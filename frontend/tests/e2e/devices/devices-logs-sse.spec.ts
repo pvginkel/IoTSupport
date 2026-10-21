@@ -9,6 +9,7 @@ import { DevicesPage } from './DevicesPage';
  * the backend testing endpoints:
  * - POST /api/testing/devices/logs/inject
  * - GET /api/testing/devices/logs/subscriptions
+ * - POST /api/testing/devices/logs/drop-stream
  *
  * The SSE stream is the backend's own (GET /api/sse/stream), served by every
  * worker's backend.
@@ -137,6 +138,56 @@ test.describe('Device Logs SSE Streaming', () => {
         devicesPage.logsEntries.filter({ hasText: message }),
       ).toBeVisible({ timeout: 10_000 });
     }
+  });
+
+  test('logs keep streaming after the stream is dropped server-side', async ({
+    page,
+    devices,
+    frontendUrl,
+    deploymentSse,
+  }) => {
+    const entityId = devices.randomDeviceEntityId('sse_drop_test');
+    const device = await devices.create({ deviceEntityId: entityId });
+
+    const devicesPage = new DevicesPage(page);
+    await devicesPage.gotoEdit(device.id);
+    await deploymentSse.ensureConnected();
+    await devicesPage.clickTab('logs');
+
+    await ensureSubscription(page, frontendUrl, deploymentSse, device.id);
+
+    await expect(devicesPage.logsViewer).toBeVisible({ timeout: 15_000 });
+    await expectSseSubscription(page, frontendUrl, entityId);
+
+    // End the stream server-side, as a pod restart does: the backend drops
+    // the subscription, and the browser reconnects with the same request_id
+    const requestId = await deploymentSse.getRequestId();
+    expect(requestId).toBeTruthy();
+    const dropResponse = await page.request.post(
+      `${frontendUrl}/api/testing/devices/logs/drop-stream`,
+      { data: { request_id: requestId } },
+    );
+    expect(dropResponse.ok()).toBe(true);
+
+    // The hook subscribes anew once the stream is connected again
+    await expectSseSubscription(page, frontendUrl, entityId);
+    expect(await deploymentSse.getRequestId()).toBe(requestId);
+
+    const message = 'SSE test log entry after reconnect';
+    const injectResponse = await page.request.post(
+      `${frontendUrl}/api/testing/devices/logs/inject`,
+      {
+        data: {
+          device_entity_id: entityId,
+          logs: [{ message }],
+        },
+      },
+    );
+    expect(injectResponse.ok()).toBe(true);
+
+    await expect(
+      devicesPage.logsEntries.filter({ hasText: message }),
+    ).toBeVisible({ timeout: 10_000 });
   });
 
   test('multiple injected entries appear in chronological order', async ({
