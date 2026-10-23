@@ -52,6 +52,7 @@ secrets:
 tools:
   - use: modern-app
   - use: aac-tools # arch-validate, the last statement of both components' lint
+  - use: iac # kubectl, to read the prd deployment's state and pod logs
 
 ports:
   - name: frontend
