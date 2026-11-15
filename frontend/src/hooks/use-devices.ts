@@ -8,8 +8,11 @@ import {
   useDeleteDevicesByDeviceId,
   useGetDevicesKeycloakStatusByDeviceId,
   usePostDevicesKeycloakSyncByDeviceId,
+  useGetDevicesFlashImagesByDeviceId,
   type DeviceCreateSchema_d48fbce,
-  type DeviceUpdateSchema_d48fbce
+  type DeviceUpdateSchema_d48fbce,
+  type DeviceFlashImagesResponseSchema_d48fbce,
+  type DeviceFlashImagesResponseSchema_d48fbce_FlashStatus
 } from '@/lib/api/generated/hooks'
 import { useToast } from '@/hooks/use-toast'
 
@@ -346,5 +349,76 @@ export function useSyncDeviceKeycloak() {
       showSuccess('Keycloak client created successfully')
       return result
     }
+  }
+}
+
+// Whether a device's model's current firmware version can be flashed
+type FlashStatus = DeviceFlashImagesResponseSchema_d48fbce_FlashStatus
+
+// One image a flash writes, at the offset its build gave it
+export interface DeviceFlashImage {
+  offset: number
+  file: string
+  size: number
+  // Base64-encoded image
+  data: string
+}
+
+// Everything a flash writes: the chip the build targets (ESP-IDF's name) and its images
+export interface DeviceFlashSet {
+  chip: string
+  images: DeviceFlashImage[]
+}
+
+export type DeviceFlashImages =
+  | { status: Extract<FlashStatus, 'flashable'>; firmwareVersion: string; flash: DeviceFlashSet }
+  | { status: Extract<FlashStatus, 'no_flash_images'>; firmwareVersion: string }
+  | { status: Extract<FlashStatus, 'no_firmware'>; firmwareVersion: null }
+
+// Transform the flash-images response; the backend sets firmware_version for
+// every status but no_firmware, and flash exactly when the status is flashable
+function transformFlashImages(apiImages: DeviceFlashImagesResponseSchema_d48fbce): DeviceFlashImages {
+  switch (apiImages.status) {
+    case 'flashable':
+      return {
+        status: apiImages.status,
+        firmwareVersion: apiImages.firmware_version!,
+        flash: {
+          chip: apiImages.flash!.chip,
+          images: apiImages.flash!.images.map(image => ({
+            offset: image.offset,
+            file: image.file,
+            size: image.size,
+            data: image.data
+          }))
+        }
+      }
+    case 'no_flash_images':
+      return { status: apiImages.status, firmwareVersion: apiImages.firmware_version! }
+    case 'no_firmware':
+      return { status: apiImages.status, firmwareVersion: null }
+    default: {
+      const unknownStatus: never = apiImages.status
+      throw new Error(`Unknown flash status: ${String(unknownStatus)}`)
+    }
+  }
+}
+
+// Hook to fetch what Flash device writes for a device. The response carries the
+// whole app image, so it is fetched afresh for every flash and never cached.
+export function useDeviceFlashImages(deviceId: number) {
+  const query = useGetDevicesFlashImagesByDeviceId(
+    { path: { device_id: deviceId } },
+    { staleTime: 0, gcTime: 0 }
+  )
+
+  const flashImages = useMemo(() => {
+    if (!query.data) return null
+    return transformFlashImages(query.data)
+  }, [query.data])
+
+  return {
+    ...query,
+    flashImages
   }
 }

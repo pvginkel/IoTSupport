@@ -1,13 +1,18 @@
 /**
- * Mock implementation of esptool-js for Playwright tests.
+ * Mock implementation of esptool-js for Playwright tests: the chip.
  *
- * This mock allows testing the provisioning workflow without actual hardware
- * by simulating the ESPLoader and Transport classes with configurable behaviors.
+ * This mock allows testing the provisioning and flash workflows without actual
+ * hardware by simulating the ESPLoader and Transport classes with configurable
+ * behaviors. The mock is enabled via Vite's resolve.alias when VITE_TEST_MODE=true.
  *
- * The mock is enabled via Vite's resolve.alias when VITE_TEST_MODE=true.
+ * A spec that gets past the port picker installs the fake port
+ * (tests/support/mocks/fake-esp-device.ts), which sets this mock's
+ * configuration and reads back what it did through `window.__fakeEspDevice`.
  */
 
 /// <reference types="w3c-web-serial" />
+
+import SparkMD5 from 'spark-md5';
 
 /**
  * LoaderOptions for ESPLoader constructor
@@ -35,6 +40,30 @@ export interface FlashOptions {
   compress: boolean;
   reportProgress?: (fileIndex: number, written: number, total: number) => void;
   calculateMD5Hash?: (image: string) => string;
+}
+
+/**
+ * One thing the fake device was made to do, in order: an image written to its
+ * flash, or signals set on its port.
+ */
+export type FakeEspOperation =
+  | { op: 'write'; address: number; data: string; md5: string | null; eraseAll: boolean }
+  | { op: 'signals'; signals: SerialOutputSignals };
+
+/**
+ * The fake device's state in the page: the chip's configuration and every
+ * operation, for the spec to read back.
+ */
+export interface FakeEspDeviceState {
+  chip: Partial<ESPLoaderMockConfig>;
+  portRequests: number;
+  operations: FakeEspOperation[];
+}
+
+declare global {
+  interface Window {
+    __fakeEspDevice?: FakeEspDeviceState;
+  }
 }
 
 /**
@@ -67,7 +96,7 @@ export interface ESPLoaderMockConfig {
   partitionTable: PartitionInfo[] | null;
   /** Result of flash write operation */
   flashWriteResult: 'success' | 'error';
-  /** Result of MD5 verification */
+  /** Whether the flash keeps what is written to it, or holds other bytes, so the read-back mismatches */
   verificationResult: 'match' | 'mismatch';
   /** Simulated chip name */
   chipName: string;
@@ -85,39 +114,35 @@ const defaultConfig: ESPLoaderMockConfig = {
   ],
   flashWriteResult: 'success',
   verificationResult: 'match',
-  chipName: 'ESP32',
+  // backend/docs/decisions/0001-hardware-revision-strategy.md: "Target platform is the ESP32-S3."
+  chipName: 'ESP32-S3',
   operationDelayMs: 50,
 };
 
-// Current mock configuration (can be changed via configureESPLoaderMock)
-let currentConfig: ESPLoaderMockConfig = { ...defaultConfig };
-
-/**
- * Configure the ESPLoader mock behavior for tests.
- * Call this before running provisioning operations to set up expected outcomes.
- */
-export function configureESPLoaderMock(config: Partial<ESPLoaderMockConfig>): void {
-  currentConfig = { ...currentConfig, ...config };
+/** The defaults, with what the spec's fake device sets over them */
+function currentConfig(): ESPLoaderMockConfig {
+  return { ...defaultConfig, ...window.__fakeEspDevice?.chip };
 }
 
-/**
- * Reset the ESPLoader mock to default configuration.
- */
-export function resetESPLoaderMock(): void {
-  currentConfig = { ...defaultConfig };
+function recordOperation(operation: FakeEspOperation): void {
+  window.__fakeEspDevice?.operations.push(operation);
 }
 
-/**
- * Get current mock configuration (for debugging)
- */
-export function getESPLoaderMockConfig(): ESPLoaderMockConfig {
-  return { ...currentConfig };
-}
+// The chip's flash: the bytes of each write, by the address written at
+const flash = new Map<number, Uint8Array>();
 
-// Track expected MD5 for verification
-let expectedMd5: string = '';
-let writtenData: Uint8Array | null = null;
-let lastWriteAddress: number = 0;
+/**
+ * `size` bytes of flash from `addr`: what a write at `addr` stored, and erased
+ * flash (0xFF) beyond it.
+ */
+function flashContent(addr: number, size: number): Uint8Array {
+  const content = new Uint8Array(size).fill(0xFF);
+  const stored = flash.get(addr);
+  if (stored) {
+    content.set(stored.slice(0, size));
+  }
+  return content;
+}
 
 /**
  * Mock Transport class wrapping a SerialPort
@@ -145,7 +170,7 @@ export class Transport {
 
   async connect(baud = 115200): Promise<void> {
     this.baudrate = baud;
-    await this.sleep(currentConfig.operationDelayMs);
+    await this.sleep(currentConfig().operationDelayMs);
   }
 
   async disconnect(): Promise<void> {
@@ -153,13 +178,11 @@ export class Transport {
   }
 
   async setRTS(state: boolean): Promise<void> {
-    void state;
-    await this.sleep(10);
+    await this.device.setSignals({ requestToSend: state });
   }
 
   async setDTR(state: boolean): Promise<void> {
-    void state;
-    await this.sleep(10);
+    await this.device.setSignals({ dataTerminalReady: state });
   }
 
   sleep(ms: number): Promise<void> {
@@ -176,7 +199,7 @@ export class Transport {
  * Simulated ROM class for chip identification
  */
 class MockROM {
-  CHIP_NAME = currentConfig.chipName;
+  CHIP_NAME = currentConfig().chipName;
   FLASH_WRITE_SIZE = 0x400;
   TEXT_START = 0x40000000;
 }
@@ -254,17 +277,17 @@ export class ESPLoader {
     void attempts;
     void detecting;
 
-    await this.sleep(currentConfig.operationDelayMs);
+    await this.sleep(currentConfig().operationDelayMs);
 
-    if (currentConfig.connectionResult === 'timeout') {
+    if (currentConfig().connectionResult === 'timeout') {
       throw new Error('Connection timed out: Failed to connect to ESP32 after 7 attempts');
     }
 
-    if (currentConfig.connectionResult === 'error') {
+    if (currentConfig().connectionResult === 'error') {
       throw new Error('Serial connection error: Device not responding');
     }
 
-    this.info(`Connected to ${currentConfig.chipName}`);
+    this.info(`Connected to ${currentConfig().chipName}`);
   }
 
   /**
@@ -272,16 +295,16 @@ export class ESPLoader {
    */
   async detectChip(mode = 'default_reset'): Promise<void> {
     void mode;
-    await this.sleep(currentConfig.operationDelayMs);
+    await this.sleep(currentConfig().operationDelayMs);
     this.chip = new MockROM();
-    this.info(`Chip is ${currentConfig.chipName}`);
+    this.info(`Chip is ${currentConfig().chipName}`);
   }
 
   /**
    * Run the flasher stub
    */
   async runStub(): Promise<MockROM> {
-    await this.sleep(currentConfig.operationDelayMs);
+    await this.sleep(currentConfig().operationDelayMs);
     this.IS_STUB = true;
     this.info('Stub loaded');
     return this.chip;
@@ -294,7 +317,7 @@ export class ESPLoader {
     await this.connect(mode);
     await this.detectChip(mode);
     await this.runStub();
-    return currentConfig.chipName;
+    return currentConfig().chipName;
   }
 
   /**
@@ -305,16 +328,17 @@ export class ESPLoader {
     size: number,
     onPacketReceived?: ((packet: Uint8Array, progress: number, totalSize: number) => void) | null
   ): Promise<Uint8Array> {
-    await this.sleep(currentConfig.operationDelayMs);
+    const { operationDelayMs, partitionTable } = currentConfig();
+    await this.sleep(operationDelayMs);
 
     // Check if reading partition table (address 0x8000)
-    if (addr === 0x8000 && currentConfig.partitionTable === null) {
+    if (addr === 0x8000 && partitionTable === null) {
       throw new Error('Failed to read flash at 0x8000: Timeout');
     }
 
     // Simulate partition table data at 0x8000
-    if (addr === 0x8000 && currentConfig.partitionTable) {
-      const data = this.buildPartitionTableBinary(currentConfig.partitionTable);
+    if (addr === 0x8000 && partitionTable) {
+      const data = this.buildPartitionTableBinary(partitionTable);
 
       if (onPacketReceived) {
         // Simulate chunked reading
@@ -336,19 +360,8 @@ export class ESPLoader {
       return result;
     }
 
-    // For other addresses (e.g., verification read-back), return written data if available
-    if (writtenData && addr === lastWriteAddress) {
-      if (currentConfig.verificationResult === 'mismatch') {
-        // Return corrupted data for verification failure
-        const corrupted = new Uint8Array(writtenData);
-        corrupted[0] = corrupted[0] ^ 0xFF;
-        return corrupted;
-      }
-      return writtenData;
-    }
-
-    // Return zeros for other reads
-    return new Uint8Array(size);
+    // Other addresses (e.g., verification read-back) read what the flash holds
+    return flashContent(addr, size);
   }
 
   /**
@@ -422,46 +435,55 @@ export class ESPLoader {
    * Calculate MD5 of flash region
    */
   async flashMd5sum(addr: number, size: number): Promise<string> {
-    void addr;
-    void size;
-    await this.sleep(currentConfig.operationDelayMs);
-
-    if (currentConfig.verificationResult === 'mismatch') {
-      return 'ffffffffffffffffffffffffffffffff';
-    }
-
-    return expectedMd5 || 'd41d8cd98f00b204e9800998ecf8427e';
+    await this.sleep(currentConfig().operationDelayMs);
+    const content = flashContent(addr, size);
+    return SparkMD5.ArrayBuffer.hash(content.buffer as ArrayBuffer);
   }
 
   /**
    * Write data to flash
    */
   async writeFlash(options: FlashOptions): Promise<void> {
-    if (currentConfig.flashWriteResult === 'error') {
+    const config = currentConfig();
+    if (config.flashWriteResult === 'error') {
       throw new Error('Flash write error: Failed to write data at specified address');
     }
 
     for (let fileIndex = 0; fileIndex < options.fileArray.length; fileIndex++) {
       const file = options.fileArray[fileIndex];
-      const data = this.bstrToUi8(file.data);
-      const total = data.length;
-
-      // Store for verification
-      writtenData = data;
-      lastWriteAddress = file.address;
-
-      // Calculate expected MD5 if calculator provided
-      if (options.calculateMD5Hash) {
-        expectedMd5 = options.calculateMD5Hash(file.data);
+      // As esptool-js does: pad to a 4-byte boundary with 0xFF, hash what is written
+      let image = file.data;
+      while (image.length % 4 !== 0) {
+        image += '\xff';
       }
+      const md5 = options.calculateMD5Hash ? options.calculateMD5Hash(image) : null;
+
+      const data = this.bstrToUi8(image);
+      if (config.verificationResult === 'mismatch') {
+        data[0] = data[0] ^ 0xFF;
+      }
+      flash.set(file.address, data);
+      recordOperation({
+        op: 'write',
+        address: file.address,
+        data: btoa(image),
+        md5,
+        eraseAll: options.eraseAll,
+      });
 
       // Simulate progress
+      const total = data.length;
       const chunkSize = 4096;
       for (let written = 0; written < total; written += chunkSize) {
         await this.sleep(10);
         if (options.reportProgress) {
           options.reportProgress(fileIndex, Math.min(written + chunkSize, total), total);
         }
+      }
+
+      // As esptool-js does: compare with the MD5 the chip computes over its flash
+      if (md5 !== null && (await this.flashMd5sum(file.address, data.length)) !== md5) {
+        throw new Error('MD5 of file does not match data in flash!');
       }
     }
 
@@ -496,7 +518,7 @@ export class ESPLoader {
    */
   async softReset(stayInBootloader: boolean): Promise<void> {
     void stayInBootloader;
-    await this.sleep(currentConfig.operationDelayMs);
+    await this.sleep(currentConfig().operationDelayMs);
     this.info('Device reset');
   }
 
@@ -506,7 +528,7 @@ export class ESPLoader {
   async after(mode = 'hard_reset', usingUsbOtg = false): Promise<void> {
     void mode;
     void usingUsbOtg;
-    await this.sleep(currentConfig.operationDelayMs);
+    await this.sleep(currentConfig().operationDelayMs);
   }
 
   /**
@@ -527,7 +549,7 @@ export class ESPLoader {
    * Get flash size
    */
   async getFlashSize(): Promise<number> {
-    await this.sleep(currentConfig.operationDelayMs);
+    await this.sleep(currentConfig().operationDelayMs);
     return 0x400000; // 4MB
   }
 }

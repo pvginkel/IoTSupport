@@ -8,9 +8,28 @@
  * The mock is configured via Vite's resolve.alias in vite.config.ts.
  */
 
+import SparkMD5 from 'spark-md5';
+
 // Re-export everything from esptool-js
 // In test mode, Vite's resolve.alias will redirect this to the mock
 export { ESPLoader, Transport } from 'esptool-js';
+
+/**
+ * The ESP-IDF target name of a chip as esptool-js names it: its `CHIP_NAME`
+ * "ESP32-S3" is ESP-IDF's "esp32s3". Holds for every target esptool-js 0.5.7
+ * knows (node_modules/esptool-js/lib/targets/*.js).
+ */
+export function chipNameToIdfTarget(chipName: string): string {
+  return chipName.toLowerCase().replaceAll('-', '');
+}
+
+/**
+ * MD5 of a binary string as lowercase hex, the form esptool-js's
+ * `flashMd5sum` reads back from the chip.
+ */
+export function md5OfBinaryString(data: string): string {
+  return SparkMD5.hashBinary(data);
+}
 
 /**
  * Partition table entry structure as defined in ESP-IDF

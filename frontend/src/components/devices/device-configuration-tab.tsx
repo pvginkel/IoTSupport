@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import Editor from '@monaco-editor/react'
-import { Cpu } from 'lucide-react'
+import { Cpu, Zap } from 'lucide-react'
 import { Button } from '@/components/primitives/button'
 import { ConfirmDialog } from '@/components/primitives/dialog'
 import type { Device } from '@/hooks/use-devices'
 import { useDeviceForm } from '@/hooks/use-device-form'
 import { KeycloakClientStatus } from './keycloak-client-status'
 import { ProvisionDeviceModal } from './provision-device-modal'
+import { FlashDeviceModal } from './flash-device-modal'
 
 interface DeviceConfigurationTabProps {
   device: Device
@@ -16,10 +17,11 @@ interface DeviceConfigurationTabProps {
 /**
  * Configuration tab content for the device detail view.
  * Handles JSON config editing, Keycloak status, model display,
- * provisioning, and form actions (Save/Cancel/Duplicate).
+ * flashing, provisioning, and form actions (Save/Cancel/Duplicate).
  */
 export function DeviceConfigurationTab({ device }: DeviceConfigurationTabProps) {
   const [provisionModalOpen, setProvisionModalOpen] = useState(false)
+  const [flashModalOpen, setFlashModalOpen] = useState(false)
 
   const {
     active,
@@ -130,7 +132,17 @@ export function DeviceConfigurationTab({ device }: DeviceConfigurationTabProps) 
 
           {/* Action buttons */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2" data-testid="devices.editor.usb-actions">
+              <Button
+                variant="outline"
+                onClick={() => setFlashModalOpen(true)}
+                disabled={isPending}
+                data-testid="devices.editor.flash-device"
+                title="Flash firmware via USB"
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                Flash Device
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => setProvisionModalOpen(true)}
@@ -188,6 +200,14 @@ export function DeviceConfigurationTab({ device }: DeviceConfigurationTabProps) 
         confirmText="Discard"
         destructive
         contentProps={{ 'data-testid': 'devices.editor.navigation-blocker-dialog' }}
+      />
+
+      {/* Flash Device Modal */}
+      <FlashDeviceModal
+        open={flashModalOpen}
+        onOpenChange={setFlashModalOpen}
+        deviceId={device.id}
+        deviceKey={device.key}
       />
 
       {/* Provision Device Modal */}

@@ -120,6 +120,18 @@ export class DevicesFactory {
   }
 
   /**
+   * Get what Flash device writes for a device, as the backend serves it.
+   */
+  async getFlashImages(deviceId: number) {
+    const result = await apiRequest(() =>
+      this.client.GET('/api/devices/{device_id}/flash-images', {
+        params: { path: { device_id: deviceId } },
+      })
+    );
+    return result.data!;
+  }
+
+  /**
    * Update a device by ID.
    * Both `active` and `config` are required by the DeviceUpdateSchema.
    */

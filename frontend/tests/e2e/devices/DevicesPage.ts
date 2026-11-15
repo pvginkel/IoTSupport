@@ -167,6 +167,51 @@ export class DevicesPage {
     return this.page.locator('[data-testid="devices.editor.provision-device"]');
   }
 
+  get flashDeviceButton(): Locator {
+    return this.page.locator('[data-testid="devices.editor.flash-device"]');
+  }
+
+  get usbActions(): Locator {
+    return this.page.locator('[data-testid="devices.editor.usb-actions"]');
+  }
+
+  // Locators - Flash Modal
+  get flashModal(): Locator {
+    return this.page.locator('[data-testid="devices.flash-modal"]');
+  }
+
+  get flashModalFirmwareVersion(): Locator {
+    return this.page.locator('[data-testid="devices.flash-modal.firmware-version"]');
+  }
+
+  get flashModalImages(): Locator {
+    return this.page.locator('[data-testid="devices.flash-modal.image"]');
+  }
+
+  get flashModalNotFlashable(): Locator {
+    return this.page.locator('[data-testid="devices.flash-modal.not-flashable"]');
+  }
+
+  get flashModalConnectButton(): Locator {
+    return this.page.locator('[data-testid="devices.flash-modal.connect-button"]');
+  }
+
+  get flashModalCloseButton(): Locator {
+    return this.page.locator('[data-testid="devices.flash-modal.close-button"]');
+  }
+
+  get flashModalSuccessMessage(): Locator {
+    return this.page.locator('[data-testid="devices.flash-modal.success-message"]');
+  }
+
+  get flashModalErrorMessage(): Locator {
+    return this.page.locator('[data-testid="devices.flash-modal.error-message"]');
+  }
+
+  get flashModalRetryButton(): Locator {
+    return this.page.locator('[data-testid="devices.flash-modal.retry-button"]');
+  }
+
   // Locators - Provision Modal
   get provisionModal(): Locator {
     return this.page.locator('[data-testid="devices.provision-modal"]');
@@ -413,6 +458,12 @@ export class DevicesPage {
 
   async cancelDiscard() {
     await this.unsavedChangesDialog.locator('button:has-text("Cancel")').click();
+  }
+
+  // Actions - Flashing
+  async openFlashModal() {
+    await this.flashDeviceButton.click();
+    await this.flashModal.waitFor({ state: 'visible' });
   }
 
   // Actions - Provisioning

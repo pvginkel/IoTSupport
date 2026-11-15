@@ -89,6 +89,29 @@ export class DeviceModelsFactory {
   }
 
   /**
+   * Seed a firmware version for a model through the real upload, making it the
+   * model's current one. Every option the backend defaults when left out: a
+   * flashable version 1.0.0-test built for the esp32s3.
+   */
+  async seedFirmware(
+    modelId: number,
+    options: { version?: string; flashImages?: boolean; chip?: string } = {}
+  ): Promise<{ firmwareVersion: string }> {
+    const result = await apiRequest(() =>
+      this.client.POST('/api/testing/device-models/{model_id}/firmware', {
+        params: { path: { model_id: modelId } },
+        body: {
+          version: options.version,
+          flash_images: options.flashImages,
+          chip: options.chip,
+        },
+      })
+    );
+
+    return { firmwareVersion: result.data!.firmware_version };
+  }
+
+  /**
    * Delete a device model by ID
    */
   async delete(id: number): Promise<void> {
