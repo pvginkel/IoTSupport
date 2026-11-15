@@ -3,17 +3,24 @@
 Stores firmware artifacts in S3 and tracks versions in the database.
 Individual artifacts are stored under firmware/{model_code}/{version}/
 with generic names (firmware.bin, firmware.elf, firmware.map, sdkconfig,
-version.json).
+version.json). A version uploaded with its build's flash images also holds
+each image but the app under flash/, and flash.json, the FlashManifest that
+lists every image with its offset.
 """
 
 import json
 import logging
+import posixpath
 import struct
 import zipfile
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import BytesIO
-from typing import TYPE_CHECKING, Any
+from itertools import pairwise
+from typing import TYPE_CHECKING, Annotated
 
+from pydantic import BaseModel, StringConstraints
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -48,6 +55,9 @@ ZIP_MAGIC = b"\x50\x4b\x03\x04"
 # Required files in a firmware ZIP (model_code is substituted at validation time)
 REQUIRED_ZIP_FILES = {"{model_code}.bin", "{model_code}.elf", "{model_code}.map", "sdkconfig", "version.json"}
 
+# The app image's member in a firmware ZIP
+APP_ZIP_FILE = "{model_code}.bin"
+
 # Mapping from model-specific filenames to generic S3 object names
 ARTIFACT_RENAMES = {
     "{model_code}.bin": "firmware.bin",
@@ -56,6 +66,58 @@ ARTIFACT_RENAMES = {
     "sdkconfig": "sdkconfig",
     "version.json": "version.json",
 }
+
+# The build's flash manifest, which ESP-IDF writes to the build directory. A ZIP
+# that carries it also carries every file it lists for flashing, by file name.
+FLASHER_ARGS_FILE = "flasher_args.json"
+
+# The stored flash set: the manifest and the directory of the images beside the app
+FLASH_MANIFEST_ARTIFACT = "flash.json"
+FLASH_IMAGES_DIR = "flash"
+
+
+class _FlashSettings(BaseModel):
+    flash_mode: str
+    flash_size: str
+    flash_freq: str
+
+
+class _ExtraEsptoolArgs(BaseModel):
+    chip: str
+
+
+class _FlasherArgs(BaseModel):
+    """The part of a build's flasher_args.json a flash needs."""
+
+    flash_settings: _FlashSettings
+    flash_files: dict[Annotated[str, StringConstraints(pattern=r"^0x[0-9a-fA-F]+$")], str]
+    extra_esptool_args: _ExtraEsptoolArgs
+
+
+class FlashImage(BaseModel):
+    """One image a flash of a firmware version writes."""
+
+    offset: int
+    file: str  # as the build names it, relative to its build directory
+    artifact: str  # the S3 artifact under the version's prefix
+    size: int
+
+
+class FlashManifest(BaseModel):
+    """Everything a flash of a firmware version writes, stored as flash.json."""
+
+    chip: str
+    flash_mode: str
+    flash_size: str
+    flash_freq: str
+    images: list[FlashImage]  # ascending offset
+
+
+@dataclass
+class _FirmwareBundle:
+    version: str
+    files: dict[str, bytes]  # artifact name -> content, the flash images included
+    flash_manifest: FlashManifest | None
 
 
 def is_zip_content(content: bytes) -> bool:
@@ -75,7 +137,8 @@ class FirmwareService:
 
     Handles firmware upload (ZIP bundles only), download, version tracking,
     and retention pruning. Each firmware version is stored as individual
-    artifacts in S3 under firmware/{model_code}/{version}/.
+    artifacts in S3 under firmware/{model_code}/{version}/, its flash images
+    among them when the upload carried them.
 
     This is a Factory service (request-scoped) because it needs DB access
     for firmware_versions tracking and coredump PENDING guard queries.
@@ -148,7 +211,9 @@ class FirmwareService:
         """Save a firmware ZIP bundle: validate, upload artifacts to S3, track version.
 
         The ZIP is validated, individual artifacts are renamed to generic names
-        and uploaded to S3 under firmware/{model_code}/{version}/. A
+        and uploaded to S3 under firmware/{model_code}/{version}/. A ZIP that
+        carries the build's flasher_args.json stores its flash images and
+        FlashManifest too; one without it stores a version without them. A
         firmware_versions DB record is created (upsert). Retention pruning
         is then applied.
 
@@ -170,15 +235,22 @@ class FirmwareService:
             raise ValidationException("Firmware must be uploaded as a ZIP bundle")
 
         # Validate ZIP structure and extract artifacts
-        artifacts = self._validate_and_extract_zip(model_code, content)
-        version: str = artifacts["version"]
+        bundle = self._validate_and_extract_zip(model_code, content)
+        version = bundle.version
 
         # Create or update firmware_versions record (flush to DB first -- golden rule)
         self._upsert_firmware_version(model_id, version)
         self.db.flush()
 
+        # A re-upload replaces the stored flash set whole. The manifest is deleted
+        # first and written last, so a version is flashable only while every image
+        # it lists is in place.
+        manifest_key = self._s3_key(model_code, version, FLASH_MANIFEST_ARTIFACT)
+        self.s3_service.delete_file(manifest_key)
+        self.s3_service.delete_prefix(self._s3_key(model_code, version, f"{FLASH_IMAGES_DIR}/"))
+
         # Upload each artifact to S3
-        for artifact_name, artifact_data in artifacts["files"].items():
+        for artifact_name, artifact_data in bundle.files.items():
             s3_key = self._s3_key(model_code, version, artifact_name)
             self.s3_service.upload_file(
                 BytesIO(artifact_data),
@@ -186,14 +258,22 @@ class FirmwareService:
                 content_type="application/octet-stream",
             )
 
+        if bundle.flash_manifest is not None:
+            self.s3_service.upload_file(
+                BytesIO(bundle.flash_manifest.model_dump_json().encode("utf-8")),
+                manifest_key,
+                content_type="application/json",
+            )
+
         # Enforce retention (prune old versions)
         self._enforce_retention(model_id, model_code)
 
         logger.info(
-            "Saved firmware for model %s, version %s (%d artifacts uploaded to S3)",
+            "Saved firmware for model %s, version %s (%d artifacts uploaded to S3, %s)",
             model_code,
             version,
-            len(artifacts["files"]),
+            len(bundle.files),
+            "flashable" if bundle.flash_manifest is not None else "without flash images",
         )
 
         return version
@@ -230,7 +310,7 @@ class FirmwareService:
 
     def _validate_and_extract_zip(
         self, model_code: str, content: bytes
-    ) -> dict[str, Any]:
+    ) -> _FirmwareBundle:
         """Validate a firmware ZIP and extract artifacts with generic names.
 
         Args:
@@ -238,7 +318,8 @@ class FirmwareService:
             content: ZIP file content
 
         Returns:
-            Dict with 'version' (str) and 'files' (dict of artifact_name -> bytes)
+            The version, its artifacts and, when the ZIP carries the build's
+            flash images, their FlashManifest
 
         Raises:
             ValidationException: If ZIP structure is invalid
@@ -254,6 +335,14 @@ class FirmwareService:
                 name.format(model_code=model_code) for name in REQUIRED_ZIP_FILES
             }
             actual_files = set(zf.namelist())
+
+            # The build's flasher_args.json brings every file it lists into the set
+            flasher_args = None
+            flash_members: dict[str, str] = {}
+            if FLASHER_ARGS_FILE in actual_files:
+                flasher_args = self._parse_flasher_args(zf.read(FLASHER_ARGS_FILE))
+                flash_members = self._flash_members(model_code, flasher_args)
+                expected_files |= {FLASHER_ARGS_FILE, *flash_members.values()}
 
             # Check for missing files
             missing = expected_files - actual_files
@@ -295,7 +384,110 @@ class FirmwareService:
                 zip_name = zip_name_template.format(model_code=model_code)
                 files[generic_name] = zf.read(zip_name)
 
-        return {"version": version, "files": files}
+            flash_manifest = None
+            if flasher_args is not None:
+                flash_manifest = self._extract_flash_images(
+                    zf, model_code, flasher_args, flash_members, files
+                )
+
+        return _FirmwareBundle(version=version, files=files, flash_manifest=flash_manifest)
+
+    def _parse_flasher_args(self, content: bytes) -> _FlasherArgs:
+        """Parse the build's flasher_args.json.
+
+        Raises:
+            ValidationException: If it is not JSON or lacks what a flash needs
+        """
+        try:
+            return _FlasherArgs.model_validate_json(content)
+        except PydanticValidationError as e:
+            problems = "; ".join(
+                f"{'.'.join(str(part) for part in error['loc']) or 'document'}: {error['msg']}"
+                for error in e.errors()
+            )
+            raise ValidationException(
+                f"Invalid firmware ZIP: {FLASHER_ARGS_FILE} is invalid: {problems}"
+            ) from e
+
+    def _flash_members(self, model_code: str, flasher_args: _FlasherArgs) -> dict[str, str]:
+        """Map each file the build lists for flashing to the ZIP member carrying it.
+
+        A member is named after its file. The app is the ZIP's {model_code}.bin,
+        which ESP-IDF names after the project, so the app a flash writes is the
+        one /iot/firmware serves.
+
+        Raises:
+            ValidationException: If the build does not flash the app, or two
+                members would share a name
+        """
+        app_file = APP_ZIP_FILE.format(model_code=model_code)
+        if app_file not in flasher_args.flash_files.values():
+            raise ValidationException(
+                f"Invalid firmware ZIP: {FLASHER_ARGS_FILE} does not flash {app_file}"
+            )
+
+        taken = {name.format(model_code=model_code) for name in REQUIRED_ZIP_FILES}
+        taken.add(FLASHER_ARGS_FILE)
+        members = {app_file: app_file}
+        for file in flasher_args.flash_files.values():
+            if file in members:
+                continue
+            member = posixpath.basename(file)
+            if member in taken:
+                raise ValidationException(
+                    f"Invalid firmware ZIP: flash file {file} shares its name with another member"
+                )
+            taken.add(member)
+            members[file] = member
+        return members
+
+    def _extract_flash_images(
+        self,
+        zf: zipfile.ZipFile,
+        model_code: str,
+        flasher_args: _FlasherArgs,
+        flash_members: dict[str, str],
+        files: dict[str, bytes],
+    ) -> FlashManifest:
+        """Add the flash images to the artifacts and build their FlashManifest.
+
+        Each image but the app is stored as flash/<offset>.bin; the app is
+        firmware.bin, already among the artifacts.
+
+        Raises:
+            ValidationException: If an image is empty or two images overlap
+        """
+        app_file = APP_ZIP_FILE.format(model_code=model_code)
+        images: list[FlashImage] = []
+        for offset_text, file in flasher_args.flash_files.items():
+            offset = int(offset_text, 16)
+            data = zf.read(flash_members[file])
+            if not data:
+                raise ValidationException(f"Invalid firmware ZIP: flash image {file} is empty")
+
+            if file == app_file:
+                artifact = ARTIFACT_RENAMES[APP_ZIP_FILE]
+            else:
+                artifact = f"{FLASH_IMAGES_DIR}/{offset:#x}.bin"
+                files[artifact] = data
+            images.append(FlashImage(offset=offset, file=file, artifact=artifact, size=len(data)))
+
+        images.sort(key=lambda image: image.offset)
+        for before, after in pairwise(images):
+            if before.offset + before.size > after.offset:
+                raise ValidationException(
+                    f"Invalid firmware ZIP: flash images overlap: {before.file} at "
+                    f"{before.offset:#x} ({before.size} bytes) runs into {after.file} "
+                    f"at {after.offset:#x}"
+                )
+
+        return FlashManifest(
+            chip=flasher_args.extra_esptool_args.chip,
+            flash_mode=flasher_args.flash_settings.flash_mode,
+            flash_size=flasher_args.flash_settings.flash_size,
+            flash_freq=flasher_args.flash_settings.flash_freq,
+            images=images,
+        )
 
     def _upsert_firmware_version(self, model_id: int, version: str) -> FirmwareVersion:
         """Create or update a firmware_versions record.

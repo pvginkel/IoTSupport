@@ -145,14 +145,60 @@ cat > "${TEMP_DIR}/version.json" <<VJEOF
 }
 VJEOF
 
-# Create ZIP with required files
+# Collect the ZIP's members, starting with the required files
 ZIP_FILE="${TEMP_DIR}/firmware.zip"
-zip -j "$ZIP_FILE" \
-    "$FIRMWARE_FILE" \
-    "$ELF_FILE" \
-    "$MAP_FILE" \
-    "$SDKCONFIG_FILE" \
-    "${TEMP_DIR}/version.json"
+set -- "$FIRMWARE_FILE" "$ELF_FILE" "$MAP_FILE" "$SDKCONFIG_FILE" "${TEMP_DIR}/version.json"
+
+# Add the build's flash images: every file its flasher_args.json lists for
+# `idf.py flash`, under its own name; the app among them is $FIRMWARE_FILE.
+# They go in all or none, and without them the version is stored unflashable.
+FLASHER_ARGS="${BUILD_DIR}/flasher_args.json"
+APP_NAME="${BIN_BASENAME}.bin"
+FLASH_NOTE=""
+if [ -f "$FLASHER_ARGS" ]; then
+    # ESP-IDF writes each flash_files entry ("<offset>" : "<file>") on a line of its own
+    sed -n '/"flash_files"[[:space:]]*:/,/}/p' "$FLASHER_ARGS" \
+        | grep -o '"0x[0-9a-fA-F]*"[[:space:]]*:[[:space:]]*"[^"]*"' \
+        | sed 's/.*:[[:space:]]*"//;s/"$//' > "${TEMP_DIR}/flash_files"
+
+    printf '%s\n' "$APP_NAME" "${BIN_BASENAME}.elf" "${BIN_BASENAME}.map" \
+        sdkconfig version.json flasher_args.json > "${TEMP_DIR}/flash_names"
+    LISTS_APP=""
+    while IFS= read -r FLASH_FILE; do
+        FLASH_NAME=$(basename "$FLASH_FILE")
+        if [ "$FLASH_FILE" = "$APP_NAME" ]; then
+            LISTS_APP=yes
+        elif [ ! -f "${BUILD_DIR}/${FLASH_FILE}" ]; then
+            FLASH_NOTE="${FLASH_NOTE:-${BUILD_DIR}/${FLASH_FILE} not found}"
+        elif grep -qxF -e "$FLASH_NAME" "${TEMP_DIR}/flash_names"; then
+            FLASH_NOTE="${FLASH_NOTE:-two members would be named $FLASH_NAME}"
+        else
+            echo "$FLASH_NAME" >> "${TEMP_DIR}/flash_names"
+        fi
+    done < "${TEMP_DIR}/flash_files"
+
+    if [ -z "$FLASH_NOTE" ] && [ -z "$LISTS_APP" ]; then
+        FLASH_NOTE="$FLASHER_ARGS does not flash $APP_NAME"
+    fi
+    if [ -z "$FLASH_NOTE" ]; then
+        set -- "$@" "$FLASHER_ARGS"
+        while IFS= read -r FLASH_FILE; do
+            if [ "$FLASH_FILE" != "$APP_NAME" ]; then
+                set -- "$@" "${BUILD_DIR}/${FLASH_FILE}"
+            fi
+        done < "${TEMP_DIR}/flash_files"
+    fi
+else
+    FLASH_NOTE="$FLASHER_ARGS not found"
+fi
+
+if [ -n "$FLASH_NOTE" ]; then
+    echo "Note: packaging without flash images ($FLASH_NOTE); the version will not be flashable from IoT Support"
+else
+    echo "Packaging the flash images listed in $FLASHER_ARGS"
+fi
+
+zip -j "$ZIP_FILE" "$@"
 
 echo "Uploading firmware ZIP to model $MODEL_CODE..."
 UPLOAD_RESPONSE=$(curl -fsSL -X POST "$BACKEND_URL/api/pipeline/models/$MODEL_CODE/firmware" \

@@ -115,9 +115,66 @@ function Upload-Firmware {
         $versionJsonPath = Join-Path $tempDir "version.json"
         Set-Content -Path $versionJsonPath -Value $versionJson -Encoding UTF8
 
-        # Create ZIP with required files
+        # Collect the ZIP's members, starting with the required files
         $zipPath = Join-Path $tempDir "firmware.zip"
-        Compress-Archive -Path $FirmwareFile, $ElfFile, $MapFile, $SdkConfigFile, $versionJsonPath -DestinationPath $zipPath -Force
+        $zipFiles = @($FirmwareFile, $ElfFile, $MapFile, $SdkConfigFile, $versionJsonPath)
+
+        # Add the build's flash images: every file its flasher_args.json lists for
+        # `idf.py flash`, under its own name; the app among them is $FirmwareFile.
+        # They go in all or none, and without them the version is stored unflashable.
+        $flasherArgsFile = Join-Path $BuildDir "flasher_args.json"
+        $appName = "$BinBasename.bin"
+        $flashNote = $null
+        if (Test-Path $flasherArgsFile) {
+            $flashFiles = @()
+            try {
+                $flasherArgs = Get-Content $flasherArgsFile -Raw | ConvertFrom-Json
+                foreach ($entry in $flasherArgs.flash_files.PSObject.Properties) {
+                    $flashFiles += [string]$entry.Value
+                }
+            }
+            catch {
+                $flashNote = "$flasherArgsFile is not valid JSON"
+            }
+
+            $names = @($appName, "$BinBasename.elf", "$BinBasename.map", "sdkconfig", "version.json", "flasher_args.json")
+            $flashImages = @()
+            foreach ($flashFile in $flashFiles) {
+                if ($flashNote) { break }
+                if ($flashFile -eq $appName) { continue }
+                $flashPath = Join-Path $BuildDir $flashFile
+                $flashName = Split-Path $flashFile -Leaf
+                if (-not (Test-Path $flashPath)) {
+                    $flashNote = "$flashPath not found"
+                }
+                elseif ($names -contains $flashName) {
+                    $flashNote = "two members would be named $flashName"
+                }
+                else {
+                    $names += $flashName
+                    $flashImages += $flashPath
+                }
+            }
+
+            if (-not $flashNote -and -not ($flashFiles -contains $appName)) {
+                $flashNote = "$flasherArgsFile does not flash $appName"
+            }
+            if (-not $flashNote) {
+                $zipFiles += @($flasherArgsFile) + $flashImages
+            }
+        }
+        else {
+            $flashNote = "$flasherArgsFile not found"
+        }
+
+        if ($flashNote) {
+            Write-Host "Note: packaging without flash images ($flashNote); the version will not be flashable from IoT Support"
+        }
+        else {
+            Write-Host "Packaging the flash images listed in $flasherArgsFile"
+        }
+
+        Compress-Archive -Path $zipFiles -DestinationPath $zipPath -Force
 
         Write-Host "Uploading firmware ZIP to model $ModelCode..."
         $fileBytes = [System.IO.File]::ReadAllBytes($zipPath)

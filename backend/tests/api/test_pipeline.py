@@ -1,18 +1,32 @@
 """Tests for pipeline API endpoints."""
 
 import json
+import os
+import shutil
+import subprocess
+import sys
 import zipfile
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlparse
 
+import pytest
 from flask import Flask
 from flask.testing import FlaskClient
 
 from app.app_config import AppSettings
 from app.services.container import ServiceContainer
 from tests.conftest import create_test_firmware
-from tests.services.test_firmware_service import _create_test_zip
+from tests.services.test_firmware_service import (
+    FlashFile,
+    _create_test_zip,
+    _flash_image,
+    _flasher_args_json,
+    _standard_flash_files,
+    _stored_flash_manifest,
+)
 
 
 class TestPipelineFirmwareUpload:
@@ -216,6 +230,57 @@ class TestPipelineFirmwareZipUpload:
         s3 = container.s3_service()
         assert s3.file_exists(f"firmware/{model_code}/4.1.0/firmware.bin")
         assert s3.file_exists(f"firmware/{model_code}/4.1.0/firmware.elf")
+
+    def test_upload_firmware_zip_with_flash_images(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that a ZIP with the build's flash images stores them with the version."""
+        model_code = "zipflash"
+        with app.app_context():
+            model_service = container.device_model_service()
+            model_service.create_device_model(code=model_code, name="ZIP Flash Test")
+            container.db_session().commit()
+
+        zip_content = _create_test_zip(
+            model_code, b"4.2.0", flash_files=_standard_flash_files(model_code)
+        )
+
+        response = client.post(
+            f"/api/pipeline/models/{model_code}/firmware",
+            data=zip_content,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 200
+        manifest = _stored_flash_manifest(container.s3_service(), model_code, "4.2.0")
+        assert manifest is not None
+        assert [image.offset for image in manifest.images] == [0x0, 0x8000, 0xD000, 0x10000]
+
+    def test_upload_firmware_zip_partial_flash_images_rejected(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that a ZIP lacking an image its build lists returns 400."""
+        model_code = "zipflashpart"
+        with app.app_context():
+            model_service = container.device_model_service()
+            model_service.create_device_model(code=model_code, name="ZIP Partial Flash Test")
+            container.db_session().commit()
+
+        zip_content = _create_test_zip(
+            model_code,
+            b"4.2.0",
+            flash_files=_standard_flash_files(model_code),
+            omit_files={"bootloader.bin"},
+        )
+
+        response = client.post(
+            f"/api/pipeline/models/{model_code}/firmware",
+            data=zip_content,
+            content_type="application/octet-stream",
+        )
+
+        assert response.status_code == 400
+        assert "missing bootloader.bin" in response.get_json()["error"]
 
 
 class TestPipelineFirmwareVersion:
@@ -540,3 +605,294 @@ class TestPipelineUploadScriptPowerShell:
         assert "sdkconfig" in script
         assert ".elf" in script
         assert ".map" in script
+
+    def test_get_upload_script_packs_flash_images(
+        self, app: Flask, client: FlaskClient
+    ) -> None:
+        """Test that the PowerShell script packs the flash images upload.sh packs."""
+        response = client.get("/api/pipeline/upload.ps1")
+
+        script = response.data.decode("utf-8")
+        assert 'Join-Path $BuildDir "flasher_args.json"' in script
+        assert ".flash_files.PSObject.Properties" in script
+        assert "$zipFiles += @($flasherArgsFile) + $flashImages" in script
+        assert "Compress-Archive -Path $zipFiles" in script
+
+
+# Stand-ins for the two tools the served script needs that the run replaces (R3):
+# zip, which the suite's containers lack, and curl, whose two calls are recorded
+# and answered; the ZIP posted is handed to the real upload afterwards.
+ZIP_STANDIN = """\
+import os
+import sys
+import zipfile
+
+# Info-ZIP's `zip -j ARCHIVE FILE...`: each file stored under its own name
+args = sys.argv[1:]
+if len(args) < 3 or args[0] != "-j" or os.path.exists(args[1]):
+    sys.exit(f"zip stand-in: unsupported call: {args}")
+archive, files = args[1], args[2:]
+names = [os.path.basename(file) for file in files]
+if len(set(names)) != len(names):
+    sys.exit("zip error: Invalid command arguments (cannot repeat names in zip file)")
+with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+    for file, name in zip(files, names, strict=True):
+        zf.write(file, name)
+        print(f"  adding: {name}")
+"""
+
+CURL_STANDIN = """\
+import json
+import os
+import shutil
+import sys
+
+capture = os.environ["STANDIN_CAPTURE_DIR"]
+args = sys.argv[1:]
+with open(os.path.join(capture, "curl_calls.jsonl"), "a") as calls:
+    calls.write(json.dumps(args) + "\\n")
+if "--data-binary" in args:
+    body = args[args.index("--data-binary") + 1]
+    shutil.copyfile(body.removeprefix("@"), os.path.join(capture, "upload.zip"))
+    print('{"firmware_version":"stand-in"}')
+else:
+    print('{"access_token":"stand-in-token","token_type":"Bearer"}')
+"""
+
+# What the script runs besides the stand-ins and the shell's builtins
+POSIX_TOOLS = ("basename", "cat", "dirname", "grep", "mktemp", "rm", "sed")
+
+REQUIRED_MEMBERS = {"{code}.bin", "{code}.elf", "{code}.map", "sdkconfig", "version.json"}
+
+
+def _esp_idf_project(
+    root: Path, model_code: str, version: str, flash_files: list[FlashFile] | None
+) -> Path:
+    """Lay out an ESP-IDF project as `idf.py build` leaves it for the upload step."""
+    build = root / "build"
+    build.mkdir(parents=True)
+    (build / "project_description.json").write_text(
+        json.dumps(
+            {
+                "version": "1.2",
+                "project_name": model_code,
+                "project_version": version,
+                "project_path": "/workspace",
+                "idf_path": "/opt/esp/idf",
+                "build_dir": "/workspace/build",
+                "app_elf": f"{model_code}.elf",
+                "app_bin": f"{model_code}.bin",
+                "git_revision": "v5.5.3",
+                "target": "esp32s3",
+            },
+            indent=4,
+        )
+    )
+    (build / f"{model_code}.bin").write_bytes(create_test_firmware(version.encode("utf-8")))
+    (build / f"{model_code}.elf").write_bytes(b"\x7fELF" + bytes(100))
+    (build / f"{model_code}.map").write_text("Memory Map\n")
+    (root / "sdkconfig").write_text('CONFIG_IDF_TARGET="esp32s3"\n')
+    if flash_files is not None:
+        (build / "flasher_args.json").write_bytes(_flasher_args_json(flash_files))
+        for _, _, file in flash_files:
+            if file != f"{model_code}.bin":
+                image = build / file
+                image.parent.mkdir(parents=True, exist_ok=True)
+                image.write_bytes(_flash_image(file))
+    return root
+
+
+def _run_upload_script(
+    client: FlaskClient, project: Path, tmp_path: Path, posix_only: bool
+) -> tuple[str, list[list[str]], bytes]:
+    """Run the served upload.sh in a project, as the firmware repos' stub does.
+
+    Returns:
+        The script's output, the arguments of each curl call, and the ZIP it posted
+    """
+    script = client.get("/api/pipeline/upload.sh").data
+
+    standins = tmp_path / "standins"
+    standins.mkdir()
+    for name, source in (("zip", ZIP_STANDIN), ("curl", CURL_STANDIN)):
+        standin = standins / name
+        standin.write_text(f"#!{sys.executable}\n{source}")
+        standin.chmod(0o755)
+
+    if posix_only:
+        tools = tmp_path / "tools"
+        tools.mkdir()
+        for tool in POSIX_TOOLS:
+            found = shutil.which(tool)
+            assert found is not None, f"{tool} is not installed"
+            (tools / tool).symlink_to(found)
+        search_path = f"{standins}:{tools}"
+    else:
+        search_path = f"{standins}:{os.environ['PATH']}"
+
+    capture = tmp_path / "capture"
+    capture.mkdir()
+    result = subprocess.run(
+        ["/bin/sh", "-s", "--"],
+        input=script,
+        cwd=project,
+        env={
+            "PATH": search_path,
+            "TMPDIR": str(tmp_path),
+            "IOTSUPPORT_CLIENT_ID": "ci-client",
+            "IOTSUPPORT_CLIENT_SECRET": "ci-secret",
+            "STANDIN_CAPTURE_DIR": str(capture),
+        },
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+    output = result.stdout.decode("utf-8") + result.stderr.decode("utf-8")
+    assert result.returncode == 0, output
+
+    calls = [json.loads(line) for line in (capture / "curl_calls.jsonl").read_text().splitlines()]
+    return output, calls, (capture / "upload.zip").read_bytes()
+
+
+def _replay_upload(client: FlaskClient, upload_call: list[str], zip_content: bytes) -> Any:
+    """Hand the ZIP the script posted to the real upload, at the URL it posted to."""
+    url = next(arg for arg in upload_call if arg.startswith("http"))
+    return client.post(
+        urlparse(url).path,
+        data=zip_content,
+        content_type="application/octet-stream",
+    )
+
+
+def _zip_members(zip_content: bytes) -> set[str]:
+    with zipfile.ZipFile(BytesIO(zip_content)) as zf:
+        return set(zf.namelist())
+
+
+class TestPipelineUploadScriptRun:
+    """Tests that run the served upload.sh on an ESP-IDF build directory."""
+
+    @pytest.mark.parametrize("posix_only", [False, True], ids=["system-tools", "without-jq"])
+    def test_upload_script_posts_build_flash_images(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        container: ServiceContainer,
+        tmp_path: Path,
+        posix_only: bool,
+    ) -> None:
+        """Test that the ZIP the script posts carries the flash images and is accepted."""
+        model_code = "scriptjq" if not posix_only else "scriptposix"
+        with app.app_context():
+            container.device_model_service().create_device_model(code=model_code, name="Script")
+            container.db_session().commit()
+        project = _esp_idf_project(
+            tmp_path / "project", model_code, "2.1.0", _standard_flash_files(model_code)
+        )
+
+        _, calls, zip_content = _run_upload_script(client, project, tmp_path, posix_only)
+
+        token_call, upload_call = calls
+        assert container.app_config().oidc_token_url in token_call
+        assert "client_id=ci-client" in token_call
+        assert "client_secret=ci-secret" in token_call
+        assert f"http://localhost/api/pipeline/models/{model_code}/firmware" in upload_call
+        assert "Authorization: Bearer stand-in-token" in upload_call
+        assert _zip_members(zip_content) == {
+            *(member.format(code=model_code) for member in REQUIRED_MEMBERS),
+            "flasher_args.json",
+            "bootloader.bin",
+            "partition-table.bin",
+            "ota_data_initial.bin",
+        }
+
+        response = _replay_upload(client, upload_call, zip_content)
+
+        assert response.status_code == 200, response.get_json()
+        assert response.get_json()["firmware_version"] == "2.1.0"
+        s3 = container.s3_service()
+        manifest = _stored_flash_manifest(s3, model_code, "2.1.0")
+        assert manifest is not None
+        assert manifest.chip == "esp32s3"
+        build = project / "build"
+        for image in manifest.images:
+            stored = s3.download_file(f"firmware/{model_code}/2.1.0/{image.artifact}").read()
+            assert stored == (build / image.file).read_bytes(), image.file
+        assert [(image.offset, image.file) for image in manifest.images] == [
+            (0x0, "bootloader/bootloader.bin"),
+            (0x8000, "partition_table/partition-table.bin"),
+            (0xD000, "ota_data_initial.bin"),
+            (0x10000, f"{model_code}.bin"),
+        ]
+
+    def test_upload_script_posts_every_listed_image(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer, tmp_path: Path
+    ) -> None:
+        """Test that images beyond today's four, in the build or outside it, come along."""
+        model_code = "scriptmore"
+        with app.app_context():
+            container.device_model_service().create_device_model(code=model_code, name="Script")
+            container.db_session().commit()
+        flash_files = [
+            *_standard_flash_files(model_code),
+            ("storage", "0x310000", "storage.bin"),
+            ("voice", "0x410000", "../models/voice.bin"),
+        ]
+        project = _esp_idf_project(tmp_path / "project", model_code, "2.2.0", flash_files)
+
+        _, calls, zip_content = _run_upload_script(client, project, tmp_path, posix_only=True)
+
+        assert {"storage.bin", "voice.bin"} <= _zip_members(zip_content)
+        response = _replay_upload(client, calls[1], zip_content)
+        assert response.status_code == 200, response.get_json()
+        manifest = _stored_flash_manifest(container.s3_service(), model_code, "2.2.0")
+        assert manifest is not None
+        assert [image.offset for image in manifest.images] == [
+            0x0, 0x8000, 0xD000, 0x10000, 0x310000, 0x410000,
+        ]
+
+    def test_upload_script_without_flash_outputs(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer, tmp_path: Path
+    ) -> None:
+        """Test that a build without flasher_args.json uploads the five artifacts, as before."""
+        model_code = "scriptnoflash"
+        with app.app_context():
+            container.device_model_service().create_device_model(code=model_code, name="Script")
+            container.db_session().commit()
+        project = _esp_idf_project(tmp_path / "project", model_code, "2.3.0", None)
+
+        output, calls, zip_content = _run_upload_script(client, project, tmp_path, posix_only=True)
+
+        assert "Note: packaging without flash images (build/flasher_args.json not found)" in output
+        assert _zip_members(zip_content) == {
+            member.format(code=model_code) for member in REQUIRED_MEMBERS
+        }
+        response = _replay_upload(client, calls[1], zip_content)
+        assert response.status_code == 200, response.get_json()
+        assert _stored_flash_manifest(container.s3_service(), model_code, "2.3.0") is None
+
+    def test_upload_script_with_incomplete_flash_outputs(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer, tmp_path: Path
+    ) -> None:
+        """Test that a build missing a listed image uploads the five artifacts, not part of the set."""
+        model_code = "scriptpartial"
+        with app.app_context():
+            container.device_model_service().create_device_model(code=model_code, name="Script")
+            container.db_session().commit()
+        project = _esp_idf_project(
+            tmp_path / "project", model_code, "2.4.0", _standard_flash_files(model_code)
+        )
+        (project / "build" / "partition_table" / "partition-table.bin").unlink()
+
+        output, calls, zip_content = _run_upload_script(client, project, tmp_path, posix_only=True)
+
+        assert (
+            "Note: packaging without flash images "
+            "(build/partition_table/partition-table.bin not found)" in output
+        )
+        assert _zip_members(zip_content) == {
+            member.format(code=model_code) for member in REQUIRED_MEMBERS
+        }
+        response = _replay_upload(client, calls[1], zip_content)
+        assert response.status_code == 200, response.get_json()
+        assert _stored_flash_manifest(container.s3_service(), model_code, "2.4.0") is None

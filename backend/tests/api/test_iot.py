@@ -155,6 +155,31 @@ class TestIotFirmware:
         assert response.content_type == "application/octet-stream"
         assert len(response.data) > 0
 
+    def test_get_firmware_serves_app_of_flashable_upload(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that a version uploaded with flash images serves the same app image."""
+        _, device_key, model_code = create_test_device(app, container, model_code="fwflash")
+
+        from tests.conftest import create_test_firmware
+        from tests.services.test_firmware_service import (
+            _create_test_zip,
+            _standard_flash_files,
+        )
+
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.get_device_model_by_code(model_code)
+            zip_content = _create_test_zip(
+                model_code, b"1.0.0", flash_files=_standard_flash_files(model_code)
+            )
+            model_service.upload_firmware(model.id, zip_content)
+
+        response = client.get(f"/api/iot/firmware?device_key={device_key}")
+
+        assert response.status_code == 200
+        assert response.data == create_test_firmware(b"1.0.0")
+
     def test_get_firmware_not_uploaded(
         self, app: Flask, client: FlaskClient, container: ServiceContainer
     ) -> None:
