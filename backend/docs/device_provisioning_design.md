@@ -64,7 +64,7 @@ The provisioning package contains everything the device needs to bootstrap:
 - Keycloak token endpoint URL
 - Backend API base URL
 
-This data is written to a dedicated partition on the device's flash storage that survives firmware updates and OTA upgrades.
+This data is written to a dedicated partition on the device's flash storage that survives firmware updates and OTA upgrades. Flash device, which writes a device's full firmware from IoT Support, leaves that partition as it is ([firmware flashing](../../docs/firmware-flashing.md)).
 
 ## Device Runtime Behavior
 

@@ -1,8 +1,8 @@
 # IoT Support Frontend
 
-The web UI for IoT Support: managing the ESP32 device fleet in a homelab. It provisions, edits and
-duplicates devices, manages device models and shows their firmware versions, shows each device's
-logs and coredumps, and follows the fleet's credential rotation. It talks only to the IoTSupport
+The web UI for IoT Support: managing the ESP32 device fleet in a homelab. It flashes, provisions,
+edits and duplicates devices, manages device models and shows their firmware versions, shows
+each device's logs and coredumps, and follows the fleet's credential rotation. It talks only to the IoTSupport
 backend in `../backend`, through the generated OpenAPI client.
 
 ## Tech Stack

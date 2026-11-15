@@ -4,7 +4,7 @@
 
 The IoT Support Backend is a REST API for managing ESP32-based IoT devices in a homelab environment. It provides device lifecycle management including provisioning, configuration, firmware distribution, and automatic credential rotation.
 
-The application uses a PostgreSQL database to store device metadata, Keycloak for device authentication (machine-to-machine), and the filesystem for firmware binaries.
+The application uses a PostgreSQL database to store device metadata, Keycloak for device authentication (machine-to-machine), and S3 for firmware artifacts.
 
 ## Target Audience
 
@@ -19,7 +19,8 @@ The application uses a PostgreSQL database to store device metadata, Keycloak fo
 1. **Device Models** - Hardware type definitions with:
    - Unique code identifier (e.g., `tempsensor`, `relay_4ch`)
    - Human-readable name
-   - Firmware binary storage and version tracking
+   - Firmware storage and version tracking, each version with its build's flash images where the
+     upload carried them ([firmware flashing](../../docs/firmware-flashing.md))
 
 2. **Device Provisioning** - Individual device management:
    - Auto-generated 8-character device keys
@@ -69,7 +70,7 @@ Authenticated endpoints for devices:
 Management endpoints for administrators:
 
 - **Device Models**: CRUD + firmware upload/download
-- **Devices**: CRUD + provisioning download + rotation trigger
+- **Devices**: CRUD + provisioning download + flash images + rotation trigger
 - **Rotation**: Status overview + fleet-wide trigger
 
 ### Operational Features
@@ -100,7 +101,7 @@ Management endpoints for administrators:
 +-----------------------------------------------------------+
 |  API Layer (app/api/)                                      |
 |  - device_models.py: Device model CRUD + firmware         |
-|  - devices.py: Device CRUD + provisioning                 |
+|  - devices.py: Device CRUD + provisioning + flash images  |
 |  - rotation.py: Rotation status + fleet trigger           |
 |  - iot.py: Device-authenticated endpoints                 |
 |  - health.py, metrics.py, auth.py, assets.py              |
@@ -121,7 +122,7 @@ Management endpoints for administrators:
 |  - PostgreSQL: Device/model data                          |
 |  - Keycloak: Device OAuth2 clients                        |
 |  - MQTT Broker: Rotation notifications                    |
-|  - Filesystem: Firmware binaries                          |
+|  - S3: Firmware artifacts                                 |
 +-----------------------------------------------------------+
 ```
 
@@ -141,7 +142,7 @@ Management endpoints for administrators:
 | `ROTATION_CRON` | Rotation schedule | `0 8 * * 6#1` (first Sat 8am) |
 | `ROTATION_TIMEOUT_SECONDS` | Rotation timeout | `300` |
 | `BASEURL` | Backend base URL for provisioning | `https://iot.local` |
-| `ASSETS_DIR` | Firmware storage directory | `/data/firmware` |
+| `ASSETS_DIR` | Legacy firmware directory, read only by the one-time filesystem-to-S3 migration command | `/data/firmware` |
 | `THUMBNAIL_STORAGE_PATH` | CAS thumbnail directory — a local, regenerable cache (defaults to `<tempdir>/iotsupport-thumbnails`) | `/tmp/iotsupport-thumbnails` |
 
 ### Deployment Context

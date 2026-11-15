@@ -17,9 +17,9 @@ device ends up running firmware with the correct pin map.
 ### Relevant existing structure
 
 - Firmware is selected purely by `DeviceModel.code` + `DeviceModel.firmware_version`
-  (`app/services/firmware_service.py:123-145`). The model code is the **only**
-  firmware-selection axis. Every device of a model receives that one firmware
-  version.
+  (`FirmwareService.get_firmware_stream`, `app/services/firmware_service.py`). The
+  model code is the **only** firmware-selection axis. Every device of a model
+  receives that one firmware version.
 - A `Device` carries an opaque, user-editable `config` JSON
   (`app/models/device.py:58`; fields extracted at
   `app/services/device_service.py:170-180`) and is delivered a set-once NVS

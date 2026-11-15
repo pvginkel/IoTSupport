@@ -27,8 +27,9 @@ in that component's `docs/`.
 `frontend/docs/contribute/` is the live, maintained doc set — `index.md` is its hub and every page
 is linked from it. A slice that changed how the suite is written, how instrumentation is emitted,
 or how the app is run locally updates the page that owns that topic and leaves the hub's links
-intact. The root `docs/` is currently only the three procedure docs; seed a topic there when
-**this** slice's design needs a home, not to fill it out.
+intact. The root `docs/` holds the three procedure docs and `firmware-flashing.md`, the firmware
+upload and flash design; seed a topic there when **this** slice's design needs a home, not to fill
+it out.
 
 ### 2. The decision records
 
