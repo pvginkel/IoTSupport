@@ -11,10 +11,15 @@ from flask import Flask
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.exceptions import RecordNotFoundException, ValidationException
+from app.exceptions import (
+    InvalidOperationException,
+    RecordNotFoundException,
+    ValidationException,
+)
 from app.models.coredump import CoreDump, ParseStatus
 from app.models.device_model import DeviceModel
 from app.models.firmware_version import FirmwareVersion
+from app.schemas.device import FlashStatus
 from app.services.container import ServiceContainer
 from app.services.firmware_service import (
     FirmwareService,
@@ -702,6 +707,120 @@ class TestFirmwareServiceFlashImages:
         assert stored is not None
         assert _stored_flash_manifest(s3, model_code, "1.0.0") == stored
         assert len(_stored_flash_images(s3, model_code, "1.0.0")) == 3
+
+
+class TestFirmwareServiceGetFlashSet:
+    """Tests for FirmwareService.get_flash_set()."""
+
+    def test_get_flash_set_flashable(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """A version stored with flash images gives every image with its content."""
+        model_code = "flashset"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
+        zip_content = _create_test_zip(
+            model_code, b"1.4.0", flash_files=_standard_flash_files(model_code)
+        )
+        service.save_firmware(model_code, model.id, zip_content)
+
+        flash_set = service.get_flash_set(model_code, "1.4.0")
+
+        assert flash_set.status == FlashStatus.FLASHABLE
+        assert flash_set.firmware_version == "1.4.0"
+        assert flash_set.manifest == _stored_flash_manifest(container.s3_service(), model_code, "1.4.0")
+        assert [(content.image.offset, content.data) for content in flash_set.images] == [
+            (0x0, _flash_image("bootloader/bootloader.bin")),
+            (0x8000, _flash_image("partition_table/partition-table.bin")),
+            (0xD000, _flash_image("ota_data_initial.bin")),
+            (0x10000, create_test_firmware(b"1.4.0")),
+        ]
+        assert flash_set.manifest is not None
+        assert [content.image for content in flash_set.images] == flash_set.manifest.images
+
+    def test_get_flash_set_app_is_served_firmware(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """The app image of the flash set is the one get_firmware_stream serves."""
+        model_code = "flashsetapp"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
+        flash_files = [
+            ("bootloader", "0x0", "bootloader/bootloader.bin"),
+            ("app", "0x20000", f"{model_code}.bin"),
+        ]
+        service.save_firmware(
+            model_code, model.id, _create_test_zip(model_code, b"1.5.0", flash_files=flash_files)
+        )
+
+        flash_set = service.get_flash_set(model_code, "1.5.0")
+
+        app_content = flash_set.images[-1]
+        assert app_content.image.offset == 0x20000
+        assert app_content.data == service.get_firmware_stream(model_code, "1.5.0").read()
+
+    def test_get_flash_set_no_firmware(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """A model without a firmware version gives no_firmware and nothing to flash."""
+        service = container.firmware_service()
+
+        flash_set = service.get_flash_set("flashsetnone", None)
+
+        assert flash_set.status == FlashStatus.NO_FIRMWARE
+        assert flash_set.firmware_version is None
+        assert flash_set.manifest is None
+        assert flash_set.images == []
+
+    def test_get_flash_set_no_flash_images(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """A version stored without flash images gives no_flash_images and its version."""
+        model_code = "flashsetold"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
+        service.save_firmware(model_code, model.id, _create_test_zip(model_code, b"1.0.0"))
+
+        flash_set = service.get_flash_set(model_code, "1.0.0")
+
+        assert flash_set.status == FlashStatus.NO_FLASH_IMAGES
+        assert flash_set.firmware_version == "1.0.0"
+        assert flash_set.manifest is None
+        assert flash_set.images == []
+
+    def test_get_flash_set_only_the_given_version(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """An older flashable version does not stand in for a version stored without images."""
+        model_code = "flashsetmix"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
+        service.save_firmware(
+            model_code,
+            model.id,
+            _create_test_zip(model_code, b"1.0.0", flash_files=_standard_flash_files(model_code)),
+        )
+        service.save_firmware(model_code, model.id, _create_test_zip(model_code, b"1.1.0"))
+
+        assert service.get_flash_set(model_code, "1.1.0").status == FlashStatus.NO_FLASH_IMAGES
+        assert service.get_flash_set(model_code, "1.0.0").status == FlashStatus.FLASHABLE
+
+    def test_get_flash_set_listed_image_missing_raises(
+        self, app: Flask, session: Session, container: ServiceContainer
+    ) -> None:
+        """An image the manifest lists but S3 lacks fails the read."""
+        model_code = "flashsetgap"
+        model = _create_model(session, model_code)
+        service = container.firmware_service()
+        service.save_firmware(
+            model_code,
+            model.id,
+            _create_test_zip(model_code, b"1.0.0", flash_files=_standard_flash_files(model_code)),
+        )
+        container.s3_service().delete_file(f"firmware/{model_code}/1.0.0/flash/0x8000.bin")
+
+        with pytest.raises(InvalidOperationException, match="flash/0x8000.bin"):
+            service.get_flash_set(model_code, "1.0.0")
 
 
 class TestFirmwareServiceGetStream:

@@ -14,14 +14,18 @@ from spectree import Response as SpectreeResponse
 from app.api.testing_guard import reject_if_not_testing
 from app.app import current_container
 from app.models.coredump import CoreDump, ParseStatus
+from app.schemas.common import ApiErrorResponseSchema
 from app.schemas.coredump import CoredumpDetailSchema
+from app.schemas.device_model import DeviceModelFirmwareResponseSchema
 from app.schemas.testing import (
     KeycloakCleanupSchema,
     TestCoredumpCreateSchema,
+    TestFirmwareCreateSchema,
 )
 from app.services.container import ServiceContainer
 from app.services.device_service import DeviceService
 from app.services.keycloak_admin_service import KeycloakAdminService
+from app.services.testing_firmware_service import TestingFirmwareService
 from app.utils.auth import public
 from app.utils.error_handling import handle_api_errors
 from app.utils.spectree_config import api
@@ -118,3 +122,44 @@ def create_test_coredump(
     logger.info("Created test coredump: id=%d device_id=%d status=%s", coredump.id, data.device_id, data.parse_status)
 
     return CoredumpDetailSchema.model_validate(coredump).model_dump(), 201
+
+
+@testing_bp.route("/device-models/<int:model_id>/firmware", methods=["POST"])
+@public
+@api.validate(
+    json=TestFirmwareCreateSchema,
+    resp=SpectreeResponse(
+        HTTP_200=DeviceModelFirmwareResponseSchema,
+        HTTP_400=ApiErrorResponseSchema,
+        HTTP_404=ApiErrorResponseSchema,
+    ),
+)
+@handle_api_errors
+@inject
+def create_test_firmware(
+    model_id: int,
+    testing_firmware_service: TestingFirmwareService = Provide[
+        ServiceContainer.testing_firmware_service
+    ],
+) -> tuple[dict[str, Any], int]:
+    """Upload a seeded firmware version for a device model, making it the model's current one.
+
+    The ZIP is built as the served upload script packs it, with the build's flash
+    images or without, and goes through the real firmware upload. Used by
+    Playwright tests to set up Flash device scenarios.
+    """
+    data = TestFirmwareCreateSchema.model_validate(request.get_json())
+
+    model = testing_firmware_service.seed_firmware(
+        model_id, version=data.version, flash_images=data.flash_images, chip=data.chip
+    )
+
+    logger.info(
+        "Seeded test firmware: model_id=%d version=%s flash_images=%s chip=%s",
+        model_id,
+        data.version,
+        data.flash_images,
+        data.chip,
+    )
+
+    return DeviceModelFirmwareResponseSchema.model_validate(model).model_dump(), 200

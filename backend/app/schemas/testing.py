@@ -40,3 +40,28 @@ class TestCoredumpCreateSchema(BaseModel):
             valid = ", ".join(s.value for s in ParseStatus)
             raise ValueError(f"Invalid parse_status '{v}'. Must be one of: {valid}") from None
         return v
+
+
+class TestFirmwareCreateSchema(BaseModel):
+    """Request schema for seeding a firmware version for a device model."""
+
+    version: str = Field(
+        "1.0.0-test",
+        min_length=1,
+        max_length=32,
+        pattern=r"^[0-9A-Za-z._+-]+$",
+        description="Firmware version the seeded app image carries",
+        examples=["1.0.0-test"],
+    )
+    flash_images: bool = Field(
+        True,
+        description="Whether the version is stored with its build's flash images, as an upload "
+        "through the served upload script stores it, or without, as every version stored "
+        "before the script packed them",
+    )
+    chip: str = Field(
+        "esp32s3",
+        pattern=r"^[a-z0-9]+$",
+        description="The chip the seeded build targets",
+        examples=["esp32s3", "esp32c3"],
+    )

@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -149,6 +150,66 @@ class NvsProvisioningResponseSchema(BaseModel):
     data: str = Field(
         ...,
         description="Base64-encoded NVS binary blob of the specified size",
+    )
+
+
+class FlashStatus(StrEnum):
+    """Whether a model's current firmware version can be flashed."""
+
+    FLASHABLE = "flashable"
+    NO_FIRMWARE = "no_firmware"  # the model has no firmware version
+    NO_FLASH_IMAGES = "no_flash_images"  # the version was stored without its flash images
+
+
+class DeviceFlashImageSchema(BaseModel):
+    """One image a flash writes, with its content."""
+
+    offset: int = Field(
+        ...,
+        description="Flash offset the image is written at, as the build gave it",
+        examples=[0x0, 0x8000, 0xD000, 0x10000],
+    )
+    file: str = Field(
+        ...,
+        description="The image's file as the build names it, relative to its build directory",
+        examples=["bootloader/bootloader.bin", "partition_table/partition-table.bin"],
+    )
+    size: int = Field(..., description="Size of the image in bytes", examples=[3072])
+    data: str = Field(..., description="Base64-encoded image")
+
+
+class DeviceFlashSetSchema(BaseModel):
+    """Everything a flash writes: the build's target chip and flash settings, and its images."""
+
+    chip: str = Field(
+        ..., description="The chip the build targets, as the build names it", examples=["esp32s3"]
+    )
+    flash_mode: str = Field(..., description="The build's flash mode", examples=["dio"])
+    flash_size: str = Field(
+        ..., description="The build's flash size", examples=["16MB", "detect"]
+    )
+    flash_freq: str = Field(..., description="The build's flash frequency", examples=["80m"])
+    images: list[DeviceFlashImageSchema] = Field(
+        ..., description="Every image the build lists for flashing, in ascending offset"
+    )
+
+
+class DeviceFlashImagesResponseSchema(BaseModel):
+    """The flash images of a device's model's current firmware version."""
+
+    status: FlashStatus = Field(
+        ...,
+        description="flashable: flash is set. no_firmware: the device's model has no "
+        "firmware. no_flash_images: the current version was stored without flash images.",
+    )
+    firmware_version: str | None = Field(
+        ...,
+        description="The model's current firmware version, the one /iot/firmware serves; "
+        "null when the model has no firmware",
+        examples=["1.2.3"],
+    )
+    flash: DeviceFlashSetSchema | None = Field(
+        ..., description="What a flash writes; null unless status is flashable"
     )
 
 

@@ -527,6 +527,159 @@
         "title": "DeviceCreateSchema",
         "type": "object"
       },
+      "DeviceFlashImagesResponseSchema.d48fbce": {
+        "description": "The flash images of a device's model's current firmware version.",
+        "properties": {
+          "firmware_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The model's current firmware version, the one /iot/firmware serves; null when the model has no firmware",
+            "examples": [
+              "1.2.3"
+            ],
+            "title": "Firmware Version"
+          },
+          "flash": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeviceFlashImagesResponseSchema.d48fbce.DeviceFlashSetSchema"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What a flash writes; null unless status is flashable"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DeviceFlashImagesResponseSchema.d48fbce.FlashStatus",
+            "description": "flashable: flash is set. no_firmware: the device's model has no firmware. no_flash_images: the current version was stored without flash images."
+          }
+        },
+        "required": [
+          "status",
+          "firmware_version",
+          "flash"
+        ],
+        "title": "DeviceFlashImagesResponseSchema",
+        "type": "object"
+      },
+      "DeviceFlashImagesResponseSchema.d48fbce.DeviceFlashImageSchema": {
+        "description": "One image a flash writes, with its content.",
+        "properties": {
+          "data": {
+            "description": "Base64-encoded image",
+            "title": "Data",
+            "type": "string"
+          },
+          "file": {
+            "description": "The image's file as the build names it, relative to its build directory",
+            "examples": [
+              "bootloader/bootloader.bin",
+              "partition_table/partition-table.bin"
+            ],
+            "title": "File",
+            "type": "string"
+          },
+          "offset": {
+            "description": "Flash offset the image is written at, as the build gave it",
+            "examples": [
+              0,
+              32768,
+              53248,
+              65536
+            ],
+            "title": "Offset",
+            "type": "integer"
+          },
+          "size": {
+            "description": "Size of the image in bytes",
+            "examples": [
+              3072
+            ],
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "offset",
+          "file",
+          "size",
+          "data"
+        ],
+        "title": "DeviceFlashImageSchema",
+        "type": "object"
+      },
+      "DeviceFlashImagesResponseSchema.d48fbce.DeviceFlashSetSchema": {
+        "description": "Everything a flash writes: the build's target chip and flash settings, and its images.",
+        "properties": {
+          "chip": {
+            "description": "The chip the build targets, as the build names it",
+            "examples": [
+              "esp32s3"
+            ],
+            "title": "Chip",
+            "type": "string"
+          },
+          "flash_freq": {
+            "description": "The build's flash frequency",
+            "examples": [
+              "80m"
+            ],
+            "title": "Flash Freq",
+            "type": "string"
+          },
+          "flash_mode": {
+            "description": "The build's flash mode",
+            "examples": [
+              "dio"
+            ],
+            "title": "Flash Mode",
+            "type": "string"
+          },
+          "flash_size": {
+            "description": "The build's flash size",
+            "examples": [
+              "16MB",
+              "detect"
+            ],
+            "title": "Flash Size",
+            "type": "string"
+          },
+          "images": {
+            "description": "Every image the build lists for flashing, in ascending offset",
+            "items": {
+              "$ref": "#/components/schemas/DeviceFlashImagesResponseSchema.d48fbce.DeviceFlashImageSchema"
+            },
+            "title": "Images",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chip",
+          "flash_mode",
+          "flash_size",
+          "flash_freq",
+          "images"
+        ],
+        "title": "DeviceFlashSetSchema",
+        "type": "object"
+      },
+      "DeviceFlashImagesResponseSchema.d48fbce.FlashStatus": {
+        "description": "Whether a model's current firmware version can be flashed.",
+        "enum": [
+          "flashable",
+          "no_firmware",
+          "no_flash_images"
+        ],
+        "title": "FlashStatus",
+        "type": "string"
+      },
       "DeviceKeycloakStatusSchema.d48fbce": {
         "description": "Schema for Keycloak client status response.",
         "properties": {
@@ -2607,6 +2760,42 @@
         "title": "TestCoredumpCreateSchema",
         "type": "object"
       },
+      "TestFirmwareCreateSchema.355d24f": {
+        "description": "Request schema for seeding a firmware version for a device model.",
+        "properties": {
+          "chip": {
+            "default": "esp32s3",
+            "description": "The chip the seeded build targets",
+            "examples": [
+              "esp32s3",
+              "esp32c3"
+            ],
+            "pattern": "^[a-z0-9]+$",
+            "title": "Chip",
+            "type": "string"
+          },
+          "flash_images": {
+            "default": true,
+            "description": "Whether the version is stored with its build's flash images, as an upload through the served upload script stores it, or without, as every version stored before the script packed them",
+            "title": "Flash Images",
+            "type": "boolean"
+          },
+          "version": {
+            "default": "1.0.0-test",
+            "description": "Firmware version the seeded app image carries",
+            "examples": [
+              "1.0.0-test"
+            ],
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^[0-9A-Za-z._+-]+$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "title": "TestFirmwareCreateSchema",
+        "type": "object"
+      },
       "TestSessionCreateSchema.e510e64": {
         "description": "Request schema for creating a test authentication session.",
         "properties": {
@@ -3894,6 +4083,58 @@
         "tags": []
       }
     },
+    "/api/devices/{device_id}/flash-images": {
+      "get": {
+        "description": "Returns every image the version's build lists for flashing, each with its offset and its content, with the build's target chip and flash settings. The app among them is the image /iot/firmware serves. When the model has no firmware, or its current version was stored without flash images, status says so and flash is null.",
+        "operationId": "get__api_devices_{device_id}_flash-images",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceFlashImagesResponseSchema.d48fbce"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseSchema.c2a0d71"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseSchema.c2a0d71"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Get the flash images of the device's model's current firmware version.",
+        "tags": []
+      }
+    },
     "/api/devices/{device_id}/keycloak-status": {
       "get": {
         "description": "Returns whether the Keycloak client exists and provides a deep link to the Keycloak admin console. Does not return an error if the client is missing - instead returns exists=false.",
@@ -5171,6 +5412,68 @@
         "summary": "Trigger a version event for integration testing.",
         "tags": [],
         "x-required-role": "editor"
+      }
+    },
+    "/api/testing/device-models/{model_id}/firmware": {
+      "post": {
+        "description": "The ZIP is built as the served upload script packs it, with the build's flash images or without, and goes through the real firmware upload. Used by Playwright tests to set up Flash device scenarios.",
+        "operationId": "post__api_testing_device-models_{model_id}_firmware",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestFirmwareCreateSchema.355d24f"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceModelFirmwareResponseSchema.349be3d"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseSchema.c2a0d71"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseSchema.c2a0d71"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Upload a seeded firmware version for a device model, making it the model's current one.",
+        "tags": []
       }
     },
     "/api/testing/devices/logs/drop-stream": {

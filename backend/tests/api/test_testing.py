@@ -1,5 +1,6 @@
 """Tests for testing API endpoints."""
 
+import os
 from collections.abc import Generator
 from pathlib import Path
 
@@ -37,6 +38,13 @@ def _build_testing_settings(tmp_path: Path) -> Settings:
         oidc_cookie_secure=False,
         oidc_cookie_samesite="Lax",
         oidc_refresh_cookie_name="refresh_token",
+        # S3 configuration (from environment, see .env.test)
+        s3_endpoint_url=os.environ.get("S3_ENDPOINT_URL", "http://localhost:9000"),
+        s3_access_key_id=os.environ.get("S3_ACCESS_KEY_ID", "admin"),
+        s3_secret_access_key=os.environ.get("S3_SECRET_ACCESS_KEY", "password"),
+        s3_bucket_name=os.environ.get("S3_BUCKET_NAME", "test-app-test-attachments"),
+        s3_region=os.environ.get("S3_REGION", "us-east-1"),
+        s3_use_ssl=os.environ.get("S3_USE_SSL", "false").lower() == "true",
     )
 
 
@@ -607,3 +615,99 @@ class TestCreateTestCoredump:
         assert response.status_code == 201
         data = response.get_json()
         assert data["parsed_output"] == "Test coredump parsed output"
+
+
+class TestCreateTestFirmware:
+    """Tests for POST /api/testing/device-models/<model_id>/firmware."""
+
+    def test_create_firmware_flashable(self, testing_client: FlaskClient, testing_device: Device):
+        """Seeds a flashable current version that the device's flash images serve."""
+        model_id = testing_device.device_model_id
+
+        response = testing_client.post(
+            f"/api/testing/device-models/{model_id}/firmware",
+            json={"version": "3.0.0-flash", "flash_images": True, "chip": "esp32s3"},
+        )
+
+        assert response.status_code == 200
+        assert response.get_json() == {
+            "id": model_id,
+            "code": "testchip",
+            "firmware_version": "3.0.0-flash",
+        }
+        flash = testing_client.get(f"/api/devices/{testing_device.id}/flash-images").get_json()
+        assert flash["status"] == "flashable"
+        assert flash["firmware_version"] == "3.0.0-flash"
+        assert flash["flash"]["chip"] == "esp32s3"
+        assert [image["offset"] for image in flash["flash"]["images"]] == [
+            0x0, 0x8000, 0xD000, 0x20000,
+        ]
+
+    def test_create_firmware_defaults(self, testing_client: FlaskClient, testing_device: Device):
+        """An empty body seeds a flashable 1.0.0-test build for the esp32s3."""
+        response = testing_client.post(
+            f"/api/testing/device-models/{testing_device.device_model_id}/firmware", json={}
+        )
+
+        assert response.status_code == 200
+        assert response.get_json()["firmware_version"] == "1.0.0-test"
+        flash = testing_client.get(f"/api/devices/{testing_device.id}/flash-images").get_json()
+        assert flash["status"] == "flashable"
+        assert flash["flash"]["chip"] == "esp32s3"
+
+    def test_create_firmware_without_flash_images(
+        self, testing_client: FlaskClient, testing_device: Device
+    ):
+        """flash_images false seeds a current version stored without flash images."""
+        response = testing_client.post(
+            f"/api/testing/device-models/{testing_device.device_model_id}/firmware",
+            json={"version": "0.9.0", "flash_images": False},
+        )
+
+        assert response.status_code == 200
+        flash = testing_client.get(f"/api/devices/{testing_device.id}/flash-images").get_json()
+        assert flash == {"status": "no_flash_images", "firmware_version": "0.9.0", "flash": None}
+
+    def test_create_firmware_other_chip(self, testing_client: FlaskClient, testing_device: Device):
+        """chip sets the chip the seeded build targets."""
+        response = testing_client.post(
+            f"/api/testing/device-models/{testing_device.device_model_id}/firmware",
+            json={"chip": "esp32c3"},
+        )
+
+        assert response.status_code == 200
+        flash = testing_client.get(f"/api/devices/{testing_device.id}/flash-images").get_json()
+        assert flash["flash"]["chip"] == "esp32c3"
+
+    def test_create_firmware_unknown_model(self, testing_client: FlaskClient):
+        """An unknown model answers 404."""
+        response = testing_client.post("/api/testing/device-models/99999/firmware", json={})
+
+        assert response.status_code == 404
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"version": ""},
+            {"version": "x" * 33},
+            {"version": "1.0 beta"},
+            {"chip": "ESP32-S3"},
+            {"flash_images": "sometimes"},
+        ],
+    )
+    def test_create_firmware_invalid_body(
+        self, testing_client: FlaskClient, testing_device: Device, body: dict[str, object]
+    ):
+        """An invalid version, chip or flash_images answers 400."""
+        response = testing_client.post(
+            f"/api/testing/device-models/{testing_device.device_model_id}/firmware", json=body
+        )
+
+        assert response.status_code == 400
+
+    def test_create_firmware_returns_400_when_not_testing(self, client: FlaskClient):
+        """The firmware seed endpoint returns 400 when not in testing mode."""
+        response = client.post("/api/testing/device-models/1/firmware", json={})
+
+        assert response.status_code == 400
+        assert response.get_json()["code"] == "ROUTE_NOT_AVAILABLE"

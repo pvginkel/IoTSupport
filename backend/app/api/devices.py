@@ -1,5 +1,6 @@
 """Device management API endpoints."""
 
+import base64
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -8,8 +9,12 @@ from dependency_injector.wiring import Provide, inject
 from flask import Blueprint, request
 from spectree import Response as SpectreeResponse
 
+from app.schemas.common import ApiErrorResponseSchema
 from app.schemas.device import (
     DeviceCreateSchema,
+    DeviceFlashImageSchema,
+    DeviceFlashImagesResponseSchema,
+    DeviceFlashSetSchema,
     DeviceKeycloakStatusSchema,
     DeviceListResponseSchema,
     DeviceResponseSchema,
@@ -28,6 +33,7 @@ from app.schemas.error import ErrorResponseSchema
 from app.services.container import ServiceContainer
 from app.services.device_service import DeviceService
 from app.services.elasticsearch_service import ElasticsearchService
+from app.services.firmware_service import FirmwareService
 from app.services.rotation_service import RotationService
 from app.utils.error_handling import handle_api_errors
 from app.utils.iot_metrics import record_operation
@@ -250,6 +256,70 @@ def get_provisioning(
     finally:
         duration = time.perf_counter() - start_time
         record_operation("get_provisioning", status, duration)
+
+
+@devices_bp.route("/<int:device_id>/flash-images", methods=["GET"])
+@api.validate(
+    resp=SpectreeResponse(
+        HTTP_200=DeviceFlashImagesResponseSchema,
+        HTTP_400=ApiErrorResponseSchema,
+        HTTP_404=ApiErrorResponseSchema,
+    )
+)
+@handle_api_errors
+@inject
+def get_flash_images(
+    device_id: int,
+    device_service: DeviceService = Provide[ServiceContainer.device_service],
+    firmware_service: FirmwareService = Provide[ServiceContainer.firmware_service],
+) -> Any:
+    """Get the flash images of the device's model's current firmware version.
+
+    Returns every image the version's build lists for flashing, each with its
+    offset and its content, with the build's target chip and flash settings.
+    The app among them is the image /iot/firmware serves. When the model has no
+    firmware, or its current version was stored without flash images, status
+    says so and flash is null.
+    """
+    start_time = time.perf_counter()
+    status = "success"
+
+    try:
+        device = device_service.get_device(device_id)
+        model = device.device_model
+        flash_set = firmware_service.get_flash_set(model.code, model.firmware_version)
+
+        flash = None
+        if flash_set.manifest is not None:
+            flash = DeviceFlashSetSchema(
+                chip=flash_set.manifest.chip,
+                flash_mode=flash_set.manifest.flash_mode,
+                flash_size=flash_set.manifest.flash_size,
+                flash_freq=flash_set.manifest.flash_freq,
+                images=[
+                    DeviceFlashImageSchema(
+                        offset=content.image.offset,
+                        file=content.image.file,
+                        size=content.image.size,
+                        data=base64.b64encode(content.data).decode("ascii"),
+                    )
+                    for content in flash_set.images
+                ],
+            )
+
+        return DeviceFlashImagesResponseSchema(
+            status=flash_set.status,
+            firmware_version=flash_set.firmware_version,
+            flash=flash,
+        ).model_dump()
+
+    except Exception:
+        status = "error"
+        raise
+
+    finally:
+        duration = time.perf_counter() - start_time
+        record_operation("get_flash_images", status, duration)
 
 
 @devices_bp.route("/<int:device_id>/rotate", methods=["POST"])

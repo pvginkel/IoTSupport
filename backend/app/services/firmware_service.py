@@ -24,9 +24,14 @@ from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.exceptions import RecordNotFoundException, ValidationException
+from app.exceptions import (
+    InvalidOperationException,
+    RecordNotFoundException,
+    ValidationException,
+)
 from app.models.coredump import CoreDump, ParseStatus
 from app.models.firmware_version import FirmwareVersion
+from app.schemas.device import FlashStatus
 
 if TYPE_CHECKING:
     from app.services.s3_service import S3Service
@@ -111,6 +116,28 @@ class FlashManifest(BaseModel):
     flash_size: str
     flash_freq: str
     images: list[FlashImage]  # ascending offset
+
+
+@dataclass
+class FlashImageContent:
+    """One image of a flash set with its content."""
+
+    image: FlashImage
+    data: bytes
+
+
+@dataclass
+class FlashSet:
+    """What a flash of a model's current firmware version writes.
+
+    manifest is set and images lists its images, in its order, exactly when
+    status is FLASHABLE.
+    """
+
+    status: FlashStatus
+    firmware_version: str | None
+    manifest: FlashManifest | None
+    images: list[FlashImageContent]
 
 
 @dataclass
@@ -206,6 +233,66 @@ class FirmwareService:
             return self.s3_service.download_file(s3_key)
         except Exception as e:
             raise RecordNotFoundException("Firmware", model_code) from e
+
+    def get_flash_set(self, model_code: str, firmware_version: str | None) -> FlashSet:
+        """Get everything a flash of a firmware version writes, its images' content included.
+
+        Args:
+            model_code: The device model code
+            firmware_version: The model's current firmware version, None when it has none
+
+        Returns:
+            The flash set; without a manifest or images when the model has no
+            firmware or the version was stored without flash images
+
+        Raises:
+            InvalidOperationException: If an image the manifest lists cannot be
+                read from S3
+        """
+        if firmware_version is None:
+            return FlashSet(
+                status=FlashStatus.NO_FIRMWARE, firmware_version=None, manifest=None, images=[]
+            )
+
+        manifest_key = self._s3_key(model_code, firmware_version, FLASH_MANIFEST_ARTIFACT)
+        if not self.s3_service.file_exists(manifest_key):
+            return FlashSet(
+                status=FlashStatus.NO_FLASH_IMAGES,
+                firmware_version=firmware_version,
+                manifest=None,
+                images=[],
+            )
+
+        manifest = FlashManifest.model_validate_json(
+            self._read_flash_artifact(model_code, firmware_version, FLASH_MANIFEST_ARTIFACT)
+        )
+        images = [
+            FlashImageContent(
+                image=image,
+                data=self._read_flash_artifact(model_code, firmware_version, image.artifact),
+            )
+            for image in manifest.images
+        ]
+        return FlashSet(
+            status=FlashStatus.FLASHABLE,
+            firmware_version=firmware_version,
+            manifest=manifest,
+            images=images,
+        )
+
+    def _read_flash_artifact(self, model_code: str, version: str, artifact: str) -> bytes:
+        """Read one artifact of a version's flash set from S3.
+
+        Raises:
+            InvalidOperationException: If S3 cannot give it
+        """
+        try:
+            return self.s3_service.download_file(self._s3_key(model_code, version, artifact)).read()
+        except InvalidOperationException as e:
+            raise InvalidOperationException(
+                f"read the flash images of {model_code} {version}",
+                f"{artifact} cannot be downloaded: {e.cause}",
+            ) from e
 
     def save_firmware(self, model_code: str, model_id: int, content: bytes) -> str:
         """Save a firmware ZIP bundle: validate, upload artifacts to S3, track version.

@@ -34,6 +34,7 @@ from app.services.settings_service import SettingsService
 from app.services.sse_connection_manager import SSEConnectionManager
 from app.services.task_service import TaskService
 from app.services.test_data_service import TestDataService
+from app.services.testing_firmware_service import TestingFirmwareService
 from app.services.testing_service import TestingService
 from app.utils.lifecycle_coordinator import LifecycleCoordinator
 from app.utils.temp_file_manager import TempFileManager
@@ -234,6 +235,12 @@ class ServiceContainer(containers.DeclarativeContainer):
         firmware_service=firmware_service,
         mqtt_service=mqtt_service,
         trigger_service=architecture_pipeline_trigger_service,
+    )
+
+    # TestingFirmwareService - Factory; seeds firmware through device_model_service's upload
+    testing_firmware_service = providers.Factory(
+        TestingFirmwareService,
+        device_model_service=device_model_service,
     )
 
     # DeviceService - Factory creates new instance per request with database session

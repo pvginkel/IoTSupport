@@ -1,5 +1,6 @@
 """Tests for devices API endpoints."""
 
+import base64
 import json
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
@@ -643,6 +644,141 @@ class TestDevicesProvisioning:
             )
 
         assert response.status_code == 502
+
+
+class TestDevicesFlashImages:
+    """Tests for GET /api/devices/<id>/flash-images."""
+
+    def _upload(
+        self, app: Flask, container: ServiceContainer, model_code: str, zip_content: bytes
+    ) -> None:
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.get_device_model_by_code(model_code)
+            model_service.upload_firmware(model.id, zip_content)
+
+    def test_get_flash_images_flashable(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Every image of the current version is served at its build's offset, with its settings."""
+        from tests.api.test_iot import create_test_device
+        from tests.services.test_firmware_service import _create_test_zip, _flash_image
+
+        device_id, device_key, model_code = create_test_device(app, container, model_code="flashapi1")
+        flash_files = [
+            ("bootloader", "0x0", "bootloader/bootloader.bin"),
+            ("partition-table", "0x8000", "partition_table/partition-table.bin"),
+            ("otadata", "0xd000", "ota_data_initial.bin"),
+            ("app", "0x20000", f"{model_code}.bin"),
+        ]
+        self._upload(
+            app, container, model_code, _create_test_zip(model_code, b"2.1.0", flash_files=flash_files)
+        )
+
+        response = client.get(f"/api/devices/{device_id}/flash-images")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["status"] == "flashable"
+        assert data["firmware_version"] == "2.1.0"
+        flash = data["flash"]
+        assert (flash["chip"], flash["flash_mode"], flash["flash_size"], flash["flash_freq"]) == (
+            "esp32s3", "dio", "16MB", "80m",
+        )
+        images = flash["images"]
+        assert [(image["offset"], image["file"]) for image in images] == [
+            (0x0, "bootloader/bootloader.bin"),
+            (0x8000, "partition_table/partition-table.bin"),
+            (0xD000, "ota_data_initial.bin"),
+            (0x20000, f"{model_code}.bin"),
+        ]
+        contents = [base64.b64decode(image["data"]) for image in images]
+        assert [image["size"] for image in images] == [len(content) for content in contents]
+        assert contents[:3] == [
+            _flash_image("bootloader/bootloader.bin"),
+            _flash_image("partition_table/partition-table.bin"),
+            _flash_image("ota_data_initial.bin"),
+        ]
+
+        # The app is the image /iot/firmware serves the device
+        firmware = client.get(f"/api/iot/firmware?device_key={device_key}")
+        assert firmware.status_code == 200
+        assert contents[3] == firmware.data
+
+    def test_get_flash_images_current_version_without_images(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """A current version stored without flash images says so, though an older one has them."""
+        from tests.api.test_iot import create_test_device
+        from tests.services.test_firmware_service import (
+            _create_test_zip,
+            _standard_flash_files,
+        )
+
+        device_id, _, model_code = create_test_device(app, container, model_code="flashapi2")
+        self._upload(
+            app,
+            container,
+            model_code,
+            _create_test_zip(model_code, b"1.0.0", flash_files=_standard_flash_files(model_code)),
+        )
+        self._upload(app, container, model_code, _create_test_zip(model_code, b"1.1.0"))
+
+        response = client.get(f"/api/devices/{device_id}/flash-images")
+
+        assert response.status_code == 200
+        assert response.get_json() == {
+            "status": "no_flash_images",
+            "firmware_version": "1.1.0",
+            "flash": None,
+        }
+
+    def test_get_flash_images_no_firmware(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """A model without firmware says so."""
+        from tests.api.test_iot import create_test_device
+
+        device_id, _, _ = create_test_device(app, container, model_code="flashapi3")
+
+        response = client.get(f"/api/devices/{device_id}/flash-images")
+
+        assert response.status_code == 200
+        assert response.get_json() == {
+            "status": "no_firmware",
+            "firmware_version": None,
+            "flash": None,
+        }
+
+    def test_get_flash_images_not_found(self, client: FlaskClient) -> None:
+        """An unknown device answers 404."""
+        response = client.get("/api/devices/99999/flash-images")
+
+        assert response.status_code == 404
+
+    def test_get_flash_images_listed_image_missing(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """An image the stored manifest lists but S3 lacks fails the request."""
+        from tests.api.test_iot import create_test_device
+        from tests.services.test_firmware_service import (
+            _create_test_zip,
+            _standard_flash_files,
+        )
+
+        device_id, _, model_code = create_test_device(app, container, model_code="flashapi4")
+        self._upload(
+            app,
+            container,
+            model_code,
+            _create_test_zip(model_code, b"1.0.0", flash_files=_standard_flash_files(model_code)),
+        )
+        container.s3_service().delete_file(f"firmware/{model_code}/1.0.0/flash/0xd000.bin")
+
+        response = client.get(f"/api/devices/{device_id}/flash-images")
+
+        assert response.status_code == 400
+        assert "flash/0xd000.bin" in response.get_json()["error"]
 
 
 class TestDevicesRotate:
