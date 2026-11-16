@@ -6,10 +6,11 @@ names it. Read it top to bottom and do what it says.
 
 ## What this phase proves, and what it does not
 
-**Verification here is local.** This repo has exactly one deployment — production, on the `prd`
-cluster — and no dev instance to roll. So the test phase deploys nothing and verifies nothing
-against a deployed instance. It runs the suites tree-wide and boots this repo's own dev stack in
-this environment, from the merged working tree.
+**Verification here is local, and of the deployed instance it verifies the roll, not prd
+behaviour.** This repo has exactly one deployment — production, on the `prd` cluster — and no dev
+instance to roll. So the test phase runs the suites tree-wide and boots this repo's own dev stack
+in this environment, from the merged working tree; after the push it follows the build until
+`iot-prd` is Synced and Healthy on the pinned build (step 4), and probes nothing on prd.
 
 **The push deploys to production.** `Jenkinsfile` runs a validation Job, then builds both images
 with `helmCharts.kaniko2` (`backend/Dockerfile` → `iotsupport-app`, `frontend/Dockerfile` →
@@ -110,30 +111,31 @@ returned, or the surface loaded and what was seen. A criterion nothing in steps 
 not "passed by inspection"; it is either an untested criterion (a finding) or one whose check
 belongs in this doc and is missing from it.
 
-## 4. Push, then follow the build it triggers
+## 4. Push, then follow the build into the Argo CD roll
 
 Pushing is this phase's job — the driver ff-merges locally and never pushes a code phase, then
 checks before the doc phase that every repo in `state.json`'s `bases` reached `origin`. Push each
 one, honouring any repo named in `plan.md`'s `## Push holds`.
 
-The push triggers Jenkins job **`IoTSupport`**. Follow it in the foreground:
+The push triggers Jenkins job **`IoTSupport`**, whose green build pins both images into IotDeploy
+for Argo CD to roll onto `iot-prd`. Follow both in one foreground command, with the Bash tool's
+timeout set to match (`timeout: 2460000`):
 
-```
-mcp__jenkins__getJob   jobFullName="IoTSupport"
-                       tree="lastBuild[number,result,building,url],inQueue"
-mcp__jenkins__getBuild jobFullName="IoTSupport" buildNumber=<n>
-                       tree="number,result,building,duration"
+```bash
+timeout 2400 track_build.py IoTSupport --hash "$(git rev-parse HEAD)" --diagnose
 ```
 
-Poll `getBuild` until `building` is false, then read `result`. The Jenkins **MCP tools are the way
-that works here**: the anonymous REST API (`.../lastBuild/api/json`) answers **403**, and this
-environment holds no Jenkins token. A session without the MCP tools reports the build number and
-its URL and leaves the verdict to the operator rather than guessing at it.
+It finds the build that checked out the pushed commit, waits for it, then follows the IotDeploy
+commit it pushed until Argo CD has rolled it. No IotDeploy clone is needed. **Exit 0** is the
+phase's pass: the build is green and its `=== Argo CD follow ===` section reports `iot-prd` Synced
+and Healthy on the pin. **Any non-zero exit is a blocking finding**; its `Result:` line says what
+stopped it.
 
 Unlike a repo with a dev tier, this is **not only** a did-I-break-CI check: this build is the
-release. A red build is a blocking finding, and note *where* it went red — the pipeline fails the
-build on a non-zero validation exit and never enters the image or deploy stages, so a validation
-failure means nothing was redeployed and production is still on the last green build's images.
+release. Note *where* a failure happened. The pipeline fails the build on a non-zero validation
+exit and never enters the image or deploy stages, so a red build means nothing was redeployed and
+production is still on the last green build's images. A green build whose roll failed or timed out
+means the new images may already be partly live on `iot-prd`.
 
 ## Findings
 
