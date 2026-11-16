@@ -67,6 +67,12 @@ export async function startBackend(
       // Without this override, OIDC_ENABLED=true from .env causes the
       // before_request hook to attempt real token validation → 401.
       OIDC_ENABLED: 'false',
+      // The NVS blob Provision device writes holds every one of these, and
+      // the backend refuses to build it with one missing. DEVICE_MQTT_URL,
+      // not MQTT_URL: the backend would connect to MQTT_URL's broker.
+      DEVICE_MQTT_URL: 'mqtt://mqtt.playwright.invalid:1883',
+      WIFI_SSID: 'playwright-ssid',
+      WIFI_PASSWORD: 'playwright-wifi-password',
       ...(options.frontendVersionUrl
         ? { FRONTEND_VERSION_URL: options.frontendVersionUrl }
         : {}),

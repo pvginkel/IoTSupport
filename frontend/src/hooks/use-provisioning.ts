@@ -22,6 +22,7 @@ import {
   isWebSerialSupported,
   decodeBase64ToUint8Array,
   uint8ArrayToBinaryString,
+  md5OfBinaryString,
   type PartitionInfo,
 } from '@/lib/esptool';
 import { useProvisioningInstrumentation } from '@/lib/test/provisioning-instrumentation';
@@ -482,16 +483,21 @@ export function useProvisioning(
         message: 'Verifying written data...',
       });
 
-      // Read back and verify via MD5
-      const md5sum = await loader.flashMd5sum(nvsPartition.offset, nvsPartition.size);
-
-      // Note: The loader internally calculates expected MD5 during writeFlash
-      // For the mock, verification is controlled by the mock config
-      // In real usage, we'd compare against expected hash
+      // Read the MD5 of exactly the bytes written back off the chip and
+      // compare it with the blob's: a corrupted write fails here, not at the
+      // device's first connect
+      const md5sum = await loader.flashMd5sum(nvsPartition.offset, nvsDataString.length);
 
       if (signal.aborted) {
         await cleanup();
         return;
+      }
+
+      const expectedMd5 = md5OfBinaryString(nvsDataString);
+      if (md5sum !== expectedMd5) {
+        throw new Error(
+          `Verification failed: the NVS partition reads back MD5 ${md5sum}, the credentials written have MD5 ${expectedMd5}`
+        );
       }
 
       updateState({

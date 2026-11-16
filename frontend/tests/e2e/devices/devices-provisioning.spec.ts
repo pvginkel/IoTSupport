@@ -1,17 +1,126 @@
+import type { Page } from '@playwright/test';
+import type { ProvisioningTestEvent } from '@/types/provisioning-events';
 import { test, expect } from '../../support/fixtures';
+import { waitTestEvent } from '../../support/helpers';
+import type { FakeEspOperation } from '../../support/mocks/esptool-mock';
+import { installFakeEspDevice, readFakeEspDevice } from '../../support/mocks/fake-esp-device';
 import { DevicesPage } from './DevicesPage';
 
 /**
  * Device Provisioning Tests
  *
- * These tests verify the provisioning modal UI behavior. Since Web Serial API
- * requires user gesture and actual hardware, we test the UI flow up to the
- * point of hardware interaction.
- *
- * The ESPLoader mock is automatically loaded when VITE_TEST_MODE=true,
- * but Web Serial port selection still requires user interaction which
- * cannot be automated in Playwright.
+ * The modal's own behaviour is tested up to the Connect button. The
+ * provisioning workflow is driven past the port picker on a fake device:
+ * installFakeEspDevice() hands out a fake Web Serial port and the esptool-js
+ * mock plays its chip, configured per spec (its partition table, a failing
+ * write, a flash that reads back other bytes). The NVS blob comes from the
+ * real backend.
  */
+
+type WriteOperation = Extract<FakeEspOperation, { op: 'write' }>;
+
+function writesOf(operations: FakeEspOperation[]): WriteOperation[] {
+  return operations.filter((operation): operation is WriteOperation => operation.op === 'write');
+}
+
+/** The mock's default NVS partition */
+const NVS_OFFSET = 0x9000;
+const NVS_SIZE = 0x5000;
+
+/** Open the device's Provision modal, connect, and wait for the workflow to end */
+async function provision(page: Page, deviceId: number): Promise<{ devicesPage: DevicesPage; ended: ProvisioningTestEvent }> {
+  const devicesPage = new DevicesPage(page);
+  await devicesPage.gotoEdit(deviceId);
+  await devicesPage.waitForEditorLoaded();
+  await devicesPage.openProvisionModal();
+  await devicesPage.startProvisioning();
+  const ended = await waitTestEvent<ProvisioningTestEvent>(
+    page,
+    'provisioning',
+    event => event.deviceId === deviceId && (event.phase === 'complete' || event.phase === 'error')
+  );
+  return { devicesPage, ended };
+}
+
+test.describe('Provision Device', () => {
+  test('writes the backend\'s NVS blob over the NVS partition and verifies it', async ({ page, devices }) => {
+    const device = await devices.create();
+    await installFakeEspDevice(page);
+
+    const { devicesPage, ended } = await provision(page, device.id);
+
+    expect(ended.phase).toBe('complete');
+    await expect(devicesPage.provisionModalSuccessMessage).toBeVisible();
+
+    // One write: a blob the partition's size, at the partition's offset
+    const { portRequests, operations } = await readFakeEspDevice(page);
+    expect(portRequests).toBe(1);
+    const writes = writesOf(operations);
+    expect(writes.map(write => ({ address: write.address, size: Buffer.from(write.data, 'base64').length }))).toEqual([
+      { address: NVS_OFFSET, size: NVS_SIZE },
+    ]);
+    expect(writes[0].eraseAll).toBe(false);
+  });
+
+  test('fails before writing when the device has no NVS partition', async ({ page, devices }) => {
+    const device = await devices.create();
+    await installFakeEspDevice(page, {
+      partitionTable: [
+        { name: 'otadata', type: 1, subtype: 0, offset: 0xe000, size: 0x2000 },
+        { name: 'app', type: 0, subtype: 0, offset: 0x10000, size: 0x100000 },
+      ],
+    });
+
+    const { devicesPage, ended } = await provision(page, device.id);
+
+    expect(ended).toMatchObject({
+      phase: 'error',
+      metadata: { provisioningPhase: 'reading_partition', error: 'NVS partition not found in partition table' },
+    });
+    await expect(devicesPage.provisionModalErrorMessage).toHaveText('NVS partition not found in partition table');
+    await expect(devicesPage.provisionModalRetryButton).toBeVisible();
+
+    expect(writesOf((await readFakeEspDevice(page)).operations)).toEqual([]);
+  });
+
+  test('fails when the device refuses the write', async ({ page, devices }) => {
+    const device = await devices.create();
+    await installFakeEspDevice(page, { flashWriteResult: 'error' });
+
+    const { devicesPage, ended } = await provision(page, device.id);
+
+    expect(ended).toMatchObject({
+      phase: 'error',
+      metadata: { error: 'Flash write error: Failed to write data at specified address' },
+    });
+    await expect(devicesPage.provisionModalErrorMessage).toHaveText(
+      'Flash write error: Failed to write data at specified address'
+    );
+    await expect(devicesPage.provisionModalSuccessMessage).toHaveCount(0);
+    await expect(devicesPage.provisionModalRetryButton).toBeVisible();
+
+    expect(writesOf((await readFakeEspDevice(page)).operations)).toEqual([]);
+  });
+
+  test('fails when the NVS partition reads back other bytes than were written', async ({ page, devices }) => {
+    const device = await devices.create();
+    // The chip's flash holds other bytes than were sent to it
+    await installFakeEspDevice(page, { verificationResult: 'mismatch' });
+
+    const { devicesPage, ended } = await provision(page, device.id);
+
+    expect(ended).toMatchObject({ phase: 'error', metadata: { provisioningPhase: 'verifying' } });
+    expect(ended.metadata?.error).toMatch(
+      /^Verification failed: the NVS partition reads back MD5 [0-9a-f]{32}, the credentials written have MD5 [0-9a-f]{32}$/
+    );
+    await expect(devicesPage.provisionModalErrorMessage).toContainText('Verification failed');
+    await expect(devicesPage.provisionModalSuccessMessage).toHaveCount(0);
+    await expect(devicesPage.provisionModalRetryButton).toBeVisible();
+
+    // The write went out; the read-back is what failed
+    expect(writesOf((await readFakeEspDevice(page)).operations).map(write => write.address)).toEqual([NVS_OFFSET]);
+  });
+});
 
 test.describe('Device Provisioning Modal', () => {
   test('shows provision device button in edit mode', async ({ page, devices }) => {

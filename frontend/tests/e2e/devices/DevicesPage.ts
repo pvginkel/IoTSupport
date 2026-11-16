@@ -229,6 +229,10 @@ export class DevicesPage {
     return this.page.locator('[data-testid="devices.provision-modal.error-message"]');
   }
 
+  get provisionModalSuccessMessage(): Locator {
+    return this.page.locator('[data-testid="devices.provision-modal.success-message"]');
+  }
+
   get provisionModalConnectButton(): Locator {
     return this.page.locator('[data-testid="devices.provision-modal.connect-button"]');
   }
