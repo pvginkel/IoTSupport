@@ -17,7 +17,7 @@ Three scopes, and the choice between them is about *what* changed, not which fil
 |---|---|
 | root `docs/` | cross-cutting and system-level material: how the two components fit together, the dev stack, the pipeline's own procedure docs (this file, `slice-test-plan.md`, `change-discipline.md`) |
 | `backend/docs/` | the Flask API — the domain model (`product_brief.md`), designs such as `device_provisioning_design.md`, and the decision records under `decisions/` |
-| `frontend/docs/` | the SPA — `product_brief.md`, `features.md`, and the contributor hub under `contribute/` |
+| `frontend/docs/` | the SPA — `product_brief.md` and the contributor hub under `contribute/` |
 
 A slice that changed the **device-facing or pipeline-facing contract** (`/iot/*`, `/pipeline/*`,
 the MQTT rotation notifications) changed a system-level thing whichever component's code moved, and
