@@ -156,7 +156,9 @@ class S3Service:
             return file_obj
 
         except ClientError as e:
-            if e.response["Error"]["Code"] == "NoSuchKey":
+            # download_fileobj issues a HeadObject first, which answers a
+            # missing object with "404" rather than "NoSuchKey".
+            if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
                 raise InvalidOperationException(
                     "download file from S3", f"file not found: {s3_key}"
                 ) from e
