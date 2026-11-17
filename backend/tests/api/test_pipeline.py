@@ -896,3 +896,58 @@ class TestPipelineUploadScriptRun:
         response = _replay_upload(client, calls[1], zip_content)
         assert response.status_code == 200, response.get_json()
         assert _stored_flash_manifest(container.s3_service(), model_code, "2.4.0") is None
+
+    def test_upload_script_with_clashing_flash_name(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer, tmp_path: Path
+    ) -> None:
+        """Test that two images of one file name upload the five artifacts, not part of the set."""
+        model_code = "scriptclash"
+        with app.app_context():
+            container.device_model_service().create_device_model(code=model_code, name="Script")
+            container.db_session().commit()
+        flash_files = [
+            *_standard_flash_files(model_code),
+            ("extra", "0x310000", "extra/bootloader.bin"),
+        ]
+        project = _esp_idf_project(tmp_path / "project", model_code, "2.5.0", flash_files)
+
+        output, calls, zip_content = _run_upload_script(client, project, tmp_path, posix_only=True)
+
+        assert (
+            "Note: packaging without flash images "
+            "(two members would be named bootloader.bin)" in output
+        )
+        assert _zip_members(zip_content) == {
+            member.format(code=model_code) for member in REQUIRED_MEMBERS
+        }
+        response = _replay_upload(client, calls[1], zip_content)
+        assert response.status_code == 200, response.get_json()
+        assert _stored_flash_manifest(container.s3_service(), model_code, "2.5.0") is None
+
+    def test_upload_script_without_app_in_flasher_args(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer, tmp_path: Path
+    ) -> None:
+        """Test that a flasher_args.json not flashing the app uploads the five artifacts only."""
+        model_code = "scriptnoapp"
+        with app.app_context():
+            container.device_model_service().create_device_model(code=model_code, name="Script")
+            container.db_session().commit()
+        flash_files = [
+            flash_file
+            for flash_file in _standard_flash_files(model_code)
+            if flash_file[2] != f"{model_code}.bin"
+        ]
+        project = _esp_idf_project(tmp_path / "project", model_code, "2.6.0", flash_files)
+
+        output, calls, zip_content = _run_upload_script(client, project, tmp_path, posix_only=True)
+
+        assert (
+            "Note: packaging without flash images "
+            f"(build/flasher_args.json does not flash {model_code}.bin)" in output
+        )
+        assert _zip_members(zip_content) == {
+            member.format(code=model_code) for member in REQUIRED_MEMBERS
+        }
+        response = _replay_upload(client, calls[1], zip_content)
+        assert response.status_code == 200, response.get_json()
+        assert _stored_flash_manifest(container.s3_service(), model_code, "2.6.0") is None
