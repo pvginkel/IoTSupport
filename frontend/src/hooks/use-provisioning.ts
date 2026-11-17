@@ -98,12 +98,14 @@ export function useProvisioning(
    */
   const updateState = useCallback(
     (updates: Partial<ProvisioningState>) => {
+      // Update the phase ref now, not in the updater: React runs the updater
+      // at the next render, and a failure that lands before it would be
+      // reported under the previous phase
+      if (updates.phase) {
+        phaseRef.current = updates.phase;
+      }
       setState(prev => {
         const next = { ...prev, ...updates };
-        // Update phase ref to avoid stale closures in error handlers
-        if (updates.phase) {
-          phaseRef.current = updates.phase;
-        }
         // Emit progress event when phase changes
         if (updates.phase && updates.phase !== prev.phase && updates.phase !== 'idle') {
           instrumentation.trackProgress(next.phase, next.progress);

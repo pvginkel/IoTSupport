@@ -91,7 +91,7 @@ test.describe('Provision Device', () => {
 
     expect(ended).toMatchObject({
       phase: 'error',
-      metadata: { error: 'Flash write error: Failed to write data at specified address' },
+      metadata: { provisioningPhase: 'flashing', error: 'Flash write error: Failed to write data at specified address' },
     });
     await expect(devicesPage.provisionModalErrorMessage).toHaveText(
       'Flash write error: Failed to write data at specified address'
