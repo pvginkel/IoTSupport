@@ -45,6 +45,21 @@ imageBuilder: true
 secrets:
   KEYCLOAK_ADMIN_CLIENT_ID: iotsupport-keycloak-admin-client-id
   KEYCLOAK_ADMIN_CLIENT_SECRET: iotsupport-keycloak-admin-client-secret
+  # The password of production's read-only database role, iot_prd_readonly
+  # (IotDeploy terraform/, the Secret iot-prd/iotsupport-db-readonly), copied
+  # into the catalog; the role and database are in env: below. It reads every
+  # table of iot_prd_db and writes nothing.
+  IOTSUPPORT_PRD_DB_PASSWORD: iotsupport-prd-db-readonly-password
+
+# Production's database, as the read-only role above reaches it, for the
+# ad-hoc tools that read it: the substrate's pooler, which this pod reaches.
+env:
+  - name: IOTSUPPORT_PRD_DB_HOST
+    value: postgres-pooler-rw.postgres-pas-prd.svc.cluster.local
+  - name: IOTSUPPORT_PRD_DB_NAME
+    value: iot_prd_db
+  - name: IOTSUPPORT_PRD_DB_USER
+    value: iot_prd_readonly
 
 # One merged sidecar rather than `python` + `frontend`: the Playwright harness
 # boots the Flask backend per worker (tests/support/process/servers.ts), so a
@@ -76,3 +91,7 @@ preamble:
     - `scripts/dev.py` ignores SIGINT and SIGTERM by design and relies on the
       terminal delivering SIGINT through the pty. `kill` on it orphans the whole
       process tree and leaves ports 3100-3101 held. Stop it with Ctrl-C.
+    - Production's database is readable, never writable, as iot_prd_readonly:
+      IOTSUPPORT_PRD_DB_HOST, _NAME, _USER and _PASSWORD. Hand the password to
+      the client through PGPASSWORD or its own setting, never on a command
+      line, and never print it.
