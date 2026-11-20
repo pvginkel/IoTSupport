@@ -1,70 +1,37 @@
 # Data Display Conventions
 
 ## Scope
-These guidelines cover list, grid, and detail presentations that sit on top of the generated TanStack Query client. They draw from `TypeList` (`src/components/types/TypeList.tsx`), `PartList` (`src/components/parts/part-list.tsx`), and `PartDetails` (`src/components/parts/part-details.tsx`).
+These conventions cover the tables, detail surfaces and dashboard that sit on top of the generated TanStack Query client. They draw from `DeviceModelListTable` (`src/components/device-models/device-model-list-table.tsx`), `DeviceListTable` (`src/components/devices/device-list-table.tsx`), `DeviceDetailHeader` (`src/components/devices/device-detail-header.tsx`), `CoredumpAccordionTable` (`src/components/devices/coredump-accordion-table.tsx`), `DeviceLogsViewer` (`src/components/devices/device-logs-viewer.tsx`) and `RotationDashboard` (`src/components/rotation/rotation-dashboard.tsx`).
 
-## Lists & Collections
-- Lists fetch data through generated hooks (`useGetTypesWithStats`, `useGetPartsWithLocations`, etc.) and expose memoized derived state (`filteredTypes`, `filteredParts`) rather than mutating the server payload.
-- Searching and filtering should update the router search params via `useNavigate` so browser history and deep links work across sessions.
-- Always provide a summary element (`data-testid="*.list.summary"`) that reports the result counts and reflects filtered vs. total totals.
-- Use responsive grids (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3`, etc.) and keep interactive cards (`PartListItem`) clickable as a whole surface for mobile friendliness.
-- High-level filter toggles (status, lifecycle, etc.) should rely on the shared `SegmentedTabs` primitive (`src/components/ui/segmented-tabs.tsx`) so keyboard navigation, badges, and instrumentation stay consistent across lists.
+## Lists
+- Lists are tables, not card grids: a `<table className="w-full border-collapse">` inside an `overflow-x-auto` wrapper that carries the list's test id (`devices.list.table`, `device-models.list.table`).
+- Data comes through the domain hooks (`useDevices`, `useDeviceModels`, `useCoredumps`), which map the API's snake_case payload to camelCase models. The table derives its rows with `useMemo` — sorted, and in `DeviceListTable` joined with `useDeviceModels` for the model name — and never mutates the payload.
+- The page owns the header: a `p-8` page with an `h1` (`text-2xl font-bold`) and the primary **New …** button linking to the create route (`devices.list.header.new-device`, `device-models.list.header.new-model`). No list has search or filters.
+- **Sorting.** Sortable columns are clickable `<th>` elements with `data-testid="<scope>.list.header.<column>"` and a `↑` / `↓` on the active column. Clicking the active column flips the direction; another column starts ascending. Nulls sort after values ascending and before them descending. The device list persists its sort in localStorage through `getSortPreference` / `setSortPreference` (`src/lib/utils/sort-preferences.ts`); the device model list keeps it in component state.
+- **Rows.** The whole row is clickable and navigates to the entity's route. It carries `data-testid="<scope>.list.row"` and data attributes that identify it (`data-device-id`, `data-device-key` and `data-rotation-state` on devices; `data-model-id` and `data-model-code` on models; `data-coredump-id` on core dumps). Row actions call `e.stopPropagation()` so they do not also open the row. Delete is an icon `Button` with `variant="destructive" size="sm"`, a `title`, and a `useConfirm` confirmation.
+- Rotation-state colours come from `getRotationStateBadge` (`src/lib/utils/device-badges.ts`), shared by the device list and the device header.
+
+## Loading, Empty & Error States
+- **Loading.** The table component renders `Skeleton` rows (`src/components/ui/skeleton.tsx`) inside a container with a loading test id: `devices.list.loading`, `device-models.list.loading`, `coredumps.table.loading`, `rotation.dashboard.loading`.
+- **Empty.** `EmptyState` (`src/components/ui/empty-state.tsx`, `testId` required) with a title and, where it helps, a description and an action: `devices.list.empty` and `device-models.list.empty` link to the create route, `devices.logs.empty` points at the Configuration tab, `coredumps.table.empty` has a title only. The list routes render it themselves once loading has finished with no rows, and keep the page header and its **New …** button above it.
+- **Error.** The list pages and the rotation dashboard render the page title and `Failed to load …: {error.message}` in `text-destructive` under an error test id (`devices.list.error`, `device-models.list.error`, `rotation.dashboard.error`); the core dumps table renders `Failed to load core dumps` under `coredumps.table.error`.
+- **Detail routes.** `/devices/$deviceId`, `/devices/$deviceId/duplicate` and `/device-models/$modelId` render centred text while loading ("Loading device..."), and for an unparseable id, a failed load or a missing entity, the message and an outline **Back to …** button linking to the list.
 
 ## Detail Surfaces
-- Detail panels such as `PartDetails` combine read-only cards, document grids, and action menus. Keep them columnar on desktop (`grid-cols-1 lg:grid-cols-2`) and collapse gracefully on small screens.
-- When switching into edit mode, replace the detail surface with the corresponding form component instead of navigating away. This keeps instrumentation state consistent and simplifies Playwright flows.
-- Heavy experiences (attachment uploads, AI flows) should expose navigation affordances (`DropdownMenu`, explicit buttons) and rely on generated mutations (`useDeletePartsByPartKey`, `usePostAiPartsCreate`).
-
-### Label-Value Pairs with DescriptionList
-For vertical label-value pair displays in detail views and information cards, use the `DescriptionList` and `DescriptionItem` components (`src/components/ui/description-list.tsx`) instead of inline divs:
-
-```tsx
-import { DescriptionList, DescriptionItem } from '@/components/ui';
-
-// Simple label-value pairs
-<DescriptionList spacing="default">
-  <DescriptionItem label="Part ID" value={partId} variant="prominent" />
-  <DescriptionItem label="Manufacturer" value={manufacturer} />
-  <DescriptionItem label="Created" value={createdDate} variant="muted" />
-</DescriptionList>
-
-// With custom value rendering
-<DescriptionItem label="Product Page" variant="compact">
-  <ExternalLink href={url}>{url}</ExternalLink>
-</DescriptionItem>
-```
-
-**Variants:**
-- `default`: label `text-sm font-medium`, value `text-lg` (standard label-value pairs)
-- `prominent`: label `text-sm font-medium`, value `text-2xl font-bold` (primary identifiers like Part ID, Box Number)
-- `compact`: label `text-sm font-medium`, value `text-sm` (technical specifications, densely packed fields)
-- `muted`: label `text-sm font-medium`, value `text-sm text-muted-foreground` (timestamps, secondary metadata)
-
-**Spacing:**
-- `compact`: `space-y-1` (tight grouping)
-- `default`: `space-y-2` (standard spacing, most common)
-- `relaxed`: `space-y-4` (section spacing)
-
-**When NOT to use DescriptionList:**
-- Horizontal layouts where label and value appear side-by-side
-- Interactive value slots requiring buttons, form inputs, or other controls
-- Specialized layouts like metrics cards with icons and trend indicators
-- Complex multi-value layouts with custom spacing or flex-wrap
-
-**Section headers stay separate:** Keep section headers (e.g., "Technical Specifications", "Manufacturer Information") as plain `<div>` elements with `text-xs font-medium text-muted-foreground` styling OUTSIDE the DescriptionList. Section headers serve organizational purposes distinct from data presentation.
-
-See `src/components/parts/part-details.tsx` and `src/components/boxes/box-details.tsx` for reference implementations.
-
-## Empty, Loading & Error States
-- Emit skeletons while TanStack Query is loading. Follow the existing pattern: skeleton cards in lists and muted placeholders in detail views, each with `data-testid` hooks (`*.loading`, `*.loading.skeleton`).
-- Provide empty and "no results" states with actionable guidance, e.g. "Add First Type" or "Try adjusting your search." That messaging belongs in the pattern docs, not in ad hoc components.
-- Error surfaces should render explanatory copy plus the raw error string, wrapped in the shared `Card` when appropriate. Keep confirmation dialogs (`ConfirmDialog`) for destructive actions.
+- **Layout route.** `src/routes/devices/$deviceId.tsx` loads the device with `useDevice`, handles the invalid, loading and not-found states, and renders `DeviceDetailHeader` above an `<Outlet />` for the tab. The tab routes call `useDevice` with the same id — answered from the query cache — and render `null` until it resolves.
+- **Header.** `DeviceDetailHeader` is sticky (`sticky top-0 z-10`): a back link to `/devices`, the title, a row of inline label–value pairs (`<span className="text-muted-foreground">Key:</span>` and the value), a link to the device's model, the rotation-state badge and the OTA status, then the `RoutedTabs` bar.
+- **Accordion table.** `CoredumpAccordionTable` expands one row at a time into a panel with the dump's metadata and its parsed output in a read-only Monaco editor. Expanding rewrites the URL with `window.history.replaceState` to `/devices/$deviceId/coredumps/$coredumpId` rather than navigating, so the route does not remount; opening that URL directly expands the row and scrolls it into view.
+- **Live view.** `DeviceLogsViewer` renders a terminal-style container (`devices.logs.container`) whose `data-log-count`, `data-scroll-at-bottom` and `data-scroll-at-top` attributes let tests assert on it; each entry (`devices.logs.entry`) shows its timestamp in a `title`.
+- **Dashboard.** `RotationDashboard` shows a stacked bar (`rotation.dashboard.bar`, segments `.healthy` / `.warning` / `.critical`), the schedule (`rotation.dashboard.schedule`) and one collapsible panel per category (`rotation.dashboard.panel.<category>`, with `data-expanded`), whose open state persists in localStorage. It updates from the SSE stream (`useSseContext`), not by polling.
+- `DescriptionList` / `DescriptionItem` (`src/components/primitives/description-list.tsx`) render vertical label–value pairs with a `variant` (`default`, `prominent`, `compact`, `muted`) and a `spacing` (`compact`, `default`, `relaxed`); no screen uses them.
 
 ## Instrumentation & Query Management
-- Lists must register with `useListLoadingInstrumentation` (`src/lib/test/query-instrumentation.ts`) using a stable scope (e.g., `types.list`, `parts.list`). Provide metadata callbacks so Playwright can assert on query status and counts.
-- Detail and form views should reuse `useFormInstrumentation` or other instrumentation helpers (`useClipboardPaste`, `useDuplicatePart`) instead of emitting bespoke events.
-- Do not intercept network requests in tests. Instead, expose deterministic hooks like `data-testid`, instrumentation scopes, and state-specific metadata. Cross-reference [Testing → Playwright Developer Guide](../testing/playwright_developer_guide.md) and [Testing → Factories & Fixtures](../testing/factories_and_fixtures.md) before adding new UI telemetry.
+- Every list registers `useListLoadingInstrumentation` (`src/lib/test/query-instrumentation.ts`) with its query's `isLoading`, `isFetching` and `error` and `getReadyMetadata: () => ({ visible, total })`. Scopes: `devices.list`, `device-models.list`, `coredumps.list`, `rotation.dashboard`. It emits `list_loading` events — `loading`, then `ready` or `error`; `ready` straight away when the data is already cached at mount; `aborted` when the component unmounts mid-load.
+- `useDeviceLogs` (`src/hooks/use-device-logs.ts`) emits `list_loading` for the scope `devices.logs` itself, with `{ deviceId, logCount }` as metadata.
+- A widget that is not a list, or a user action, uses `useUiStateInstrumentation(scope, options)` (`src/lib/test/ui-state.ts`), which emits `ui_state` events. `FlashDeviceModal` registers `devices.flash-modal.images` for its data and `devices.flash-modal.flash` for the flash itself, the latter with `readyOnMount: false` because an action has nothing to be ready about at mount.
+- Playwright waits on these with `waitForListLoading(page, scope, phase)` and `waitForUiState(page, scope, phase)` from `tests/support/helpers.ts`.
+- Do not intercept network requests in tests; expose `data-testid`s, instrumentation scopes and state attributes instead. See [Testing → Playwright Developer Guide](../testing/playwright_developer_guide.md) and [Testing → Factories & Fixtures](../testing/factories_and_fixtures.md) before adding UI telemetry.
 
 ## Referenced Patterns
-- [Type Catalog Pattern](./patterns/type_catalog.md) applies these rules to a single-entity CRUD list + modal workflow.
-- [Part Management Pattern](./patterns/part_management.md) demonstrates the richer combination of list, detail, AI dialog, and document management that future complex domains should inherit.
+- The [Device Models Pattern](./patterns/device_models.md) applies these rules to a table whose rows open a full-page editor.
+- The [Devices Pattern](./patterns/devices.md) adds the persisted sort, the detail layout route with routed tabs, the accordion table and the live log view.

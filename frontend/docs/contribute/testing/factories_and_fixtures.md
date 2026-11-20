@@ -150,7 +150,7 @@ Avoid duplicating helper logic in specs — centralize shared behaviors here.
 
 Use the backend-provided `/api/testing/content/*` endpoints whenever specs need static assets:
 
-- `GET /api/testing/content/image?text=<label>` – stable placeholder PNG (supersedes `/api/testing/fake-image`).
+- `GET /api/testing/content/image?text=<label>` – stable placeholder PNG.
 - `GET /api/testing/content/pdf` – deterministic PDF stream with canned metadata.
 - `GET /api/testing/content/html?title=<text>` – plain HTML response without banners.
 - `GET /api/testing/content/html-with-banner?title=<text>` – HTML response that includes the standard marketing banner.

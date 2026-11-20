@@ -1,56 +1,64 @@
 # Tooltip Guidelines
 
-This guide documents when and how to use tooltips in the Electronics Inventory application.
+This guide documents when and how to show tooltips in the IoT Support frontend.
 
 ## Overview
 
-Tooltips provide contextual information when users hover over or focus on UI elements. The application provides a unified `Tooltip` component that supports both simple text tooltips and rich content tooltips, with automatic handling for disabled elements.
+Tooltips give contextual information when the user hovers over or focuses an element. There are two mechanisms:
+
+- the native `title` attribute, which the app's screens use throughout — the device model list's delete button ("Delete model", or "Cannot delete: model has devices"), the **Flash Device** and **Provision Device** buttons ("Flash firmware via USB", "Provision device via USB"), each log entry's timestamp, the rotation dashboard's bar segments;
+- the shared `Tooltip` component (`src/components/primitives/tooltip.tsx`, exported from `@/components/primitives`), for simple text on a disabled element and for rich content. No screen uses it; the template's `LinkChip` primitive does.
+
+The sketches below use the app's components to show the API; none of them is in the screens.
 
 ## Decision Tree: When to Use What
 
-### Use Plain `title` Attribute When:
+### Use a Plain `title` Attribute When:
 
-- Content is simple text (no formatting, icons, or multiline)
-- Element is **not** disabled (or doesn't need tooltip when disabled)
-- No special positioning or styling needed
+- The content is simple text (no formatting, icons or multiple lines)
+- The element is **not** disabled, or needs no tooltip while disabled
+- No special positioning or styling is needed
 
 ```tsx
-<button title="Save changes">Save</button>
-<span title="Created on 2024-01-15">2024-01-15</span>
+<Button variant="outline" onClick={() => setFlashModalOpen(true)} title="Flash firmware via USB">
+  <Zap className="h-4 w-4 mr-2" />
+  Flash Device
+</Button>
 ```
 
-### Use `Tooltip` with `title` Prop When:
+### Use `Tooltip` with the `title` Prop When:
 
-- Content is simple text
-- Element **is disabled** and needs explanatory tooltip
-- You want consistent timing/behavior across the app
+- The content is simple text
+- The element **is disabled** and the user needs to know why: a disabled element does not receive pointer events, so `Tooltip` puts the `title` on a focusable wrapper instead
 
 ```tsx
-<Tooltip title="Add parts before ordering">
-  <Button disabled={!hasParts}>Order Stock</Button>
+<Tooltip title="Web Serial needs a desktop Chromium browser">
+  <Button variant="outline" disabled={!isWebSerialSupported()}>Flash Device</Button>
 </Tooltip>
 ```
 
-### Use `Tooltip` with `content` Prop When:
+### Use `Tooltip` with the `content` Prop When:
 
-- Content includes formatting, icons, or multiline text
-- Content is structured (lists, key-value pairs, etc.)
-- Need special placement (e.g., `placement="center"` for modal-like overlay)
-- Content is dynamic or complex
+- The content has formatting, icons or several lines
+- The content is structured (a list, key–value pairs)
+- It needs a placement, such as `placement="center"` for an overlay on the trigger
+- The content is dynamic
 
 ```tsx
 <Tooltip
+  testId="feature"
   content={
     <div>
-      <div className="font-medium">Active Reservations</div>
+      <div className="font-medium">Rotation State</div>
       <ul className="text-xs">
-        <li>Kit A: 50 units</li>
-        <li>Kit B: 30 units</li>
+        <li>Healthy: {healthy}</li>
+        <li>Warning: {warning}</li>
+        <li>Critical: {critical}</li>
       </ul>
     </div>
   }
 >
-  <ReservationIcon />
+  <span>{healthy + warning + critical} devices</span>
 </Tooltip>
 ```
 
@@ -61,87 +69,78 @@ Tooltips provide contextual information when users hover over or focus on UI ele
 ```typescript
 interface TooltipProps {
   // Content (mutually exclusive - provide one or the other)
-  title?: string;           // Simple text tooltip
-  content?: ReactNode;      // Rich tooltip content
+  title?: string;           // Simple text tooltip (native title attribute)
+  content?: ReactNode;      // Rich tooltip content, rendered in a portal
 
   // Common props
   children: ReactElement;   // Trigger element (must accept ref)
-  enabled?: boolean;        // Whether tooltip is enabled (default: true)
-  placement?: 'top' | 'right' | 'bottom' | 'left' | 'auto' | 'center';
-  showArrow?: boolean;      // Show arrow indicator (default: true for content, false for center)
-  offset?: number;          // Distance from trigger in px (default: 8)
+  enabled?: boolean;        // Whether the tooltip is enabled (default: true)
+  placement?: 'top' | 'right' | 'bottom' | 'left' | 'auto' | 'center'; // default: 'auto'
+  showArrow?: boolean;      // Arrow indicator (default: true, false for 'center')
+  offset?: number;          // Distance from the trigger in px (default: 8; ignored for 'center')
   delay?: number;           // Open delay in ms (default: 200)
   testId?: string;          // data-testid for Playwright
-  className?: string;       // Additional classes for tooltip content (content mode only)
 }
 ```
+
+If both `title` and `content` are given, `content` wins, and in development the component logs a warning.
+
+`placement`, `showArrow`, `offset` and `delay` apply to content mode only: in title mode the browser shows the native tooltip with its own timing. In content mode the tooltip closes 120 ms after the pointer leaves, and stays open while the pointer is over the tooltip itself.
 
 ## Placement Options
 
 ### Standard Placements
 
-- `'top'` - Above the trigger
-- `'bottom'` - Below the trigger
-- `'left'` - Left of the trigger
-- `'right'` - Right of the trigger
-- `'auto'` (default) - Automatically choose best position based on viewport space
+- `'top'`, `'bottom'`, `'left'`, `'right'` — on that side of the trigger, centred on it, and kept inside the viewport with a 12 px margin. A side that lacks room is not swapped for another.
+- `'auto'` (default) — the side with the most room, if the tooltip fits there; otherwise below the trigger.
+
+The tooltip repositions on scroll and resize while it is open.
 
 ### Special Placement
 
-- `'center'` - Centers tooltip over the trigger element (modal-like overlay)
-  - Used for rich, interactive-looking content that acts as a temporary overlay
-  - No arrow indicator shown
-  - Example: Health score breakdown tooltip
+- `'center'` — centres the tooltip over the trigger element, as an overlay on it
+  - For rich content that reads as a temporary panel
+  - No arrow
 
 ```tsx
-<Tooltip
-  content={<ComplexBreakdown />}
-  placement="center"
->
-  <div>Click for details</div>
+<Tooltip content={<RotationBreakdown />} placement="center">
+  <div>{healthy} healthy</div>
 </Tooltip>
 ```
 
 ## Automatic Disabled Element Handling
 
-The Tooltip component **automatically detects** when its child has a `disabled` prop and applies a wrapper pattern to ensure the tooltip still works.
+`Tooltip` detects when its child has `disabled={true}` and wraps it so the tooltip still works.
 
 ### Title Mode (Simple Text)
 
 ```tsx
-// Tooltip automatically wraps disabled button
-<Tooltip title="Add parts before ordering">
-  <Button disabled>Order Stock</Button>
+<Tooltip title="Web Serial needs a desktop Chromium browser">
+  <Button disabled>Flash Device</Button>
 </Tooltip>
 
 // Rendered as:
-// <div tabIndex={0} title="...">
-//   <Button disabled className="pointer-events-none">...</Button>
+// <div class="inline-flex cursor-not-allowed" tabIndex={0} title="…">
+//   <Button disabled className="… pointer-events-none">…</Button>
 // </div>
 ```
 
+For an enabled child, title mode adds the `title` to the child itself and renders no wrapper.
+
 ### Content Mode (Rich Content)
 
-```tsx
-// Tooltip automatically wraps disabled button
-<Tooltip content={<ExplanationPanel />}>
-  <Button disabled>Edit Kit</Button>
-</Tooltip>
-
-// Rendered with wrapper that captures hover/focus events
-```
+Content mode always renders a wrapper `div` that captures hover and focus. For a disabled child, the wrapper also gets `tabIndex={0}` and `cursor-not-allowed`, and the child gets `pointer-events-none`.
 
 ### No Special Code Needed
 
-You don't need to manually detect disabled state or wrap elements. The Tooltip component handles this automatically.
+You do not need to detect the disabled state or wrap the element yourself.
 
 ## Arrow Indicators
 
-Content mode tooltips show a small arrow pointing from the tooltip to the trigger element by default.
+Content-mode tooltips show a small arrow pointing at the trigger, on the side the tooltip opened on.
 
-- Arrow automatically positioned based on placement direction
-- Arrow hidden for `placement="center"` (modal-like overlays)
-- Can be disabled via `showArrow={false}` if needed
+- Hidden for `placement="center"`
+- Turned off with `showArrow={false}`
 
 ```tsx
 // Default: arrow shown
@@ -154,7 +153,7 @@ Content mode tooltips show a small arrow pointing from the tooltip to the trigge
   <Trigger />
 </Tooltip>
 
-// Explicitly disable arrow
+// Arrow turned off
 <Tooltip content={<Info />} showArrow={false}>
   <InfoIcon />
 </Tooltip>
@@ -162,253 +161,169 @@ Content mode tooltips show a small arrow pointing from the tooltip to the trigge
 
 ## Conditional Tooltips
 
-Use the `enabled` prop to conditionally show tooltips:
+Use the `enabled` prop to show a tooltip only when it applies:
 
 ```tsx
-<Tooltip
-  title="Archived kits are read-only"
-  enabled={isArchived}
->
-  <Button disabled={isArchived}>Edit Kit</Button>
+<Tooltip title="A model with devices cannot be deleted" enabled={model.deviceCount > 0}>
+  <Button variant="destructive" size="sm" disabled={model.deviceCount > 0}>
+    Delete Model
+  </Button>
 </Tooltip>
 ```
 
-Note: `enabled` is independent of the child's `disabled` state. A disabled button can have `enabled={false}` to suppress the tooltip entirely.
+`enabled` is independent of the child's `disabled` state. With `enabled={false}` the component renders the child untouched, and an open tooltip closes.
 
 ## Content Restrictions
 
-**IMPORTANT**: Tooltips must contain **only informational content**. Do not include:
+**IMPORTANT**: Tooltips contain **only informational content**. Do not put in them:
 
 - Buttons or clickable actions
 - Form inputs
 - Interactive elements
-- Critical information that's not available elsewhere
+- Critical information that is not available elsewhere
 
-Tooltips are dismissible on mouse leave or Escape key, so users must be able to access all functionality without them.
+Tooltips close on mouse leave, blur and Escape, so users must be able to reach all functionality without them.
 
 ### Good Examples
 
 ```tsx
 // ✓ Simple explanation
-<Tooltip title="Part ID is auto-generated">
+<Tooltip title="Model code cannot be changed once the model is created">
   <InfoIcon />
 </Tooltip>
 
 // ✓ Structured information
 <Tooltip content={
   <div>
-    <div>Reservation Details:</div>
+    <div>Firmware {firmwareVersion}</div>
     <ul>
-      <li>Kit: {name}</li>
-      <li>Qty: {qty}</li>
+      <li>Chip: {chip}</li>
+      <li>Images: {imageCount}</li>
     </ul>
   </div>
 }>
-  <ReservationIcon />
+  <InfoIcon />
 </Tooltip>
 ```
 
 ### Bad Examples
 
 ```tsx
-// ✗ Interactive button in tooltip
+// ✗ Interactive button in a tooltip
 <Tooltip content={
   <div>
     Are you sure?
-    <Button>Confirm</Button>
+    <Button>Delete Device</Button>
   </div>
 }>
-  <DeleteIcon />
+  <Trash2 />
 </Tooltip>
 
-// ✗ Critical action only in tooltip
-<Tooltip content={<a href="/help">Get help</a>}>
+// ✗ Critical action only in a tooltip
+<Tooltip content={<a href="/rotation">Open Rotation Dashboard</a>}>
   <HelpIcon />
 </Tooltip>
 ```
 
-For interactive overlays, use a Dialog or Popover component instead.
+For an interactive overlay, use a `Dialog` instead.
 
 ## Accessibility
 
-The Tooltip component handles accessibility automatically:
+In content mode the component handles:
 
-- `role="tooltip"` on tooltip content
-- `aria-describedby` linking trigger to tooltip
-- Keyboard support: Escape to close, focus to open
-- Focus management: Returns focus to trigger on close
-- Disabled element handling: Focusable wrapper with `tabIndex={0}`
+- `role="tooltip"` on the tooltip element
+- `aria-describedby` on the wrapper, pointing at the tooltip while it is open
+- Keyboard support: focus opens the tooltip, blur and Escape close it
+- Disabled children: a focusable wrapper with `tabIndex={0}`
+
+In title mode, accessibility is the browser's handling of the native `title`; a disabled child still gets the focusable wrapper.
 
 ## Testing with Playwright
 
-Tooltips are tested using visibility assertions, not test events.
+Tooltips are tested with visibility assertions, not test events.
 
 ### Pattern
 
 ```typescript
-// Hover over trigger
+// Hover over the trigger
 await trigger.hover();
 
-// Assert tooltip is visible
+// Assert the tooltip is visible
 await expect(page.getByTestId('feature.tooltip')).toBeVisible();
 
-// Assert tooltip content
+// Assert its content
 await expect(page.getByTestId('feature.tooltip')).toContainText('Expected text');
 
-// Tooltip disappears on mouse leave
+// It disappears when the pointer leaves
 await page.mouse.move(0, 0);
 await expect(page.getByTestId('feature.tooltip')).not.toBeVisible();
 ```
 
 ### TestId Convention
 
-**Content mode** (rich tooltips): When providing `testId` prop with `content`, the tooltip element gets `${testId}.tooltip` suffix:
+**Content mode** (rich tooltips): with a `testId`, the tooltip element gets `${testId}.tooltip`. The wrapper gets `${testId}` itself when the child has no `data-testid` of its own, and `${testId}.disabled-wrapper` when the child is disabled.
 
 ```tsx
-<Tooltip testId="reservations" content={...}>
-  <Icon />
+<Tooltip testId="feature" content={…}>
+  <span>…</span>
 </Tooltip>
 
-// In test:
-await expect(page.getByTestId('reservations.tooltip')).toBeVisible();
+// In the test:
+await expect(page.getByTestId('feature.tooltip')).toBeVisible();
 ```
 
-**Title mode** (simple tooltips): When providing `testId` prop with `title`, the testId is applied to the trigger element without suffix:
+**Title mode** (simple tooltips): the `testId` goes on the element that carries the `title` — the child itself, or the wrapper around a disabled child — without a suffix.
 
 ```tsx
-<Tooltip testId="action-button" title="Click to submit">
-  <Button>Submit</Button>
+<Tooltip testId="feature.hint" title="Web Serial needs a desktop Chromium browser">
+  <Button disabled>Flash Device</Button>
 </Tooltip>
 
-// The trigger gets the testId (native title tooltips are typically not tested)
-await expect(page.getByTestId('action-button')).toBeVisible();
+// The wrapper gets the testId; the native tooltip itself is not testable
+await expect(page.getByTestId('feature.hint')).toHaveAttribute('title', /Web Serial/);
 ```
 
-**Why the difference?** Content mode tooltips are testable React components that render via portal, while title mode uses native browser tooltips that are not easily testable. The testId in title mode identifies the trigger element for test interaction, not the tooltip itself.
-
-## Migration Checklist
-
-When migrating existing tooltip implementations:
-
-1. **Identify tooltip type**: Simple text or rich content?
-2. **Choose mode**: Plain `title`, `Tooltip` with `title`, or `Tooltip` with `content`
-3. **Remove custom code**: Delete manual positioning, portal code, state management
-4. **Delete bespoke components**: Remove custom tooltip components entirely
-5. **Add testId**: Ensure Playwright tests can target the tooltip
-6. **Verify tests**: Run existing specs to ensure they still pass
-7. **Update page objects**: If needed, update locator methods
+**Why the difference?** A content-mode tooltip is a React element rendered through a portal, so a test can find it. A title-mode tooltip is the browser's native tooltip, which a test cannot see; the testId identifies the element that carries it.
 
 ## Prohibition on Bespoke Tooltip Implementations
 
-**DO NOT** create new custom tooltip implementations. Always use:
+**DO NOT** create a custom tooltip implementation. Always use:
 
-- Plain `title` attribute for simple cases, or
-- The shared `Tooltip` component for all other cases
+- the plain `title` attribute for simple cases, or
+- the shared `Tooltip` component for everything else.
 
 ### What Counts as a Bespoke Tooltip?
 
-- Manual `createPortal` with tooltip-like positioning
-- Inline tooltip divs with `isHovered` state
-- CSS-only `group-hover` tooltip patterns
-- Custom positioning logic (getBoundingClientRect, viewport collision detection)
+- A manual `createPortal` with tooltip-like positioning
+- Inline tooltip divs driven by an `isHovered` state
+- CSS-only `group-hover` tooltips
+- Custom positioning logic (`getBoundingClientRect`, viewport collision detection)
 - Timer-based show/hide logic
 
 ### PR Checklist Item
 
 Before merging:
 
-- [ ] Verify no custom tooltip implementations (check for createPortal, inline tooltip divs, custom positioning logic)
-- [ ] All tooltips use either plain `title` attribute or shared `Tooltip` component
-- [ ] No `role="tooltip"` outside of shared Tooltip component
+- [ ] No custom tooltip implementation (check for `createPortal`, inline tooltip divs, custom positioning logic)
+- [ ] Every tooltip uses either the plain `title` attribute or the shared `Tooltip` component
+- [ ] No `role="tooltip"` outside the shared `Tooltip` component
 
 ### Why This Rule?
 
 Custom tooltip implementations:
 
-- Create inconsistent behavior (different timing, positioning bugs)
+- Behave inconsistently (different timing, positioning bugs)
 - Duplicate complex code (event coordination, viewport handling, accessibility)
 - Are harder to test (no standard selectors, inconsistent structure)
 - Accumulate bugs (quick mouse movement, click behavior, memory leaks)
 
-The shared `Tooltip` component consolidates all this complexity into a single, tested implementation.
-
-## Examples
-
-### Simple Disabled Button Tooltip
-
-```tsx
-<Tooltip title="Part must have quantity before adding to kit">
-  <Button disabled={quantity === 0}>
-    Add to Kit
-  </Button>
-</Tooltip>
-```
-
-### Reservation Indicator Tooltip
-
-```tsx
-<Tooltip
-  testId="kits.detail.table.row.reservations"
-  content={
-    <div className="space-y-2">
-      <div className="flex items-center gap-2 font-medium">
-        <AlertTriangle className="h-4 w-4 text-amber-500" />
-        <span>Active Reservations</span>
-      </div>
-      <ul className="space-y-1 text-xs">
-        {reservations.map(r => (
-          <li key={r.id}>
-            <div>{r.kitName}</div>
-            <div>Reserved: {r.quantity}</div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  }
->
-  <Users className="h-4 w-4 text-muted-foreground" />
-</Tooltip>
-```
-
-### Health Score Breakdown (Center Placement)
-
-```tsx
-<Tooltip
-  content={<HealthBreakdownPanel />}
-  placement="center"
-  testId="dashboard.health"
->
-  <div className="health-gauge">
-    {scoreValue}
-  </div>
-</Tooltip>
-```
-
-### Conditional Tooltip
-
-```tsx
-<Tooltip
-  title="Type is used by existing parts"
-  enabled={isUsed}
->
-  <Button disabled={isUsed}>
-    Delete Type
-  </Button>
-</Tooltip>
-```
-
-## Mobile Considerations
-
-- Touch devices show tooltip on tap
-- Tooltip dismisses on tap outside or scroll
-- For simple cases on mobile, prefer plain `title` attribute
-- Rich tooltips work on tap but consider if a Dialog would be better UX
+The shared `Tooltip` component keeps that complexity in one implementation, with its positioning in `useTooltip` (`src/components/primitives/use-tooltip.ts`).
 
 ## Summary
 
-- **Plain `title`**: Simple text, no disabled handling needed
-- **`Tooltip` with `title`**: Simple text on disabled elements
-- **`Tooltip` with `content`**: Rich content, formatting, or special placement
-- **Never**: Create custom tooltip implementations
-- **Always**: Informational content only (no interactive elements)
-- **Testing**: Use visibility assertions, not test events
+- **Plain `title`**: simple text, no disabled handling needed
+- **`Tooltip` with `title`**: simple text on a disabled element
+- **`Tooltip` with `content`**: rich content, formatting, or a placement
+- **Never**: a custom tooltip implementation
+- **Always**: informational content only (no interactive elements)
+- **Testing**: visibility assertions, not test events

@@ -78,7 +78,7 @@ As additional features gain coverage, follow the same foldering: put specs and t
 
 - The frontend emits structured test events through the Playwright bridge while in test mode.
 - Tests use helpers such as `waitTestEvent` and `expectConsoleError` from `tests/support/helpers.ts`.
-- Review [Test Instrumentation](../architecture/test_instrumentation.md) for the precise taxonomy (`route`, `form`, `api`, `toast`, `error`, `query_error`, `ui_state`, `list_loading`, `sse`).
+- Review [Test Instrumentation](../architecture/test_instrumentation.md) for the precise taxonomy (`route`, `form`, `api`, `toast`, `error`, `query_error`, `ui_state`, `list_loading`, `sse`, and the app's own `provisioning`).
 
 ## Next Steps
 
