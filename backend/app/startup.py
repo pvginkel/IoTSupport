@@ -185,6 +185,9 @@ def register_cli_commands(cli: click.Group) -> None:
     # Setting key for last scheduled rotation timestamp
     LAST_SCHEDULED_AT_KEY = "LAST_SCHEDULED_AT"
 
+    # How long the rotation job waits for the MQTT broker before giving up
+    MQTT_CONNECT_TIMEOUT_SECONDS = 10.0
+
     @cli.command()
     @click.pass_context
     def rotation_job(ctx: click.Context) -> None:
@@ -217,9 +220,23 @@ def register_cli_commands(cli: click.Group) -> None:
             # rotation. The LifecycleCoordinator drives flush + disconnect at
             # the end of this command so in-flight QoS 1 publishes are
             # acknowledged before the process exits.
-            app.container.mqtt_service().startup()
+            mqtt_service = app.container.mqtt_service()
+            mqtt_service.startup()
 
             try:
+                # startup() connects asynchronously, and publish() drops what it
+                # is given until the broker confirms the connection: a device
+                # set PENDING without its notification is never told to rotate.
+                # Rotate nothing without a connection, and fail the run so the
+                # CronJob's alert sees it.
+                if not mqtt_service.wait_for_connection(MQTT_CONNECT_TIMEOUT_SECONDS):
+                    print(
+                        "Error: MQTT broker did not confirm the connection within "
+                        f"{MQTT_CONNECT_TIMEOUT_SECONDS:.0f}s; no device rotated",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
+
                 rotation_service = app.container.rotation_service()
                 result = rotation_service.process_rotation_job(last_scheduled_at)
 

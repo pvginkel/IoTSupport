@@ -1,5 +1,6 @@
 """Tests for MqttService."""
 
+import threading
 from unittest.mock import ANY, MagicMock, Mock, patch
 
 import pytest
@@ -615,6 +616,59 @@ class TestMqttServiceConnectionCallbacks:
 
         # Simulate disconnect callback - should not raise
         service._on_disconnect(mock_client, None, mock_disconnect_flags, mock_reason_code, None)
+
+
+class TestMqttServiceWaitForConnection:
+    """Tests for wait_for_connection, which the rotation CLI blocks on."""
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_returns_true_once_connect_callback_arrives(
+        self, mock_mqtt_client_class: Mock
+    ):
+        """A CONNACK arriving on paho's thread releases a waiting caller."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+        service = _make_started_service(_make_test_settings())
+
+        connector = threading.Timer(
+            0.05, _simulate_successful_connection, args=(service, mock_client)
+        )
+        connector.start()
+        try:
+            assert service.wait_for_connection(5.0) is True
+        finally:
+            connector.join()
+        assert service.enabled is True
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_returns_false_when_no_connection_within_timeout(
+        self, mock_mqtt_client_class: Mock
+    ):
+        """startup() alone does not count as connected."""
+        mock_mqtt_client_class.return_value = MagicMock()
+        service = _make_started_service(_make_test_settings())
+
+        assert service.wait_for_connection(0.01) is False
+
+    def test_returns_false_when_mqtt_not_configured(self):
+        """With no MQTT_URL there is never a connection to wait for."""
+        service = _make_started_service(_make_test_settings(mqtt_url=None))
+
+        assert service.wait_for_connection(0.01) is False
+
+    @patch("app.services.mqtt_service.MqttClient")
+    def test_returns_false_after_a_failed_connect(self, mock_mqtt_client_class: Mock):
+        """A refused reconnect withdraws the earlier connection."""
+        mock_client = MagicMock()
+        mock_mqtt_client_class.return_value = mock_client
+        service = _make_started_service(_make_test_settings())
+        _simulate_successful_connection(service, mock_client)
+
+        refused = MagicMock()
+        refused.is_failure = True
+        service._on_connect(mock_client, None, MagicMock(), refused, None)
+
+        assert service.wait_for_connection(0.01) is False
 
 
 class TestMqttServiceLifecycle:

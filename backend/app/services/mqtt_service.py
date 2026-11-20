@@ -6,6 +6,7 @@ subscribing (with message callbacks).
 """
 
 import logging
+import threading
 import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -73,6 +74,9 @@ class MqttService:
 
         # Track whether MQTT is enabled
         self.enabled = False
+        # Set alongside `enabled` by _on_connect, so a short-lived process can
+        # block until publish() is ready (wait_for_connection).
+        self._connected = threading.Event()
         self.client: MqttClient | None = None
         self._shutdown_called = False
 
@@ -171,6 +175,22 @@ class MqttService:
             self.enabled = False
             self.mqtt_enabled_gauge.set(0)
 
+    def wait_for_connection(self, timeout: float) -> bool:
+        """Block until the broker has confirmed the connection.
+
+        startup() connects asynchronously, and publish() drops what it is given
+        until the broker's CONNACK arrives. A process that publishes right
+        after startup() — the rotation CLI — waits here first.
+
+        Args:
+            timeout: Maximum seconds to wait for the connection
+
+        Returns:
+            True once connected; False if no connection was confirmed within
+            the timeout (MQTT not configured, broker unreachable, or refused).
+        """
+        return self._connected.wait(timeout)
+
     def _initialize_metrics(self) -> None:
         """Initialize Prometheus metrics for MQTT operations."""
         # Check if already initialized (for container singleton reuse)
@@ -226,11 +246,13 @@ class MqttService:
             self.mqtt_connection_state.set(0)
             # Disable publishing on connection failure
             self.enabled = False
+            self._connected.clear()
         else:
             logger.info("Connected to MQTT broker successfully")
             self.mqtt_connection_state.set(1)
             # Enable publishing now that connection is confirmed
             self.enabled = True
+            self._connected.set()
 
             # Re-subscribe to all registered topics
             for topic, (qos, _callback) in self._subscriptions.items():

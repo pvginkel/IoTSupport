@@ -2,10 +2,12 @@
 
 from unittest.mock import MagicMock, patch
 
+import click
 import pytest
+from click.testing import CliRunner
 from flask import Flask
 
-from app.startup import _notify_rotation_nudge
+from app.startup import _notify_rotation_nudge, register_cli_commands
 
 
 class TestNotifyRotationNudge:
@@ -97,3 +99,60 @@ class TestNotifyRotationNudge:
 
             call_url = mock_post.call_args[0][0]
             assert call_url == "http://web-process:3200/internal/rotation-nudge"
+
+
+class TestRotationJob:
+    """Tests for the rotation-job CLI command the CronJob runs."""
+
+    def _run(
+        self, app: Flask, monkeypatch: pytest.MonkeyPatch, mqtt_connected: bool
+    ) -> tuple[click.testing.Result, MagicMock]:
+        """Run rotation-job against a mocked container; return the result and it."""
+        mock_container = MagicMock()
+        mock_container.settings_service.return_value.get.return_value = None
+        mock_container.app_config.return_value.internal_api_url = None
+        mock_container.mqtt_service.return_value.wait_for_connection.return_value = (
+            mqtt_connected
+        )
+        result_obj = mock_container.rotation_service.return_value.process_rotation_job
+        result_obj.return_value.scheduled_rotation_triggered = False
+        # The session app is shared: monkeypatch puts its container back.
+        monkeypatch.setattr(app, "container", mock_container)
+
+        @click.group()
+        def cli() -> None:
+            """A bare group carrying the app's commands."""
+
+        with patch("app.database.check_db_connection", return_value=True):
+            register_cli_commands(cli)
+            result = CliRunner().invoke(cli, ["rotation-job"], obj={"app": app})
+        return result, mock_container
+
+    def test_rotates_once_mqtt_is_connected(
+        self, app: Flask, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Given the broker confirms the connection, the job rotates and succeeds."""
+        result, container = self._run(app, monkeypatch, mqtt_connected=True)
+
+        assert result.exit_code == 0, result.output
+        mqtt_service = container.mqtt_service.return_value
+        mqtt_service.startup.assert_called_once_with()
+        mqtt_service.wait_for_connection.assert_called_once_with(10.0)
+        container.rotation_service.return_value.process_rotation_job.assert_called_once()
+        container.lifecycle_coordinator.return_value.shutdown.assert_called_once_with()
+
+    def test_fails_without_rotating_when_mqtt_does_not_connect(
+        self, app: Flask, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Given no MQTT connection, the job rotates nothing and exits non-zero.
+
+        A device set PENDING while publish() drops its notification is never
+        told to rotate, so the job must not get that far.
+        """
+        result, container = self._run(app, monkeypatch, mqtt_connected=False)
+
+        assert result.exit_code == 1
+        assert "MQTT broker did not confirm the connection within 10s" in result.stderr
+        container.rotation_service.return_value.process_rotation_job.assert_not_called()
+        container.db_session.return_value.commit.assert_not_called()
+        container.lifecycle_coordinator.return_value.shutdown.assert_called_once_with()
