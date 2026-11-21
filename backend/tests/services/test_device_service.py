@@ -716,6 +716,101 @@ class TestDeviceServiceSecretCaching:
                 assert cached is None
 
 
+class TestDeviceServiceAbortRotation:
+    """Tests for ending a pending rotation without completing it."""
+
+    def test_abort_rotation_restores_cached_secret(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that the cached secret is restored, the device TIMEOUT, the cache cleared."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="abort1", name="Abort Test")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ), patch.object(
+                keycloak_service, "update_client_secret"
+            ) as mock_update:
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.PENDING.value
+                device_service.cache_secret_for_rotation(device, "old-secret")
+
+                device_service.abort_rotation(device)
+
+                mock_update.assert_called_once_with(device.client_id, "old-secret")
+                assert device.rotation_state == RotationState.TIMEOUT.value
+                assert device.cached_secret is None
+
+    def test_abort_rotation_without_cached_secret(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that a device that never fetched new credentials just moves to TIMEOUT."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="abort2", name="Abort Test 2")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ), patch.object(
+                keycloak_service, "update_client_secret"
+            ) as mock_update:
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.PENDING.value
+                container.db_session().flush()
+
+                device_service.abort_rotation(device)
+
+                mock_update.assert_not_called()
+                assert device.rotation_state == RotationState.TIMEOUT.value
+
+    def test_abort_rotation_keycloak_failure_leaves_device_pending(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that a failed restore raises and leaves state and cache untouched."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="abort3", name="Abort Test 3")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ), patch.object(
+                keycloak_service,
+                "update_client_secret",
+                side_effect=ExternalServiceException("update secret", "unavailable"),
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.PENDING.value
+                device_service.cache_secret_for_rotation(device, "old-secret")
+
+                with pytest.raises(ExternalServiceException):
+                    device_service.abort_rotation(device)
+
+                assert device.rotation_state == RotationState.PENDING.value
+                assert device_service.get_cached_secret(device) == "old-secret"
+
+
 class TestDeviceServiceFieldExtraction:
     """Tests for config field extraction."""
 

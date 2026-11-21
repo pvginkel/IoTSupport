@@ -25,7 +25,6 @@ from app.models.device import Device, RotationState
 if TYPE_CHECKING:
     from app.app_config import AppSettings
     from app.services.device_service import DeviceService
-    from app.services.keycloak_admin_service import KeycloakAdminService
     from app.services.mqtt_service import MqttService
 
 logger = logging.getLogger(__name__)
@@ -59,7 +58,6 @@ class RotationService:
         db: Session,
         config: "AppSettings",
         device_service: "DeviceService",
-        keycloak_admin_service: "KeycloakAdminService",
         mqtt_service: "MqttService",
     ) -> None:
         """Initialize rotation service.
@@ -68,13 +66,11 @@ class RotationService:
             db: SQLAlchemy database session
             config: Application settings
             device_service: Device service for device operations
-            keycloak_admin_service: Keycloak service for secret management
             mqtt_service: MQTT service for notifications
         """
         self.db = db
         self.config = config
         self.device_service = device_service
-        self.keycloak_admin_service = keycloak_admin_service
         self.mqtt_service = mqtt_service
 
     def get_rotation_status(self) -> dict[str, Any]:
@@ -275,26 +271,18 @@ class RotationService:
                 timeout_seconds,
             )
 
-            # Restore old secret if cached
-            cached_secret = self.device_service.get_cached_secret(device)
-            if cached_secret:
-                try:
-                    self.keycloak_admin_service.update_client_secret(
-                        device.client_id, cached_secret
-                    )
-                    logger.info("Restored old secret for device %s", device.key)
-                except ExternalServiceException as e:
-                    # Log but continue - device stays in PENDING, will retry
-                    logger.error(
-                        "Failed to restore secret for device %s: %s - will retry",
-                        device.key,
-                        e,
-                    )
-                    continue
+            # Restore the old secret and move to TIMEOUT
+            try:
+                self.device_service.abort_rotation(device)
+            except ExternalServiceException as e:
+                # Log but continue - device stays in PENDING, will retry
+                logger.error(
+                    "Failed to restore secret for device %s: %s - will retry",
+                    device.key,
+                    e,
+                )
+                continue
 
-            # Move to TIMEOUT state
-            device.rotation_state = RotationState.TIMEOUT.value
-            self.device_service.clear_cached_secret(device)
             processed += 1
 
         self.db.flush()

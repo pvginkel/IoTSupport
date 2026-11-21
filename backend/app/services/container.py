@@ -260,7 +260,6 @@ class ServiceContainer(containers.DeclarativeContainer):
         db=db_session,
         config=app_config,
         device_service=device_service,
-        keycloak_admin_service=keycloak_admin_service,
         mqtt_service=mqtt_service,
     )
 

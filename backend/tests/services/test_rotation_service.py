@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from flask import Flask
 
+from app.core_exceptions import ExternalServiceException
 from app.models.device import RotationState
 from app.services.container import ServiceContainer
 
@@ -264,6 +265,52 @@ class TestRotationServiceProcessJob:
                 # So it ends up in PENDING state, not TIMEOUT
                 # But we should still verify that update_client_secret was called for restoration
                 mock_update.assert_called_once()
+
+    def test_process_timeouts_restore_failure_is_per_device(
+        self, app: Flask, container: ServiceContainer, test_app_settings
+    ) -> None:
+        """Test that one device's failed restore leaves it PENDING and others still time out."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="job4", name="Job Test 4")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ), patch.object(
+                keycloak_service, "update_client_secret"
+            ) as mock_update:
+                device_service = container.device_service()
+                d_failing = device_service.create_device(device_model_id=model.id, config="{}")
+                d_ok = device_service.create_device(device_model_id=model.id, config="{}")
+
+                expired = datetime.utcnow() - timedelta(
+                    seconds=test_app_settings.rotation_timeout_seconds + 60
+                )
+                for device, secret in ((d_failing, "failing-secret"), (d_ok, "ok-secret")):
+                    device.rotation_state = RotationState.PENDING.value
+                    device.last_rotation_attempt_at = expired
+                    device_service.cache_secret_for_rotation(device, secret)
+
+                def restore(client_id: str, secret: str) -> None:
+                    if client_id == d_failing.client_id:
+                        raise ExternalServiceException("update secret", "unavailable")
+
+                mock_update.side_effect = restore
+
+                rotation_service = container.rotation_service()
+                processed = rotation_service._process_timeouts()
+
+                assert processed == 1
+                assert d_failing.rotation_state == RotationState.PENDING.value
+                assert device_service.get_cached_secret(d_failing) == "failing-secret"
+                assert d_ok.rotation_state == RotationState.TIMEOUT.value
+                assert d_ok.cached_secret is None
 
 
 class TestRotationServiceScheduleCheck:

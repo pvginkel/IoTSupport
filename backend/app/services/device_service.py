@@ -619,6 +619,30 @@ class DeviceService:
         device.cached_secret = None
         self.db.flush()
 
+    def abort_rotation(self, device: Device) -> None:
+        """End a device's pending rotation without completing it.
+
+        Restores the old secret in Keycloak if one is cached, then moves the
+        device to TIMEOUT and clears the cache.
+
+        Args:
+            device: Device in PENDING state
+
+        Raises:
+            ExternalServiceException: If restoring the secret fails; the
+                device is left PENDING with its cached secret intact
+        """
+        # Restore first, so a Keycloak failure leaves the device untouched
+        cached_secret = self.get_cached_secret(device)
+        if cached_secret:
+            self.keycloak_admin_service.update_client_secret(
+                device.client_id, cached_secret
+            )
+            logger.info("Restored old secret for device %s", device.key)
+
+        device.rotation_state = RotationState.TIMEOUT.value
+        self.clear_cached_secret(device)
+
     def get_keycloak_status(self, device_id: int) -> dict[str, Any]:
         """Get Keycloak client status for a device.
 
