@@ -389,6 +389,99 @@ class TestRotationServiceDeviceSelection:
 
                 assert selected is None
 
+    def test_select_skips_inactive_timeout_device(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that the TIMEOUT retry passes over an inactive device, however old."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="sel4", name="Select Test 4")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                d_retired = device_service.create_device(device_model_id=model.id, config="{}")
+                d_active = device_service.create_device(device_model_id=model.id, config="{}")
+
+                # The retired device has the oldest attempt, so it would be first in line
+                d_retired.active = False
+                d_retired.rotation_state = RotationState.TIMEOUT.value
+                d_retired.last_rotation_attempt_at = datetime.utcnow() - timedelta(days=60)
+                d_active.rotation_state = RotationState.TIMEOUT.value
+                d_active.last_rotation_attempt_at = datetime.utcnow() - timedelta(days=1)
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                selected = rotation_service._select_next_device()
+
+                assert selected is not None
+                assert selected.id == d_active.id
+
+    def test_select_returns_none_when_only_inactive_timeout(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that an inactive TIMEOUT device alone is not selected."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="sel5", name="Select Test 5")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.active = False
+                device.rotation_state = RotationState.TIMEOUT.value
+                device.last_rotation_attempt_at = datetime.utcnow() - timedelta(days=60)
+                container.db_session().flush()
+
+                rotation_service = container.rotation_service()
+                selected = rotation_service._select_next_device()
+
+                assert selected is None
+
+    def test_select_takes_inactive_queued_device(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that an inactive QUEUED device (a manual Rotate) is still selected."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="sel6", name="Select Test 6")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.active = False
+                container.db_session().flush()
+                device_service.trigger_rotation(device.id)
+
+                rotation_service = container.rotation_service()
+                selected = rotation_service._select_next_device()
+
+                assert selected is not None
+                assert selected.id == device.id
+
 
 class TestRotationServiceChainRotation:
     """Tests for rotate_next_queued_device (chain rotation)."""

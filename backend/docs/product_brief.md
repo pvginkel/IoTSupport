@@ -41,7 +41,7 @@ Automatic rotation of device OAuth2 credentials:
    - `OK` - Normal operation, credentials valid
    - `QUEUED` - Scheduled for rotation
    - `PENDING` - Rotation in progress, waiting for device acknowledgment
-   - `TIMEOUT` - Device did not acknowledge rotation, will retry
+   - `TIMEOUT` - Device did not acknowledge rotation; retried while the device is active
 
 2. **Fleet-Wide Scheduling** - CRON-based rotation schedule:
    - Configurable via `ROTATION_CRON` (default: first Saturday of month at 8am)
@@ -51,7 +51,7 @@ Automatic rotation of device OAuth2 credentials:
 3. **Timeout Handling** - Graceful failure recovery:
    - Configurable timeout (default: 300 seconds)
    - Old secret cached and restored on timeout
-   - Failed devices moved to TIMEOUT state and retried later
+   - Failed devices moved to TIMEOUT state; active ones are retried later, inactive ones stay until reactivated or rotated by hand
 
 4. **MQTT Notifications** - Real-time rotation triggers:
    - Publishes to `iotsupport/<client_id>/rotation`

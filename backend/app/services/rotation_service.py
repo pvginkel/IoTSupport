@@ -159,7 +159,7 @@ class RotationService:
         Steps:
         1. Check CRON schedule and queue all devices if triggered
         2. Process any timed-out PENDING devices
-        3. Select and rotate one device (QUEUED first, then TIMEOUT)
+        3. Select and rotate one device (QUEUED first, then active TIMEOUT)
 
         Args:
             last_scheduled_at: Last time the scheduled rotation was triggered
@@ -316,7 +316,12 @@ class RotationService:
 
         Priority:
         1. QUEUED device with oldest secret_created_at
-        2. TIMEOUT device (retry)
+        2. Active TIMEOUT device (retry)
+
+        A QUEUED device is taken whether or not it is active, so a manual
+        Rotate on an inactive device still runs once. An inactive device is
+        never retried: a retired device in TIMEOUT would otherwise take the
+        PENDING slot on every run until it timed out again.
 
         Returns:
             Device to rotate or None if no devices need rotation
@@ -333,10 +338,13 @@ class RotationService:
         if device is not None:
             return device
 
-        # Fall back to TIMEOUT devices
+        # Fall back to active TIMEOUT devices
         timeout_stmt = (
             select(Device)
-            .where(Device.rotation_state == RotationState.TIMEOUT.value)
+            .where(
+                Device.rotation_state == RotationState.TIMEOUT.value,
+                Device.active == True,  # noqa: E712
+            )
             .order_by(Device.last_rotation_attempt_at.asc())
             .limit(1)
         )
