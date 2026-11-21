@@ -52,6 +52,7 @@ Automatic rotation of device OAuth2 credentials:
    - Configurable timeout (default: 300 seconds)
    - Old secret cached and restored on timeout
    - Failed devices moved to TIMEOUT state; active ones are retried later, inactive ones stay until reactivated or rotated by hand
+   - Deactivating a PENDING device ends its rotation the same way, and the next device starts
 
 4. **MQTT Notifications** - Real-time rotation triggers:
    - Publishes to `iotsupport/<client_id>/rotation`
