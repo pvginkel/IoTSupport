@@ -162,15 +162,26 @@ def get_device(
 def update_device(
     device_id: int,
     device_service: DeviceService = Provide[ServiceContainer.device_service],
+    rotation_service: RotationService = Provide[ServiceContainer.rotation_service],
 
 ) -> Any:
-    """Update a device's configuration."""
+    """Update a device's configuration.
+
+    Deactivating a PENDING device ends its rotation and immediately starts
+    the next device instead of waiting for the CRON job.
+    """
     start_time = time.perf_counter()
     status = "success"
 
     try:
         data = DeviceUpdateSchema.model_validate(request.get_json())
-        device = device_service.update_device(device_id, config=data.config, active=data.active)
+        device, rotation_aborted = device_service.update_device(
+            device_id, config=data.config, active=data.active
+        )
+
+        # The PENDING slot is free: start the next device
+        if rotation_aborted:
+            rotation_service.rotate_next_queued_device()
 
         return DeviceResponseSchema.model_validate(device).model_dump()
 

@@ -291,7 +291,7 @@ class TestDeviceServiceUpdate:
                     config='{"old": "value"}'
                 )
 
-                updated = device_service.update_device(
+                updated, _ = device_service.update_device(
                     device.id,
                     config='{"new": "value"}',
                     active=True,
@@ -868,7 +868,7 @@ class TestDeviceServiceFieldExtraction:
                 assert device.device_name == "Old Name"
 
                 # Update with new values
-                updated = device_service.update_device(
+                updated, _ = device_service.update_device(
                     device.id,
                     config='{"deviceName": "New Name", "enableOTA": false}',
                     active=True,
@@ -1286,7 +1286,7 @@ class TestDeviceServiceActiveFlag:
 
                 assert device.active is True
 
-                result = device_service.update_device(device.id, config="{}", active=False)
+                result, _ = device_service.update_device(device.id, config="{}", active=False)
 
                 assert result.active is False
                 assert result.id == device.id
@@ -1313,7 +1313,7 @@ class TestDeviceServiceActiveFlag:
                 device.active = False
                 container.db_session().flush()
 
-                result = device_service.update_device(device.id, config="{}", active=True)
+                result, _ = device_service.update_device(device.id, config="{}", active=True)
 
                 assert result.active is True
 
@@ -1339,15 +1339,15 @@ class TestDeviceServiceActiveFlag:
                 device.rotation_state = RotationState.QUEUED.value
                 container.db_session().flush()
 
-                result = device_service.update_device(device.id, config="{}", active=False)
+                result, _ = device_service.update_device(device.id, config="{}", active=False)
 
                 assert result.active is False
                 assert result.rotation_state == RotationState.QUEUED.value
 
-    def test_update_device_pending_does_not_cancel_rotation(
+    def test_update_device_deactivating_pending_aborts_rotation(
         self, app: Flask, container: ServiceContainer
     ) -> None:
-        """Test that deactivating a PENDING device does not change rotation state."""
+        """Test that deactivating a PENDING device ends its rotation like a timeout."""
         with app.app_context():
             model_service = container.device_model_service()
             model = model_service.create_device_model(code="patch4", name="Patch Test 4")
@@ -1360,16 +1360,85 @@ class TestDeviceServiceActiveFlag:
             ), patch.object(
                 keycloak_service,
                 "update_client_metadata",
+            ), patch.object(
+                keycloak_service, "update_client_secret"
+            ) as mock_update:
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.rotation_state = RotationState.PENDING.value
+                device_service.cache_secret_for_rotation(device, "old-secret")
+
+                result, rotation_aborted = device_service.update_device(
+                    device.id, config="{}", active=False
+                )
+
+                assert rotation_aborted is True
+                assert result.active is False
+                assert result.rotation_state == RotationState.TIMEOUT.value
+                assert result.cached_secret is None
+                mock_update.assert_called_once_with(device.client_id, "old-secret")
+
+    def test_update_device_inactive_pending_keeps_rotation(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that editing an already-inactive PENDING device (a manual Rotate) keeps it PENDING."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="patch5", name="Patch Test 5")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                device = device_service.create_device(device_model_id=model.id, config="{}")
+                device.active = False
+                device.rotation_state = RotationState.PENDING.value
+                container.db_session().flush()
+
+                result, rotation_aborted = device_service.update_device(
+                    device.id, config="{}", active=False
+                )
+
+                assert rotation_aborted is False
+                assert result.rotation_state == RotationState.PENDING.value
+
+    def test_update_device_deactivating_pending_keycloak_failure(
+        self, app: Flask, container: ServiceContainer
+    ) -> None:
+        """Test that a failed secret restore fails the update and leaves the device PENDING."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="patch7", name="Patch Test 7")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ), patch.object(
+                keycloak_service,
+                "update_client_secret",
+                side_effect=ExternalServiceException("update secret", "unavailable"),
             ):
                 device_service = container.device_service()
                 device = device_service.create_device(device_model_id=model.id, config="{}")
                 device.rotation_state = RotationState.PENDING.value
-                container.db_session().flush()
+                device_service.cache_secret_for_rotation(device, "old-secret")
 
-                result = device_service.update_device(device.id, config="{}", active=False)
+                with pytest.raises(ExternalServiceException):
+                    device_service.update_device(device.id, config="{}", active=False)
 
-                assert result.active is False
-                assert result.rotation_state == RotationState.PENDING.value
+                assert device.rotation_state == RotationState.PENDING.value
+                assert device.active is True
 
     def test_new_device_defaults_to_active(
         self, app: Flask, container: ServiceContainer

@@ -375,10 +375,15 @@ class DeviceService:
                 f"database operation failed: {e}"
             ) from e
 
-    def update_device(self, device_id: int, config: str, active: bool) -> Device:
+    def update_device(
+        self, device_id: int, config: str, active: bool
+    ) -> tuple[Device, bool]:
         """Update a device's configuration and active status.
 
         Updates the config, syncs to Keycloak, and notifies the device via MQTT.
+        Deactivating a PENDING device ends its rotation the way a timeout does
+        (see ``abort_rotation``), so a retired device stops holding the
+        PENDING slot; the caller then starts the next device.
 
         Args:
             device_id: Device ID
@@ -386,11 +391,13 @@ class DeviceService:
             active: Whether device participates in automatic fleet rotation
 
         Returns:
-            Updated Device instance
+            The updated Device, and whether its pending rotation was aborted
 
         Raises:
             RecordNotFoundException: If device doesn't exist
             ValidationException: If config is invalid JSON or fails schema validation
+            ExternalServiceException: If restoring an aborted rotation's
+                secret fails
         """
         from app.services.mqtt_service import MqttService
 
@@ -404,6 +411,17 @@ class DeviceService:
 
         # Validate against schema if model has one
         self._validate_config_schema(config, device.device_model.config_schema)
+
+        # Only the active -> inactive transition aborts: a manual Rotate on an
+        # already-inactive device must survive a later config edit
+        rotation_aborted = (
+            device.active
+            and not active
+            and device.rotation_state == RotationState.PENDING.value
+        )
+        if rotation_aborted:
+            self.abort_rotation(device)
+            logger.info("Deactivated device %s ended its pending rotation", device.key)
 
         device.config = config
         device.active = active
@@ -425,7 +443,7 @@ class DeviceService:
         logger.info("Updated device %s config", device.key)
         # Fleet changed: mark for a post-commit architecture re-generation.
         self.trigger_service.mark_pending()
-        return device
+        return device, rotation_aborted
 
     def delete_device(self, device_id: int) -> str:
         """Delete a device and its Keycloak client.

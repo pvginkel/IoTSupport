@@ -1583,6 +1583,52 @@ class TestDevicesUpdateActiveFlag:
         data = response.get_json()
         assert data["active"] is True
 
+    def test_deactivating_pending_device_starts_next(
+        self, app: Flask, client: FlaskClient, container: ServiceContainer
+    ) -> None:
+        """Test that deactivating a PENDING device frees the slot for the next queued one."""
+        with app.app_context():
+            model_service = container.device_model_service()
+            model = model_service.create_device_model(code="ptch3", name="Patch Test 3")
+
+            keycloak_service = container.keycloak_admin_service()
+            with patch.object(
+                keycloak_service,
+                "create_client",
+                return_value=MagicMock(client_id="test", secret="test-secret"),
+            ), patch.object(
+                keycloak_service,
+                "update_client_metadata",
+            ):
+                device_service = container.device_service()
+                d_retiring = device_service.create_device(
+                    device_model_id=model.id, config="{}"
+                )
+                d_next = device_service.create_device(device_model_id=model.id, config="{}")
+                d_retiring.rotation_state = RotationState.PENDING.value
+                d_next.rotation_state = RotationState.QUEUED.value
+                container.db_session().flush()
+                retiring_id = d_retiring.id
+                next_id = d_next.id
+
+        with patch.object(
+            container.keycloak_admin_service(), "update_client_metadata"
+        ), patch.object(app.container.mqtt_service(), "publish") as mock_publish:
+            response = client.put(
+                f"/api/devices/{retiring_id}",
+                json={"config": "{}", "active": False},
+            )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["active"] is False
+        assert data["rotation_state"] == RotationState.TIMEOUT.value
+
+        next_device = client.get(f"/api/devices/{next_id}").get_json()
+        assert next_device["rotation_state"] == RotationState.PENDING.value
+        topics = [call.args[0] for call in mock_publish.call_args_list]
+        assert any(topic.endswith("/provisioning") for topic in topics)
+
 
 class TestDevicesActiveInListResponse:
     """Tests for active field visibility in device list/detail responses."""

@@ -3764,7 +3764,7 @@
         "tags": []
       },
       "put": {
-        "description": "",
+        "description": "Deactivating a PENDING device ends its rotation and immediately starts the next device instead of waiting for the CRON job.",
         "operationId": "put__api_devices_{device_id}",
         "parameters": [
           {
